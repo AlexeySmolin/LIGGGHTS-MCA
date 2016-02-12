@@ -15,7 +15,7 @@ www.dcs-computing.com, office@dcs-computing.com
 LIGGGHTS® is open-source, distributed under the terms of the GNU Public 
 License, version 2 or later.
 
-LIGGGHTS® is part of CFDEM®project: 
+LIGGGHTS® is part of CFDEM® project: 
 www.liggghts.com | www.cfdem.com
 
 Core developer and main author:
@@ -47,7 +47,7 @@ src             source files
 Point your browser at any of these files to get started:
 
 doc/Manual.html	           the manual
-doc/Section_intro.html	   hi-level introductio
+doc/Section_intro.html	   hi-level introduction
 doc/Section_start.html	   how to build and use
 
 ----------------------------------------------------------------------

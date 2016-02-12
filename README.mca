@@ -1,0 +1,10 @@
+----------------------------------------------------------------------
+This is the version of LIGGGHTS® which is aimed to implement 
+Movable Cellular Automaton (MCA) method in the LIGGGHTS framework.
+MCA is a kind of DEM having a number of specific features enabling
+correct simultion of solid behavour such as elasto-plastic deformation
+and fracture. The latest description of MCA is published in 
+http://dx.doi.org/10.1016/j.commatsci.2015.02.026
+
+Core developer and main author of LIGGGHTS-MCA®:
+Alexey Smolin, asmolin@ispms.tsc.ru
