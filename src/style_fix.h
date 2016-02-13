@@ -7,6 +7,8 @@
 #include "fix_ave_histo.h"
 #include "fix_ave_spatial.h"
 #include "fix_ave_time.h"
+#include "fix_bond_create_mca.h"
+#include "fix_bond_exchange_mca.h"
 #include "fix_box_relax.h"
 #include "fix_buoyancy.h"
 #include "fix_cfd_coupling_convection.h"
