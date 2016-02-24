@@ -64,18 +64,18 @@ class AtomVecMCA : public AtomVec {
   void copy(int, int, int);
   int pack_comm(int, int *, double *, int, int *);
   int pack_comm_vel(int, int *, double *, int, int *);
-  int pack_comm_vel_wedge(int, int *, double *, int, int *); ///AS ///////////
-  int pack_comm_hybrid(int, int *, double *); ////////////////
+  int pack_comm_vel_wedge(int, int *, double *, int, int *);
+  int pack_comm_hybrid(int, int *, double *);
   void unpack_comm(int, int, double *);
   void unpack_comm_vel(int, int, double *);
-  int unpack_comm_hybrid(int , int , double *); ///AS
+  int unpack_comm_hybrid(int, int, double *);
   int pack_reverse(int, int, double *);
-  int pack_reverse_hybrid(int, int, double *); //////////////////
+  int pack_reverse_hybrid(int, int, double *);
   void unpack_reverse(int, int *, double *);
-  int unpack_reverse_hybrid(int, int *, double *);  ///////////////////
+  int unpack_reverse_hybrid(int, int *, double *);
   int pack_border(int, int *, double *, int, int *);
   int pack_border_vel(int, int *, double *, int, int *);
-  int pack_border_vel_wedge(int, int *, double *, int, int *); ///AS ///////////
+  int pack_border_vel_wedge(int, int *, double *, int, int *);
   int pack_border_hybrid(int, int *, double *);
   void unpack_border(int, int, double *);
   void unpack_border_vel(int, int, double *);
@@ -86,38 +86,43 @@ class AtomVecMCA : public AtomVec {
   int pack_restart(int, double *);
   int unpack_restart(double *);
   void create_atom(int, double *);
-  void data_atom(double *, int, char **);
+  void data_atom(double *, tagint, char **);
   int data_atom_hybrid(int, char **);
-  void data_vel(int, char **);  /////////////
-  int data_vel_hybrid(int, char **);  /////////////
-  bigint memory_usage();
-  //new for L3
+  void data_vel(int, char **);
+  int data_vel_hybrid(int, char **);
   void pack_data(double **);
   void pack_data(double **buf,int tag_offset); 
-  int pack_data_hybrid(int, double *); ////////////??
+  int pack_data_hybrid(int, double *);
   void write_data(FILE *, int, double **);
-  int write_data_hybrid(FILE *, double *); /////////??
+  int write_data_hybrid(FILE *, double *);
+  void pack_vel(double **);
+  void pack_vel(double **buf,int tag_offset);
+  int pack_vel_hybrid(int, double *);
+  void write_vel(FILE *, int, double **);
+  int write_vel_hybrid(FILE *, double *);
+  bigint memory_usage();
   void write_restart_settings(FILE *);
   void read_restart_settings(FILE *);
-  void pack_vel(double **); ///////////
-  void pack_vel(double **buf,int tag_offset); //////////
-  int pack_vel_hybrid(int, double *); ////////////??
-  void write_vel(FILE *, int, double **); /////////
-  int write_vel_hybrid(FILE *, double *); //////??
 
  private:
    //!! All these are in Sphere
   int *tag,*type,*mask; //atom ID, atom type?, deform_groupbit?
   tagint *image;        // IMGMAX-IMG2BITS in new version of LIGGGHTS?? 
   double **x,**v,**f;
-  double *radius,*density,*rmass; //////////!!Later change as 'double radius,rmass;' and  int mass_type;  // 1 if per-type masses
-  double **omega,**torque; //////////
-  int radvary; ///////////
+  double *radius;
+  double *density,*rmass; //////////!!Later change as 'double radius,rmass;' and  int mass_type;  // 1 if per-type masses
+  double **omega,**torque;
+  int radvary;
 
   /* { //!! Later we will need these
-  double **angmom; // ?? We need moment of inertia
+  double radius; //Change from array to single variable: all automata have the same radius
+  double contact_area; // Initial contact area defined by packing. Remember about heat transfer through contact_area in granular!!
+  double *inertia_mom; // ?? We need moment of inertia
   double **theta //theta - we need orientation vector to describe rotation as a first approximation
-  // Later we must use quaternions or Rodrigues rotation vector , as in AtomVecEllipsoid 'struct Bonus {double quat[4]...};'
+                 // Later we must use quaternions or Rodrigues rotation vector , as in AtomVecEllipsoid 'struct Bonus {double quat[4]...};'
+  double *mean_stress;
+  int packing; 
+  int coord_num; // Coordination number is defined by packing (6 for cubic or 12 for fcc and hcp)
   // } */
 /*
 For the MCA style, the number of mca bonds per atom is stored, and the information associated to it:

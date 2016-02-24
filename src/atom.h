@@ -144,6 +144,7 @@ class Atom : protected Pointers {
   int peri_flag,electron_flag;
   int ecp_flag;
   int wavepacket_flag,sph_flag;
+  int mca_flag;
 
   int molecule_flag,q_flag,mu_flag;
   int rmass_flag,radius_flag,omega_flag,torque_flag,angmom_flag;

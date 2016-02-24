@@ -226,7 +226,7 @@ void BondMCA::compute(int eflag, int vflag)
     }
 
     type = bondlist[n][2];
-    rbmin=rb[type]*MIN(radius[i1],radius[i2]); //lamda * min(rA,rB) see P.Cundall, "A bondet particle model for rock"
+    rbmin=rb[type]*MIN(radius[i1],radius[i2]); //lamda * min(rA,rB) see P.Cundall, "A bonded particle model for rock"
 
 	A = M_PI * rbmin* rbmin;
     J = A * 0.5 * rbmin * rbmin;
