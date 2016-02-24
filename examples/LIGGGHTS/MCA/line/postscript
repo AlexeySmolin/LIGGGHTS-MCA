@@ -3,3 +3,6 @@
 shopt -s expand_aliases
 cd post
 lpp dump*.liggghts
+
+cd ../
+gnuplot force_displ.plt
