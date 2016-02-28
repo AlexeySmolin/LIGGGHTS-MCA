@@ -75,8 +75,8 @@ AtomVecMCA::AtomVecMCA(LAMMPS *lmp) : AtomVec(lmp)
   comm_x_only = 1;   // 1 if only exchange x in forward comm
   comm_f_only = 0;   ///AS TODO !! 1 if only exchange f in reverse comm - in Sphere = 0 ???????
 
-  size_forward = 3;  ///AS TODO !! Later choose what to pass via MPI
-  size_reverse = 6;  ///AS TODO !! Later choose what to pass via MPI
+  size_forward = 3;  ///AS TODO # of values per atom in comm !! Later choose what to pass via MPI
+  size_reverse = 6;  ///AS TODO # in reverse comm !! Later choose what to pass via MPI
   size_border = 9;   ///AS TODO # in border comm
   size_velocity = 6; ///AS # of velocity based quantities
   size_data_atom = 7;///AS TODO number of values in Atom line
@@ -299,13 +299,13 @@ void AtomVecMCA::grow_reset()
 ///AS  radius = atom->radius;
   density = atom->density; rmass = atom->rmass; 
   omega = atom->omega; torque = atom->torque;
-/*AS TODO
-  double *q;
-  double **mu;
-  double *p;
-  double *s0;
-  double *e;
-*/
+//AS TODO
+  q = atom->q;
+  mu = atom->mu;
+  p = atom->p;
+  s0 = atom->s0;
+  e = atom->e;
+
 
   molecule = atom->molecule;
   nspecial = atom->nspecial; special = atom->special;
@@ -340,13 +340,24 @@ void AtomVecMCA::copy(int i, int j, int delflag)
   omega[j][1] = omega[i][1];
   omega[j][2] = omega[i][2];
 
-/*AS TODO
-  double *q;
-  double **mu;
-  double *p;
-  double *s0;
-  double *e;
-*/
+//AS TODO
+  q[j][0] = q[i][0];
+  q[j][1] = q[i][1];
+  q[j][2] = q[i][2];
+  mu[j][0] = mu[i][0];
+  mu[j][1] = mu[i][1];
+  mu[j][2] = mu[i][2];
+  p[j][0] = p[i][0];
+  p[j][1] = p[i][1];
+  p[j][2] = p[i][2];
+  s0[j][0] = s0[i][0];
+  s0[j][1] = s0[i][1];
+  so[j][2] = s0[i][2];
+  e[j][0] = e[i][0];
+  e[j][1] = e[i][1];
+  e[j][2] = e[i][2];
+  
+  
   molecule[j] = molecule[i];
 
   num_bond[j] = num_bond[i];
@@ -471,12 +482,24 @@ int AtomVecMCA::pack_comm_vel(int n, int *list, double *buf,
       buf[m++] = omega[j][0];
       buf[m++] = omega[j][1];
       buf[m++] = omega[j][2];
+
 ///AS TODO
-  double *q;
-  double **mu;
-  double *p;
-  double *s0;
-  double *e;
+      buf[m++] = q[j][0];
+      buf[m++] = q[j][1];
+      buf[m++] = q[j][2];
+      buf[m++] = mu[j][0];
+      buf[m++] = mu[j][1];
+      buf[m++] = mu[j][2];
+      buf[m++] = p[j][0];
+      buf[m++] = p[j][1];
+      buf[m++] = p[j][2];
+      buf[m++] = s0[j][0];
+      buf[m++] = s0[j][1];
+      buf[m++] = s0[j][2];
+      buf[m++] = e[j][0];
+      buf[m++] = e[j][1];
+      buf[m++] = e[j][2];
+ 
 
     }
   } else {
@@ -501,13 +524,24 @@ int AtomVecMCA::pack_comm_vel(int n, int *list, double *buf,
 		  buf[m++] = omega[j][0];
 		  buf[m++] = omega[j][1];
 		  buf[m++] = omega[j][2];
-/*AS TODO
-  double *q;
-  double **mu;
-  double *p;
-  double *s0;
-  double *e;
-*/
+//AS TODO 
+		  buf[m++] = q[j][0];
+		  buf[m++] = q[j][1];
+		  buf[m++] = q[j][2];
+		  buf[m++] = mu[j][0];
+		  buf[m++] = mu[j][1];
+		  buf[m++] = mu[j][2];
+		  buf[m++] = p[j][0];
+		  buf[m++] = p[j][1];
+		  buf[m++] = p[j][2];
+		  buf[m++] = s0[j][0];
+		  buf[m++] = s0[j][1];
+		  buf[m++] = s0[j][2];
+		  buf[m++] = e[j][0];
+		  buf[m++] = e[j][1];
+		  buf[m++] = e[j][2];
+
+
 		}
     } else {
       dvx = pbc[0]*h_rate[0] + pbc[5]*h_rate[5] + pbc[4]*h_rate[4];
@@ -530,13 +564,23 @@ int AtomVecMCA::pack_comm_vel(int n, int *list, double *buf,
 		  buf[m++] = omega[j][0];
 		  buf[m++] = omega[j][1];
 		  buf[m++] = omega[j][2];
-/*AS TODO
-  double *q;
-  double **mu;
-  double *p;
-  double *s0;
-  double *e;
-*/
+//AS TODO
+		  buf[m++] = q[j][0];
+		  buf[m++] = q[j][1];
+		  buf[m++] = q[j][2];
+		  buf[m++] = mu[j][0];
+		  buf[m++] = mu[j][1];
+		  buf[m++] = mu[j][2];
+		  buf[m++] = p[j][0];
+		  buf[m++] = p[j][1];
+		  buf[m++] = p[j][2];
+		  buf[m++] = s0[j][0];
+		  buf[m++] = s0[j][1];
+		  buf[m++] = s0[j][2];
+		  buf[m++] = e[j][0];
+		  buf[m++] = e[j][1];
+		  buf[m++] = e[j][2];
+
       }
     }
   }
@@ -560,11 +604,22 @@ int AtomVecMCA::pack_comm_vel(int n, int *list, double *buf,
         buf[m++] = omega[j][1];
         buf[m++] = omega[j][2];
 ///AS TODO
-  double *q;
-  double **mu;
-  double *p;
-  double *s0;
-  double *e;
+        buf[m++] = q[j][0];
+        buf[m++] = q[j][1];
+        buf[m++] = q[j][2];
+        buf[m++] = mu[j][0];
+        buf[m++] = mu[j][1];
+        buf[m++] = mu[j][2];
+        buf[m++] = p[j][0];
+        buf[m++] = p[j][1];
+        buf[m++] = p[j][2];
+        buf[m++] = s0[j][0];
+        buf[m++] = s0[j][1];
+        buf[m++] = s0[j][2];
+        buf[m++] = e[j][0];
+        buf[m++] = e[j][1];
+        buf[m++] = e[j][2];
+
 /
       }
     } else {
@@ -594,11 +649,22 @@ int AtomVecMCA::pack_comm_vel(int n, int *list, double *buf,
           buf[m++] = omega[j][1];
           buf[m++] = omega[j][2];
 ////AS TODO
-  double *q;
-  double **mu;
-  double *p;
-  double *s0;
-  double *e;
+          buf[m++] = q[j][0];
+          buf[m++] = q[j][1];
+          buf[m++] = q[j][2];
+          buf[m++] = mu[j][0];
+          buf[m++] = mu[j][1];
+          buf[m++] = mu[j][2];
+          buf[m++] = p[j][0];
+          buf[m++] = p[j][1];
+          buf[m++] = p[j][2];
+          buf[m++] = s0[j][0];
+          buf[m++] = s0[j][1];
+          buf[m++] = s0[j][2];
+          buf[m++] = e[j][0];
+          buf[m++] = e[j][1];
+          buf[m++] = e[j][2];
+
 /
         }
       } else {
@@ -627,11 +693,22 @@ int AtomVecMCA::pack_comm_vel(int n, int *list, double *buf,
           buf[m++] = omega[j][1];
           buf[m++] = omega[j][2];
 ///AS TODO
-  double *q;
-  double **mu;
-  double *p;
-  double *s0;
-  double *e;
+            buf[m++] = q[j][0];
+            buf[m++] = q[j][1];
+            buf[m++] = q[j][2];
+            buf[m++] = mu[j][0];
+            buf[m++] = mu[j][1];
+            buf[m++] = mu[j][2];
+            buf[m++] = p[j][0];
+            buf[m++] = p[j][1];
+            buf[m++] = p[j][2];
+            buf[m++] = s0[j][0];
+            buf[m++] = s0[j][1];
+            buf[m++] = s0[j][2];
+            buf[m++] = e[j][0];
+            buf[m++] = e[j][1];
+            buf[m++] = e[j][2];
+
 /
         }
       }
@@ -709,13 +786,25 @@ void AtomVecMCA::unpack_comm_vel(int n, int first, double *buf)
     omega[i][0] = buf[m++];
     omega[i][1] = buf[m++];
     omega[i][2] = buf[m++];
-/*AS TODO
-  double *q;
-  double **mu;
-  double *p;
-  double *s0;
-  double *e;
-*/
+
+//AS TODO
+    q[i][0] = buf[m++];
+    q[i][1] = buf[m++];
+    q[i][2] = buf[m++];
+    mu[i][0] = buf[m++];
+    mu[i][1] = buf[m++];
+    mu[i][2] = buf[m++];
+    p[i][0] = buf[m++];
+    p[i][1] = buf[m++];
+    p[i][2] = buf[m++];
+    s0[i][0] = buf[m++];
+    s0[i][1] = buf[m++];
+    s0[i][2] = buf[m++];
+    e[i][0] = buf[m++];
+    e[i][1] = buf[m++];
+    e[i][2] = buf[m++];
+
+
   }
 /*
   } else {
@@ -736,11 +825,22 @@ void AtomVecMCA::unpack_comm_vel(int n, int first, double *buf)
       omega[i][1] = buf[m++];
       omega[i][2] = buf[m++];
 ///AS TODO
-  double *q;
-  double **mu;
-  double *p;
-  double *s0;
-  double *e;
+      q[i][0] = buf[m++];
+      q[i][1] = buf[m++];
+      q[i][2] = buf[m++];
+      mu[i][0] = buf[m++];
+      mu[i][1] = buf[m++];
+      mu[i][2] = buf[m++];
+      p[i][0] = buf[m++];
+      p[i][1] = buf[m++];
+      p[i][2] = buf[m++];
+      s0[i][0] = buf[m++];
+      so[i][1] = buf[m++];
+      so[i][2] = buf[m++];
+      e[i][0] = buf[m++];
+      e[i][1] = buf[m++];
+      e[i][2] = buf[m++];
+ 
 /
     }
   } */
@@ -781,11 +881,18 @@ int AtomVecMCA::pack_reverse(int n, int first, double *buf)
     buf[m++] = torque[i][0];
     buf[m++] = torque[i][1];
     buf[m++] = torque[i][2];
-/*AS TODO
-  double *p;
-  double *s0;
-  double *e;
-*/
+//AS TODO
+    buf[m++] = p[i][0];
+    buf[m++] = p[i][1];
+    buf[m++] = p[i][2];
+    buf[m++] = s0[i][0];
+    buf[m++] = s0[i][1];
+    buf[m++] = s0[i][2];
+    buf[m++] = e[i][0];
+    buf[m++] = e[i][1];
+    buf[m++] = e[i][2];
+
+
   }
   return m;
 }
@@ -802,11 +909,17 @@ int AtomVecMCA::pack_reverse_hybrid(int n, int first, double *buf)
     buf[m++] = torque[i][0];
     buf[m++] = torque[i][1];
     buf[m++] = torque[i][2];
-/*AS TODO
-  double *p;
-  double *s0;
-  double *e;
-*/
+//AS TODO
+    buf[m++] = p[i][0];
+    buf[m++] = p[i][1];
+    buf[m++] = p[i][2];
+    buf[m++] = s0[i][0];
+    buf[m++] = s0[i][1];
+    buf[m++] = s0[i][2];
+    buf[m++] = e[i][0];
+    buf[m++] = e[i][1];
+    buf[m++] = e[i][2];
+
   }
   return m;
 }
@@ -826,11 +939,17 @@ void AtomVecMCA::unpack_reverse(int n, int *list, double *buf)
     torque[j][0] += buf[m++];
     torque[j][1] += buf[m++];
     torque[j][2] += buf[m++];
-/*AS TODO
-  double *p;
-  double *s0;
-  double *e;
-*/
+//AS TODO
+    p[j][0] += buf[m++];
+    p[j][1] += buf[m++];
+    p[j][2] += buf[m++];
+    s0[j][0] += buf[m++];
+    s0[j][1] += buf[m++];
+    s0[j][2] += buf[m++];
+    e[j][0] += buf[m++];
+    e[j][1] += buf[m++];
+    e[j][2] += buf[m++];
+
   }
 }
 
@@ -846,11 +965,17 @@ int AtomVecMCA::unpack_reverse_hybrid(int n, int *list, double *buf)
     torque[j][0] += buf[m++];
     torque[j][1] += buf[m++];
     torque[j][2] += buf[m++];
-/*AS TODO
-  double *p;
-  double *s0;
-  double *e;
-*/
+//AS TODO
+    p[j][0] += buf[m++];
+    p[j][1] += buf[m++];
+    p[j][2] += buf[m++];
+    s0[j][0] += buf[m++];
+    s0[j][1] += buf[m++];
+    s0[j][2] += buf[m++];
+    e[j][0] += buf[m++];
+    e[j][1] += buf[m++];
+    e[j][2] += buf[m++];
+
   }
   return m;
 }
@@ -943,12 +1068,20 @@ int AtomVecMCA::pack_border_vel(int n, int *list, double *buf,
       buf[m++] = omega[j][0];
       buf[m++] = omega[j][1];
       buf[m++] = omega[j][2];
-/*AS TODO
-  double **mu;
-  double *p;
-  double *s0;
-  double *e;
-*/
+//AS TODO
+      buf[m++] = mu[j][0];
+      buf[m++] = mu[j][1];
+      buf[m++] = mu[j][2];
+      buf[m++] = p[j][0];
+      buf[m++] = p[j][1];
+      buf[m++] = p[j][2];
+      buf[m++] = s0[j][0];
+      buf[m++] = s0[j][1];
+      buf[m++] = s0[j][2];
+      buf[m++] = e[j][0];
+      buf[m++] = e[j][1];
+      buf[m++] = e[j][2];  
+
 
       buf[m++] = ubuf(molecule[j]).d;
     }
@@ -983,12 +1116,21 @@ int AtomVecMCA::pack_border_vel(int n, int *list, double *buf,
 		  buf[m++] = omega[j][0];
 		  buf[m++] = omega[j][1];
 		  buf[m++] = omega[j][2];
-/*AS TODO
-  double **mu;
-  double *p;
-  double *s0;
-  double *e;
-*/
+//AS TODO
+     		  buf[m++] = mu[j][0];
+     		  buf[m++] = mu[j][1];
+    		  buf[m++] = mu[j][2];
+     		  buf[m++] = p[j][0];
+   		  buf[m++] = p[j][1];
+      		  buf[m++] = p[j][2];
+      		  buf[m++] = s0[j][0];
+      		  buf[m++] = s0[j][1];
+      		  buf[m++] = s0[j][2];
+      		  buf[m++] = e[j][0];
+      		  buf[m++] = e[j][1];
+      		  buf[m++] = e[j][2]; 
+
+
 
 		  buf[m++] = ubuf(molecule[j]).d;
 		}
@@ -1021,12 +1163,24 @@ int AtomVecMCA::pack_border_vel(int n, int *list, double *buf,
 		buf[m++] = omega[j][0];
 		buf[m++] = omega[j][1];
 		buf[m++] = omega[j][2];
-/*AS TODO
-  double **mu;
-  double *p;
-  double *s0;
-  double *e;
-*/
+//AS TODO
+
+     		buf[m++] = mu[j][0];
+     		buf[m++] = mu[j][1];
+    		buf[m++] = mu[j][2];
+
+     		buf[m++] = p[j][0];
+   		buf[m++] = p[j][1];
+      		buf[m++] = p[j][2];
+
+      		buf[m++] = s0[j][0];
+      		buf[m++] = s0[j][1];
+      		buf[m++] = s0[j][2];
+
+      		buf[m++] = e[j][0];
+      		buf[m++] = e[j][1];
+      		buf[m++] = e[j][2];
+  
 
 		buf[m++] = ubuf(molecule[j]).d;
       }
@@ -1053,9 +1207,9 @@ int AtomVecMCA::pack_border_hybrid(int n, int *list, double *buf)
     buf[m++] = rmass[j];
     buf[m++] = density[j];
     buf[m++] = ubuf(molecule[j]).d;
-/*AS TODO
-  double *q;
-*/
+//AS TODO
+    buf[m++] = q[j];
+
   }
   return m;
 }
@@ -1079,9 +1233,9 @@ void AtomVecMCA::unpack_border(int n, int first, double *buf)
 ///AS    radius[i] = buf[m++];
     rmass[i] = buf[m++];
     density[i] = buf[m++];
-/*AS TODO
-  double *q;
-*/
+//AS TODO
+    q[i] = buf[m++];
+
     molecule[i] = (int) ubuf(buf[m++]).i; // remove?
   }
 
@@ -1116,11 +1270,17 @@ void AtomVecMCA::unpack_border_vel(int n, int first, double *buf)
     omega[i][0] = buf[m++];
     omega[i][1] = buf[m++];
     omega[i][2] = buf[m++];
-/*AS TODO
-  double *q;
-  double **mu;
-  double *e;
-*/
+//AS TODO
+    q[i][0] = buf[m++];
+    q[i][1] = buf[m++];
+    q[i][2] = buf[m++];
+    mu[i][0] = buf[m++];
+    mu[i][1] = buf[m++];
+    mu[i][2] = buf[m++];
+    e[i][0] = buf[m++];
+    e[i][1] = buf[m++];
+    e[i][2] = buf[m++];
+
     
     molecule[i] = (int) ubuf(buf[m++]).i;  // remove?
 
@@ -1144,9 +1304,9 @@ int AtomVecMCA::unpack_border_hybrid(int n, int first, double *buf)
 ///AS    radius[i] = buf[m++];
     rmass[i] = buf[m++];
     density[i] = buf[m++];
-/*AS TODO
-  double *q;
-*/
+//AS TODO
+    q[i] = buf[m++];
+
     molecule[i] = (int) ubuf(buf[m++]).i; //remove?
  }
   return m;
@@ -1180,13 +1340,23 @@ int AtomVecMCA::pack_exchange(int i, double *buf)
   buf[m++] = omega[i][0];
   buf[m++] = omega[i][1];
   buf[m++] = omega[i][2];
-/*AS TODO
-  double *q;
-  double **mu;
-  double *p;
-  double *s0;
-  double *e;
-*/
+//AS TODO
+  buf[m++] = q[i][0];
+  buf[m++] = q[i][1];
+  buf[m++] = q[i][2];  
+  buf[m++] = mu[i][0];
+  buf[m++] = mu[i][1];
+  buf[m++] = mu[i][2];
+  buf[m++] = p[i][0];
+  buf[m++] = p[i][1];
+  buf[m++] = p[i][2];
+  buf[m++] = s0[i][0];
+  buf[m++] = s0[i][1];
+  buf[m++] = s0[i][2];
+  buf[m++] = e[i][0];
+  buf[m++] = e[i][1];
+  buf[m++] = e[i][2]; 
+
 
   buf[m++] = ubuf(molecule[i]).d;
 
@@ -1244,13 +1414,23 @@ int AtomVecMCA::unpack_exchange(double *buf)
   omega[nlocal][0] = buf[m++];
   omega[nlocal][1] = buf[m++];
   omega[nlocal][2] = buf[m++];
-/*AS TODO
-  double *q;
-  double **mu;
-  double *p;
-  double *s0;
-  double *e;
-*/
+//AS TODO
+  q[nlocal][0] = buf[m++];
+  q[nlocal][1] = buf[m++];
+  q[nlocal][2] = buf[m++];
+  mu[nlocal][0] = buf[m++];
+  mu[nlocal][1] = buf[m++];
+  mu[nlocal][2] = buf[m++];
+  p[nlocal][0] = buf[m++];
+  p[nlocal][1] = buf[m++];
+  p[nlocal][2] = buf[m++];
+  s0[nlocal][0] = buf[m++];
+  s0[nlocal][1] = buf[m++];
+  s0[nlocal][2] = buf[m++];
+  e[nlocal][0] = buf[m++];
+  e[nlocal][1] = buf[m++];
+  e[nlocal][2] = buf[m++];
+ 
 
   molecule[nlocal] = (int) ubuf(buf[m++]).i; //remove?
 
@@ -1346,13 +1526,23 @@ int AtomVecMCA::pack_restart(int i, double *buf)
   buf[m++] = omega[i][0];
   buf[m++] = omega[i][1];
   buf[m++] = omega[i][2];
-/*AS TODO
-  double *q;
-  double **mu;
-  double *p;
-  double *s0;
-  double *e;
-*/
+//AS TODO
+  buf[m++] = q[i][0];
+  buf[m++] = q[i][1];
+  buf[m++] = q[i][2]; 
+  buf[m++] = mu[i][0];
+  buf[m++] = mu[i][1];
+  buf[m++] = mu[i][2]; 
+  buf[m++] = p[i][0];
+  buf[m++] = p[i][1];
+  buf[m++] = p[i][2];
+  buf[m++] = s0[i][0];
+  buf[m++] = s0[i][1];
+  buf[m++] = s0[i][2];  
+  buf[m++] = e[i][0];
+  buf[m++] = e[i][1];
+  buf[m++] = e[i][2]; 
+
 
   buf[m++] = ubuf(molecule[i]).d; //remove?
 
@@ -1414,13 +1604,23 @@ int AtomVecMCA::unpack_restart(double *buf)
   omega[nlocal][0] = buf[m++];
   omega[nlocal][1] = buf[m++];
   omega[nlocal][2] = buf[m++];
-/*AS TODO
-  double *q;
-  double **mu;
-  double *p;
-  double *s0;
-  double *e;
-*/
+//AS TODO
+  q[nlocal][0] = buf[m++];
+  q[nlocal][1] = buf[m++];
+  q[nlocal][2] = buf[m++]; 
+  mu[nlocal][0] = buf[m++];
+  mu[nlocal][1] = buf[m++];
+  mu[nlocal][2] = buf[m++]; 
+  p[nlocal][0] = buf[m++];
+  p[nlocal][1] = buf[m++];
+  p[nlocal][2] = buf[m++]; 
+  s0[nlocal][0] = buf[m++];
+  s0[nlocal][1] = buf[m++];
+  s0[nlocal][2] = buf[m++]; 
+  e[nlocal][0] = buf[m++];
+  e[nlocal][1] = buf[m++];
+  e[nlocal][2] = buf[m++];  
+
 
   molecule[nlocal] = (int) ubuf(buf[m++]).i; //remove?
 
@@ -1639,6 +1839,11 @@ void AtomVecMCA::pack_data(double **buf)
     buf[i][6] = ubuf((image[i] & IMGMASK) - IMGMAX).d;
     buf[i][7] = ubuf((image[i] >> IMGBITS & IMGMASK) - IMGMAX).d;
     buf[i][8] = ubuf((image[i] >> IMG2BITS) - IMGMAX).d;
+
+    buf[i][9] = q[i][0];
+    buf[i][10] = q[i][1];
+    buf[i][11] = q[i][2];
+
 ///AS TODO ??? what we need to save else?
   }
 }
@@ -1667,6 +1872,10 @@ void AtomVecMCA::pack_data(double **buf,int tag_offset)
     buf[i][6] = ubuf((image[i] & IMGMASK) - IMGMAX).d;
     buf[i][7] = ubuf((image[i] >> IMGBITS & IMGMASK) - IMGMAX).d;
     buf[i][8] = ubuf((image[i] >> IMG2BITS) - IMGMAX).d;
+
+    buf[i][9] = q[i][0];
+    buf[i][10] = q[i][1];
+    buf[i][11] = q[i][2];
 ///AS TODO ??? what we need to save else?
   }
 }
