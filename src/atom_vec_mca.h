@@ -109,41 +109,56 @@ class AtomVecMCA : public AtomVec {
   int *tag,*type,*mask; //atom ID, atom type?, deform_groupbit?
   tagint *image;        // IMGMAX-IMG2BITS in new version of LIGGGHTS?? 
   double **x,**v,**f;
-  double *radius;
-  double *density,*rmass; //////////!!Later change as 'double radius,rmass;' and  int mass_type;  // 1 if per-type masses
+//!!  double *radius;
+  double *density,*rmass; //!!Later we should use  'int mass_type;  // 1 if per-type masses'
   double **omega,**torque;
-  int radvary;
+//!!  int radvary; //!! We do not need it
 
-  /* { //!! Later we will need these
-  double radius; //Change from array to single variable: all automata have the same radius
-  double contact_area; // Initial contact area defined by packing. Remember about heat transfer through contact_area in granular!!
-  double *inertia_mom; // ?? We need moment of inertia
-  double **theta //theta - we need orientation vector to describe rotation as a first approximation
-                 // Later we must use quaternions or Rodrigues rotation vector , as in AtomVecEllipsoid 'struct Bonus {double quat[4]...};'
-  double *mean_stress;
-  int packing; 
-  int coord_num; // Coordination number is defined by packing (6 for cubic or 12 for fcc and hcp)
-  // } */
+  int packing;   //!! Packing of movable callular automata: 'sc' or 'fcc' or 'hcp'
+  int coord_num; //!! Coordination number is defined by packing (6 for cubic or 12 for fcc and hcp)
+  double mca_radius; //!! Change from array to single variable: all automata have the same radius
+  double contact_area; //!! Initial contact area defined by packing. Remember about heat transfer through contact_area in granular!!
+
+  double *q; //!! mca_inertia moment of inertia is a scalar as for sphere
+  double **mu;    //!! We need orientation vector to describe rotation as a first approximation
+                  //!! Later we must use Rodrigues rotation vector or quaternions, as in AtomVecEllipsoid 'struct Bonus {double quat[4]...};'
+  double *p;  //!! 'pressure == -mean_stress' - is used for many-body interaction
+  double *s0; //!! equiv_stress~ equivalent (or von Mises, shear) stress - is used for plasticity
+  double *e; //!! equiv_strain~ equivalent (shear) strain - is used for plasticity
 /*
 For the MCA style, the number of mca bonds per atom is stored, and the information associated to it:
  the type of each bond, the ID of the bonded atom and the so-called bond history.
 The bond history is similar to the contact history for granulars, it stores the internal state of the bond.
 What exactly is stored in this internal state is defined by the MCA style used.
 
-In atom_style command it need 2 args: the number of bond types, and the maximum number of bonds that each atom can have. 
-??? For each bond type, the parameters have to be specified via the bond_coeff command (see example here).
+In atom_style command it need 4 args: 
+the automaton radius, the packing of automata,
+the number of bond types, and the _maximum_ number of bonds that each atom can have.
 
 An example for the sytnax is given below:
-atom_style mca n_bondtypes 1 bonds_per_atom 6  (6 - cubic packing, 12 - fcc packing)
+atom_style mca radius 0.0001 packing fcc n_bondtypes 1 bonds_per_atom 6  
+
+Ususally atom_vec_mca has number bonds defined by packing (6 for cubic packing, 12 for fcc packing), 
+but during deformation other atoms can be in contact with it and the total number of interacting 
+neighbours may be greater than coordination number of the packing .
+
+For each bond type, the parameters have to be specified via the bond_coeff command.
+These parameters define bond formation and breaking rules
+bond_coeff 	1 0.0025 10000000000 10000000000 ${simplebreak} 0.002501
+
 */
   int *molecule; //!! This allows to have bonds. Do we really need it?
   int **nspecial,**special;
-  int *num_bond;
+  int *num_bond; //!! Do we really need it?
   int **bond_type,**bond_atom;
   int num_bondhist;
-  double ***bond_hist;
+  double ***bond_hist; //???
 
   class FixBondExchangeMCA *fbe; //!! This is used for MPI eschange as I understand. But there is no '#include ...' Why?
+
+  double get_init_volume(); //!! compute initial volume of cellular automaton based on radius and packing
+  double get_contact_area(); //!! compute initial contact_area between cellular automata based on radius and packing
+
 };
 
 }

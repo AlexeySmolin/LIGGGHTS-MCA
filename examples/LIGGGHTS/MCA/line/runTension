@@ -1,3 +1,4 @@
 #!/bin/sh
 
-../../../../src/lmp_serial < line_tension.in
+../../../../src/lmp_serial -in line_tension.in
+#gdb --args ../../../../src/lmp_serial_debug -in line_tension.in

@@ -110,17 +110,18 @@ void FixNVEMCA::init()
 {
   FixNVE::init();
 
-  // check that all particles are finite-size spheres
-  // no point particles allowed
+  // check that all particles are atom_vec_mca
 
-  double *radius = atom->radius;
   int *mask = atom->mask;
   int nlocal = atom->nlocal;
 
-  for (int i = 0; i < nlocal; i++)
+  if (!(atom->mca_flag))
+    error->one(FLERR,"Fix nve/mca requires atom_vec_mca particles");
+
+/*  for (int i = 0; i < nlocal; i++)
     if (mask[i] & groupbit)
-      if (radius[i] == 0.0)
-        error->one(FLERR,"Fix nve/mca requires extended particles");
+      if (!mca_flag[i])
+        error->one(FLERR,"Fix nve/mca requires atom_vec_mca particles");*/
 }
 
 /* ---------------------------------------------------------------------- */
@@ -128,69 +129,59 @@ void FixNVEMCA::init()
 void FixNVEMCA::initial_integrate(int vflag)
 {
   double dtfm,dtirotate,msq,scale;
-  double g[3];
 
   double **x = atom->x;
   double **v = atom->v;
   double **f = atom->f;
   double **omega = atom->omega;
   double **torque = atom->torque;
-  double *radius = atom->radius;
   double *rmass = atom->rmass;
+  double *inertia = atom->q;
+  double **theta = atom->mu;
   int *mask = atom->mask;
   int nlocal = atom->nlocal;
   if (igroup == atom->firstgroup) nlocal = atom->nfirst;
 
   // set timestep here since dt may have changed or come via rRESPA
 
-  double dtfrotate; 
-  if (domain->dimension == 2) dtfrotate = dtf / 0.5; // for discs the formula is I=0.5*Mass*Radius^2
-  else dtfrotate  = dtf / INERTIA;
+  if (domain->dimension != 3) {
+   error->one(FLERR,"Fix nve/mca is impllemented only for 3D");
+  }
 
   // update 1/2 step for v and omega, and full step for  x for all particles
   // d_omega/dt = torque / inertia
+//fprintf(stderr, "FixNVEMCA::initial_integrate dtv= %g dtf= %g\n",dtv,dtf);      
 
   for (int i = 0; i < nlocal; i++) {
     if (mask[i] & groupbit) {
 
       // velocity update for 1/2 step
       dtfm = dtf / (rmass[i]*onePlusCAddRhoFluid_);
+//fprintf(stderr, "rmass[%d]= %20.12e onePlusCAddRhoFluid_= %20.12e f= %20.12e %20.12e %20.12e \n",i,rmass[i],onePlusCAddRhoFluid_,f[i][0],f[i][1],f[i][2]);      
       v[i][0] += dtfm * f[i][0];
       v[i][1] += dtfm * f[i][1];
       v[i][2] += dtfm * f[i][2];
 
+//fprintf(stderr, "coord[%d]= %20.12e %20.12e %20.12e velo= %20.12e %20.12e %20.12e \n",i,x[i][0],x[i][1],x[i][2],v[i][0],v[i][1],v[i][2]);      
       // position update
       x[i][0] += dtv * v[i][0];
       x[i][1] += dtv * v[i][1];
       x[i][2] += dtv * v[i][2];
-      
+//fprintf(stderr, "coord[%d]= %20.12e %20.12e %20.12e\n",i,x[i][0],x[i][1],x[i][2]);      
       // rotation update
-      dtirotate = dtfrotate / (radius[i]*radius[i]*rmass[i]);
+      dtirotate = dtf / (inertia[i]);
       omega[i][0] += dtirotate * torque[i][0];
       omega[i][1] += dtirotate * torque[i][1];
       omega[i][2] += dtirotate * torque[i][2];
+
+      // update rotation 
+      ///AS TODO Here it is for small roations as vector, Must be done for quaternions
+      theta[i][0] += dtv * omega[i][0];
+      theta[i][1] += dtv * omega[i][1];
+      theta[i][2] += dtv * omega[i][2];
     }
   }
 
-  // update mu for dipoles
-  // d_mu/dt = omega cross mu
-  // renormalize mu to dipole length
-
-  if (extra == DIPOLE) {
-    double **mu = atom->mu;
-    for (int i = 0; i < nlocal; i++)
-      if (mask[i] & groupbit)
-        if (mu[i][3] > 0.0) {
-          g[0] = mu[i][0] + dtv * (omega[i][1]*mu[i][2]-omega[i][2]*mu[i][1]);
-          g[1] = mu[i][1] + dtv * (omega[i][2]*mu[i][0]-omega[i][0]*mu[i][2]);
-          g[2] = mu[i][2] + dtv * (omega[i][0]*mu[i][1]-omega[i][1]*mu[i][0]);
-          msq = g[0]*g[0] + g[1]*g[1] + g[2]*g[2];
-          scale = mu[i][3]/sqrt(msq);
-          mu[i][0] = g[0]*scale;
-          mu[i][1] = g[1]*scale;
-          mu[i][2] = g[2]*scale;
-        }
-  }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -204,19 +195,14 @@ void FixNVEMCA::final_integrate()
   double **omega = atom->omega;
   double **torque = atom->torque;
   double *rmass = atom->rmass;
-  double *radius = atom->radius;
+  double *inertia = atom->q;
   int *mask = atom->mask;
   int nlocal = atom->nlocal;
   if (igroup == atom->firstgroup) nlocal = atom->nfirst;
 
-  // set timestep here since dt may have changed or come via rRESPA
-
-  double dtfrotate; 
-  if (domain->dimension == 2) dtfrotate = dtf / 0.5; // for discs the formula is I=0.5*Mass*Radius^2
-  else dtfrotate  = dtf / INERTIA;
-
   // update 1/2 step for v,omega for all particles
   // d_omega/dt = torque / inertia
+//fprintf(stderr, "FixNVEMCA::final_integrate \n");      
 
   for (int i = 0; i < nlocal; i++)
     if (mask[i] & groupbit) {
@@ -226,11 +212,12 @@ void FixNVEMCA::final_integrate()
       v[i][0] += dtfm * f[i][0];
       v[i][1] += dtfm * f[i][1];
       v[i][2] += dtfm * f[i][2];
+//fprintf(stderr, "velo[%d]= %20.12e %20.12e %20.12e\n",i,v[i][0],v[i][1],v[i][2]);      
 
       // rotation update
-      dtirotate = dtfrotate / (radius[i]*radius[i]*rmass[i]);
+      dtirotate = dtf / (inertia[i]);
       omega[i][0] += dtirotate * torque[i][0];
       omega[i][1] += dtirotate * torque[i][1];
       omega[i][2] += dtirotate * torque[i][2];
-    }
+   }
 }

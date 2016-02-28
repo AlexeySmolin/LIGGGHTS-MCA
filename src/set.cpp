@@ -923,6 +923,8 @@ void Set::set(int keyword)
       } else if (atom->line_flag && atom->line[i] >= 0) {
         double length = avec_line->bonus[atom->line[i]].length;
         atom->rmass[i] = length * dvalue;
+      } else if (atom->mca_flag) {
+        atom->rmass[i] *= dvalue;
       }
        else atom->rmass[i] = dvalue;
     }
