@@ -104,6 +104,12 @@ Lattice::Lattice(LAMMPS *lmp, int narg, char **arg) : Pointers(lmp)
       error->all(FLERR,"Lattice style incompatible with simulation dimension");
   }
 
+  // check that lattice matches packing for 'atom_vec_mca'
+  if (atom->mca_flag) {
+    if (atom->packing != style)
+      error->all(FLERR,"Lattice style incompatible with packing in 'atom_style mca'");
+  }
+
   // scale = conversion factor between lattice and box units
 
   if (narg < 2) error->all(FLERR,"Illegal lattice command");

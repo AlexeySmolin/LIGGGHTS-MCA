@@ -19,22 +19,26 @@ variable rho equal 2700			# density
 variable Y  equal 6.894757291e10	# Young modulus 70 GPa
 variable p  equal 0.3			# Poisson ratio
 variable G  equal $Y/(2*(1+$p))		# Shear modulus
+variable K  equal $Y/(3*(1-2.0*$p))	# Bulk modulus
+
+#Y=1.0/(1.0/(9.0*K) + 1.0/(3.0*G))
+#p=0.5*(3.0*K - 2.0*G)/(3.0*K + G)
 
 # Loading parameters
 variable KIP equal 4448.2216		#N
 variable inch equal 0.0254		#mm
 
 variable M equal 100*${KIP}/${inch}
-variable F equal 10*${KIP}		#N
+variable F equal 10*${KIP}		#N 10
 
 
-# Time step
+# Time step = ${rp}/(sqrt($Y/${rho}))
 variable dt equal 0.00001
 
 # Simulation time parameters
 variable fulltime equal 10
 variable runstep equal ${fulltime}/${dt}
-variable savetime equal 0.01
+variable savetime equal 0.01	# 0.0001
 variable filestep equal ${savetime}/${dt}
 ################################################
 
@@ -66,7 +70,7 @@ units		si
 #               block args = xlo xhi ylo yhi zlo zhi
 #                          units value = lattice or box 
 #(lattice = the geometry is defined in lattice units; box = the geometry is defined in simulation box units
-region		reg block -$L ${2L} -1 1 -$L 1 units box
+region		reg block -$L ${2L} -1 1 -1 1 units box
 
 #create_box N region-ID; N = # of atom types in simulation
 create_box	${nat} reg #bonds 1 6 	# {num_atom_types} {region} bonds moved into atom_style for LIGGGHTS>=3.X.X
@@ -85,8 +89,8 @@ neigh_modify	delay 0
 ##pair_style 	gran model hertz tangential history 
 pair_style 	mca ${skin} # cutoff as for 'pair_soft' - just for working now
 
-#Specify the pairwise force field coefficients - Зачем нам? - без этого не работает
-pair_coeff	* * 0.0 # ?? Later change it for real mca
+# pair_coeff I J shear_modulus bulk_modulus
+pair_coeff	* * $G $K
 
 #bond
 bond_style 	mca
@@ -114,11 +118,11 @@ bond_coeff 	1 ${rb} ${kn} ${ks} 1 1e4 1e4
 #Everything that happens during a simulation besides force computation, neighbor list construction, and output, 
 #is a "fix". This includes time integration (update of coordinates and velocities), force constraints or 
 #boundary conditions (SHAKE or walls), and diagnostics (compute a diffusion coefficient). 
-
-fix 		m1 all property/global youngsModulus peratomtype $Y $Y
-fix 		m2 all property/global poissonsRatio peratomtype $p $p
-fix 		m3 all property/global coefficientRestitution peratomtypepair 2 0.2 0.2 0.2 0.2
-fix 		m4 all property/global coefficientFriction peratomtypepair 2 0.3 0.3 0.3 0.3
+# is used only in 'fix_check_timestep_gran.cpp'
+#fix 		m1 all property/global youngsModulus peratomtype $Y $Y
+#fix 		m2 all property/global poissonsRatio peratomtype $p $p
+#fix 		m3 all property/global coefficientRestitution peratomtypepair 2 0.2 0.2 0.2 0.2
+#fix 		m4 all property/global coefficientFriction peratomtypepair 2 0.3 0.3 0.3 0.3
 
 mass 		1 1.0 #dummy
 mass 		2 1.0 #dummy
@@ -129,6 +133,7 @@ timestep	1.0e-9 # Small step for initialization ???
 # create just 11 particles in a line
 # ================================================
 region		bc cylinder x 0.00 0.00 ${rp} 0.0 $L units box
+#lattice		fcc ${sc}
 lattice		sc ${sc}
 create_atoms	1 region bc
 run 1
@@ -163,8 +168,6 @@ fix 		bondcr all bond/create/mca 1 1 1 ${c} 1 ${bpa} #every itype jtype cutoff b
 group		nve_group region reg
 
 #apply nve integration to all particles that are inserted as single particles
-# - This does not update orientation! For mca we need 'nve/sphere update dipole' and 'atom_style dipole'
-#   or  'nve/asphere'????? 
 fix		integr nve_group nve/mca
 
 #output settings, include total thermal energyg
@@ -174,13 +177,16 @@ thermo_modify	lost ignore norm no
 compute_modify	thermo_temp dynamic yes
 
 #insert the first particles so that dump is not empty
-shell rm -rf post
+#shell -rf post		# does not work
+shell rm    post/*	# does not work
+shell rmdir post	# does not work
 shell mkdir post
+
 ##dump		dmp 	all custom  ${filestep} post/dump*.liggghts id type x y z vx vy vz fx fy fz omegax omegay omegaz radius
 dump		dmp 	all custom  ${filestep} post/dump*.liggghts id type x y z vx vy vz fx fy fz omegax omegay omegaz
 
 #get coordinates of the last particle
-variable time equal step*dt
+variable time equal step*${dt}
 variable px equal x[${lastone}]
 variable py equal y[${lastone}]
 variable pz equal z[${lastone}]
@@ -203,9 +209,9 @@ fix 	tipF tipball addforce  $F 0 0    #1kip=4.4482216kN
 #fix 	tipM tipball addtorque 0 $M  0	  #not possible 
 
 timestep	${dt}
+
+#run 10
 #quit
-variable t equal 1/${dt} 	#run 1 second
+
+variable t equal 1/${dt} 	#run 0.0005 second
 run $t
-
-
-

@@ -54,10 +54,6 @@
 using namespace LAMMPS_NS;
 using namespace FixConst;
 
-#define INERTIA 0.4          // moment of inertia prefactor for sphere
-
-enum{NONE,DIPOLE};
-
 /* ---------------------------------------------------------------------- */
 
 FixNVEMCA::FixNVEMCA(LAMMPS *lmp, int narg, char **arg) :
@@ -70,38 +66,10 @@ FixNVEMCA::FixNVEMCA(LAMMPS *lmp, int narg, char **arg) :
 
   time_integrate = 1;
 
-  // process extra keywords
-
-  extra = NONE;
-
-  int iarg = 3;
-  while (iarg < narg) {
-    if (strcmp(arg[iarg],"update") == 0) {
-      if (iarg+2 > narg) error->all(FLERR,"Illegal fix nve/mca command");
-      if (strcmp(arg[iarg+1],"dipole") == 0) extra = DIPOLE;
-      else if (strcmp(arg[iarg+1],"CAddRhoFluid") == 0)
-      {
-            if(narg < iarg+2)
-                error->fix_error(FLERR,this,"not enough arguments for 'CAddRhoFluid'");
-            iarg+=2;
-            useAM_ = true;
-            CAddRhoFluid_        = atof(arg[iarg]);
-            onePlusCAddRhoFluid_ = 1.0 + CAddRhoFluid_;
-            fprintf(screen,"cfd_coupling_force_implicit will consider added mass with CAddRhoFluid = %f\n",
-                    CAddRhoFluid_);
-      }
-      else error->all(FLERR,"Illegal fix nve/mca command");
-      iarg += 2;
-    } else error->all(FLERR,"Illegal fix nve/mca command");
-  }
-
   // error checks
 
   if (!atom->mca_flag)
     error->all(FLERR,"Fix nve/mca requires atom style mca");
-  /*!! //AS
-  if (extra == DIPOLE && !atom->mu_flag) 
-    error->all(FLERR,"Fix nve/mca requires atom attribute mu"); */
 }
 
 /* ---------------------------------------------------------------------- */
@@ -111,14 +79,11 @@ void FixNVEMCA::init()
   FixNVE::init();
 
   // check that all particles are atom_vec_mca
-
+/*
   int *mask = atom->mask;
   int nlocal = atom->nlocal;
 
-  if (!(atom->mca_flag))
-    error->one(FLERR,"Fix nve/mca requires atom_vec_mca particles");
-
-/*  for (int i = 0; i < nlocal; i++)
+  for (int i = 0; i < nlocal; i++)
     if (mask[i] & groupbit)
       if (!mca_flag[i])
         error->one(FLERR,"Fix nve/mca requires atom_vec_mca particles");*/
@@ -150,24 +115,25 @@ void FixNVEMCA::initial_integrate(int vflag)
 
   // update 1/2 step for v and omega, and full step for  x for all particles
   // d_omega/dt = torque / inertia
-//fprintf(stderr, "FixNVEMCA::initial_integrate dtv= %g dtf= %g\n",dtv,dtf);      
+//fprintf(stderr, "FixNVEMCA::initial_integrate dtv= %g dtf= %g\n",dtv,dtf);
+//fprintf(stderr, "rmass[%d]= %20.12e mca_radius= %g\n",nlocal,rmass[nlocal-1],atom->mca_radius);
 
   for (int i = 0; i < nlocal; i++) {
     if (mask[i] & groupbit) {
 
       // velocity update for 1/2 step
       dtfm = dtf / (rmass[i]*onePlusCAddRhoFluid_);
-//fprintf(stderr, "rmass[%d]= %20.12e onePlusCAddRhoFluid_= %20.12e f= %20.12e %20.12e %20.12e \n",i,rmass[i],onePlusCAddRhoFluid_,f[i][0],f[i][1],f[i][2]);      
+//fprintf(stderr, "rmass[%d]= %20.12e onePlusCAddRhoFluid_= %20.12e f= %20.12e %20.12e %20.12e \n",i,rmass[i],onePlusCAddRhoFluid_,f[i][0],f[i][1],f[i][2]);
       v[i][0] += dtfm * f[i][0];
       v[i][1] += dtfm * f[i][1];
       v[i][2] += dtfm * f[i][2];
 
-//fprintf(stderr, "coord[%d]= %20.12e %20.12e %20.12e velo= %20.12e %20.12e %20.12e \n",i,x[i][0],x[i][1],x[i][2],v[i][0],v[i][1],v[i][2]);      
+//fprintf(stderr, "coord[%d]= %20.12e %20.12e %20.12e velo= %20.12e %20.12e %20.12e \n",i,x[i][0],x[i][1],x[i][2],v[i][0],v[i][1],v[i][2]);
       // position update
       x[i][0] += dtv * v[i][0];
       x[i][1] += dtv * v[i][1];
       x[i][2] += dtv * v[i][2];
-//fprintf(stderr, "coord[%d]= %20.12e %20.12e %20.12e\n",i,x[i][0],x[i][1],x[i][2]);      
+//fprintf(stderr, "coord[%d]= %20.12e %20.12e %20.12e\n",i,x[i][0],x[i][1],x[i][2]);
       // rotation update
       dtirotate = dtf / (inertia[i]);
       omega[i][0] += dtirotate * torque[i][0];
@@ -202,7 +168,7 @@ void FixNVEMCA::final_integrate()
 
   // update 1/2 step for v,omega for all particles
   // d_omega/dt = torque / inertia
-//fprintf(stderr, "FixNVEMCA::final_integrate \n");      
+fprintf(stderr, "FixNVEMCA::final_integrate \n");
 
   for (int i = 0; i < nlocal; i++)
     if (mask[i] & groupbit) {
@@ -212,7 +178,7 @@ void FixNVEMCA::final_integrate()
       v[i][0] += dtfm * f[i][0];
       v[i][1] += dtfm * f[i][1];
       v[i][2] += dtfm * f[i][2];
-//fprintf(stderr, "velo[%d]= %20.12e %20.12e %20.12e\n",i,v[i][0],v[i][1],v[i][2]);      
+//fprintf(stderr, "velo[%d]= %20.12e %20.12e %20.12e\n",i,v[i][0],v[i][1],v[i][2]);
 
       // rotation update
       dtirotate = dtf / (inertia[i]);

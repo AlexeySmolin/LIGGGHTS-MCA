@@ -61,6 +61,7 @@ using namespace MathConst;
 PairMCA::PairMCA(LAMMPS *lmp) : Pair(lmp)
 {
   writedata = 1;
+  single_enable = 0;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -71,8 +72,8 @@ PairMCA::~PairMCA()
     memory->destroy(setflag);
     memory->destroy(cutsq);
 
-    memory->destroy(prefactor);
-    memory->destroy(cut);
+    memory->destroy(G);
+    memory->destroy(K);
   }
 }
 
@@ -81,8 +82,10 @@ PairMCA::~PairMCA()
 void PairMCA::compute(int eflag, int vflag)
 {
   int i,j,ii,jj,inum,jnum,itype,jtype;
-  double xtmp,ytmp,ztmp,delx,dely,delz,evdwl,fpair;
-  double r,rsq,arg,factor_lj;
+  double xtmp,ytmp,ztmp,delx,dely,delz,fpair;
+  double evdwl,factor_lj; ///AS
+  double r,rsq;
+  double e_ij;
   int *ilist,*jlist,*numneigh,**firstneigh;
 
   evdwl = 0.0;
@@ -90,16 +93,35 @@ void PairMCA::compute(int eflag, int vflag)
   else evflag = vflag_fdotr = 0;
 
   double **x = atom->x;
+  double **v = atom->v;
   double **f = atom->f;
+  double **omega = atom->omega;
+  double **torque = atom->torque;
+  double *rmass = atom->rmass;
+  double *inertia = atom->q;
+  double **theta = atom->mu;
+  int coord_num  = atom->coord_num;
+  double mca_radius  = atom->mca_radius;
+  double contact_area  = atom->contact_area;
+  double *mca_inertia  = atom->q;
+  double *mean_stress  = atom->p;
+  double *equiv_stress  = atom->s0;
+  double *equiv_strain  = atom->e;
+
+  const double dtImpl = 0.5*update->dt; // for implicit estimation of displacement
+  const double cutsq = 5.76*mca_radius*mca_radius; // 1.44*d*d
+
   int *type = atom->type;
   int nlocal = atom->nlocal;
-  double *special_lj = force->special_lj;
+ ///AS  double *special_lj = force->special_lj;
   int newton_pair = force->newton_pair;
 
   inum = list->inum;
   ilist = list->ilist;
   numneigh = list->numneigh;
   firstneigh = list->firstneigh;
+
+//fprintf(stderr, "PairMCA::compute dtImpl= %g\n", dtImpl);
 
   // loop over neighbors of my atoms
 
@@ -114,33 +136,34 @@ void PairMCA::compute(int eflag, int vflag)
 
     for (jj = 0; jj < jnum; jj++) {
       j = jlist[jj];
-      factor_lj = special_lj[sbmask(j)];
+///AS      factor_lj = special_lj[sbmask(j)];
       j &= NEIGHMASK;
 
-      delx = xtmp - x[j][0];
-      dely = ytmp - x[j][1];
-      delz = ztmp - x[j][2];
+      delx = xtmp - x[j][0] + dtImpl*(v[i][0] - v[j][0]);
+      dely = ytmp - x[j][1] + dtImpl*(v[i][1] - v[j][1]);
+      delz = ztmp - x[j][2] + dtImpl*(v[i][2] - v[j][2]);
       rsq = delx*delx + dely*dely + delz*delz;
       jtype = type[j];
 
-      if (rsq < cutsq[itype][jtype]) {
+//if(ii == (inum-2)) fprintf(stderr, "PairMCA::compute i= %d j= %d rsq= %g cutsq = %g\n", i, j, rsq, cutsq);
+      if (rsq < cutsq) {
         r = sqrt(rsq);
-        arg = MY_PI*r/cut[itype][jtype];
-        if (r > 0.0) fpair = factor_lj * prefactor[itype][jtype] *
-                       sin(arg) * MY_PI/cut[itype][jtype]/r;
-        else fpair = 0.0;
+        e_ij = (0.5*r - mca_radius) / mca_radius;
+        fpair = contact_area * e_ij * 2.0 * G[itype][jtype]
+                / r; //this allows to get cos of normal direction by mult on delx 
+//if(ii == (inum-2)) fprintf(stderr, "PairMCA::compute i= %d j= %d e_ij= %g fpair = %g G=%g mass[i]= %g\n", i, j, e_ij, fpair*r,G[itype][jtype],rmass[i]);
 
-        f[i][0] += delx*fpair;
-        f[i][1] += dely*fpair;
-        f[i][2] += delz*fpair;
+        f[i][0] -= delx*fpair;
+        f[i][1] -= dely*fpair;
+        f[i][2] -= delz*fpair;
         if (newton_pair || j < nlocal) {
-          f[j][0] -= delx*fpair;
-          f[j][1] -= dely*fpair;
-          f[j][2] -= delz*fpair;
+          f[j][0] += delx*fpair;
+          f[j][1] += dely*fpair;
+          f[j][2] += delz*fpair;
         }
 
         if (eflag)
-          evdwl = factor_lj * prefactor[itype][jtype] * (1.0+cos(arg));
+          evdwl = 2.0 * G[itype][jtype] * e_ij * e_ij;///AS ??? energy?
 
         if (evflag) ev_tally(i,j,nlocal,newton_pair,
                              evdwl,0.0,fpair,delx,dely,delz);
@@ -167,8 +190,8 @@ void PairMCA::allocate()
 
   memory->create(cutsq,n+1,n+1,"pair:cutsq");
 
-  memory->create(prefactor,n+1,n+1,"pair:prefactor");
-  memory->create(cut,n+1,n+1,"pair:cut");
+  memory->create(G,n+1,n+1,"pair:G");
+  memory->create(K,n+1,n+1,"pair:K");
 }
 
 /* ----------------------------------------------------------------------
@@ -177,6 +200,7 @@ void PairMCA::allocate()
 
 void PairMCA::settings(int narg, char **arg)
 {
+/*
   if (narg != 1) error->all(FLERR,"Illegal pair_style command");
 
   cut_global = force->numeric(FLERR,arg[0]); ///AS Later we will change it
@@ -188,7 +212,7 @@ void PairMCA::settings(int narg, char **arg)
     for (i = 1; i <= atom->ntypes; i++)
       for (j = i+1; j <= atom->ntypes; j++)
         if (setflag[i][j]) cut[i][j] = cut_global;
-  }
+  }*/
 }
 
 /* ----------------------------------------------------------------------
@@ -197,30 +221,29 @@ void PairMCA::settings(int narg, char **arg)
 
 void PairMCA::coeff(int narg, char **arg)
 {
-  if (narg < 3 || narg > 4)
-    error->all(FLERR,"Incorrect args for pair coefficients");
+  if (narg < 4)
+    error->all(FLERR,"Incorrect args for mca pair coefficients");
   if (!allocated) allocate();
 
   int ilo,ihi,jlo,jhi;
   force->bounds(arg[0],atom->ntypes,ilo,ihi);
   force->bounds(arg[1],atom->ntypes,jlo,jhi);
 
-  double prefactor_one = force->numeric(FLERR,arg[2]);
+  double G_one = force->numeric(FLERR,arg[2]);
 
-  double cut_one = cut_global;
-  if (narg == 4) cut_one = force->numeric(FLERR,arg[3]);
+  double K_one = force->numeric(FLERR,arg[3]);
 
   int count = 0;
   for (int i = ilo; i <= ihi; i++) {
     for (int j = MAX(jlo,i); j <= jhi; j++) {
-      prefactor[i][j] = prefactor_one;
-      cut[i][j] = cut_one;
-      setflag[i][j] = 1;
+      G[i][j] = G_one;
+      K[i][j] = K_one;
+      setflag[i][j] = 1; // 0/1 = whether each i,j has been set
       count++;
     }
   }
 
-  if (count == 0) error->all(FLERR,"Incorrect args for pair coefficients");
+  if (count == 0) error->all(FLERR,"Incorrect args for mca pair coefficients");
 }
 
 /* ----------------------------------------------------------------------
@@ -229,17 +252,17 @@ void PairMCA::coeff(int narg, char **arg)
 
 double PairMCA::init_one(int i, int j)
 {
-  // always mix prefactors geometrically
+  // always mix Gs geometrically
 
   if (setflag[i][j] == 0) {
-    prefactor[i][j] = sqrt(prefactor[i][i]*prefactor[j][j]);
-    cut[i][j] = mix_distance(cut[i][i],cut[j][j]);
+    G[i][j] =(G[i][i] * G[j][j]) / (G[i][i] + G[j][j]);
+    K[i][j] = (K[i][i] * K[j][j]) / (K[i][i] + K[j][j]);
   }
 
-  prefactor[j][i] = prefactor[i][j];
-  cut[j][i] = cut[i][j];
+  G[j][i] = G[i][j];
+  K[j][i] = K[i][j];
 
-  return cut[i][j];
+  return 1.2*atom->mca_radius; // have to return cut_global
 }
 
 /* ----------------------------------------------------------------------
@@ -255,8 +278,8 @@ void PairMCA::write_restart(FILE *fp)
     for (j = i; j <= atom->ntypes; j++) {
       fwrite(&setflag[i][j],sizeof(int),1,fp);
       if (setflag[i][j]) {
-        fwrite(&prefactor[i][j],sizeof(double),1,fp);
-        fwrite(&cut[i][j],sizeof(double),1,fp);
+        fwrite(&G[i][j],sizeof(double),1,fp);
+        fwrite(&K[i][j],sizeof(double),1,fp);
       }
     }
 }
@@ -279,11 +302,11 @@ void PairMCA::read_restart(FILE *fp)
       MPI_Bcast(&setflag[i][j],1,MPI_INT,0,world);
       if (setflag[i][j]) {
         if (me == 0) {
-          fread(&prefactor[i][j],sizeof(double),1,fp);
-          fread(&cut[i][j],sizeof(double),1,fp);
+          fread(&G[i][j],sizeof(double),1,fp);
+          fread(&K[i][j],sizeof(double),1,fp);
         }
-        MPI_Bcast(&prefactor[i][j],1,MPI_DOUBLE,0,world);
-        MPI_Bcast(&cut[i][j],1,MPI_DOUBLE,0,world);
+        MPI_Bcast(&G[i][j],1,MPI_DOUBLE,0,world);
+        MPI_Bcast(&K[i][j],1,MPI_DOUBLE,0,world);
       }
     }
 }
@@ -319,7 +342,7 @@ void PairMCA::read_restart_settings(FILE *fp)
 void PairMCA::write_data(FILE *fp)
 {
   for (int i = 1; i <= atom->ntypes; i++)
-    fprintf(fp,"%d %g\n",i,prefactor[i][i]);
+    fprintf(fp,"%d %g\n",i,G[i][i]);
 }
 
 /* ----------------------------------------------------------------------
@@ -330,10 +353,10 @@ void PairMCA::write_data_all(FILE *fp)
 {
   for (int i = 1; i <= atom->ntypes; i++)
     for (int j = i; j <= atom->ntypes; j++)
-      fprintf(fp,"%d %d %g %g\n",i,j,prefactor[i][j],cut[i][j]);
+      fprintf(fp,"%d %d %g %g\n",i,j,G[i][j],K[i][j]);
 }
 
-/* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- (
 
 double PairMCA::single(int i, int j, int itype, int jtype, double rsq,
                         double factor_coul, double factor_lj,
@@ -343,18 +366,17 @@ double PairMCA::single(int i, int j, int itype, int jtype, double rsq,
 
   r = sqrt(rsq);
   arg = MY_PI*r/cut[itype][jtype];
-  fforce = factor_lj * prefactor[itype][jtype] *
-    sin(arg) * MY_PI/cut[itype][jtype]/r;
+  fforce = factor_lj * G[itype][jtype] * sin(arg) * MY_PI/cut[itype][jtype]/r;
 
-  philj = prefactor[itype][jtype] * (1.0+cos(arg));
+  philj = G[itype][jtype] * (1.0+cos(arg));
   return factor_lj*philj;
-}
+}*/
 
 /* ---------------------------------------------------------------------- */
 
 void *PairMCA::extract(const char *str, int &dim)
 {
   dim = 2;
-  if (strcmp(str,"a") == 0) return (void *) prefactor;
+  if (strcmp(str,"a") == 0) return (void *) G; ///AS ???
   return NULL;
 }

@@ -9,7 +9,7 @@
 set grid
 set autoscale
 
-X0=5.0919047754402
+X0=5.08
 
 set xlabel "t, s"
 set ylabel "x, m"

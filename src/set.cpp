@@ -925,6 +925,7 @@ void Set::set(int keyword)
         atom->rmass[i] = length * dvalue;
       } else if (atom->mca_flag) {
         atom->rmass[i] *= dvalue;
+        atom->q[i] *= dvalue;
       }
        else atom->rmass[i] = dvalue;
     }

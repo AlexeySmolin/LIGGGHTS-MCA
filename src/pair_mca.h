@@ -69,13 +69,13 @@ class PairMCA : public Pair {
   void read_restart_settings(FILE *);
   void write_data(FILE *);
   void write_data_all(FILE *);
-  double single(int, int, int, int, double, double, double, double &);
+///AS  double single(int, int, int, int, double, double, double, double &);
   void *extract(const char *, int &);
 
  protected:
   double cut_global;
-  double **prefactor;
-  double **cut;
+  double **G; // shear modulus
+  double **K; // bulk modulus
 
   void allocate();
 };
