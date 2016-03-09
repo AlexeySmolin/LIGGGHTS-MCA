@@ -1,0 +1,13 @@
+#!/bin/sh
+
+THEPWD=`pwd`
+
+cd ../../../../src
+make serial
+
+cd $THEPWD
+
+
+rm -rf post
+
+../../../../src/lmp_serial -in line_tension.in
