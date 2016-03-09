@@ -67,9 +67,11 @@ class BondMCA : public Bond {
 
  protected:
   int breakmode;
-  double *rb,*Sn,*St; //!! расстояние, Нормальное напряжние, Сдвиговое напряжение
+  double *rb,*Sn,*St; //!! Breaking parameters: distance, normal stress, shear stress
   double *r_break,*sigman_break,*tau_break,*T_break;
   void allocate();
+  void compute_total_force(int, int);
+  void compute_bond_state();
 
   class FixPropertyAtom *fix_Temp;
   double *Temp;

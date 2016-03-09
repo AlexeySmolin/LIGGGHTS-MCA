@@ -72,10 +72,10 @@ class PairMCA : public Pair {
 ///AS  double single(int, int, int, int, double, double, double, double &);
   void *extract(const char *, int &);
 
- protected:
-  double cut_global;
   double **G; // shear modulus
   double **K; // bulk modulus
+ protected:
+  double cut_global;
 
   void allocate();
 };

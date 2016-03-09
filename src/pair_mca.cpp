@@ -92,23 +92,21 @@ void PairMCA::compute(int eflag, int vflag)
   if (eflag || vflag) ev_setup(eflag,vflag);
   else evflag = vflag_fdotr = 0;
 
+  int coord_num  = atom->coord_num;
+  double mca_radius  = atom->mca_radius;
+  double contact_area  = atom->contact_area;
   double **x = atom->x;
   double **v = atom->v;
   double **f = atom->f;
   double **omega = atom->omega;
   double **torque = atom->torque;
-  double *rmass = atom->rmass;
-  double *inertia = atom->q;
-  double **theta = atom->mu;
-  int coord_num  = atom->coord_num;
-  double mca_radius  = atom->mca_radius;
-  double contact_area  = atom->contact_area;
-  double *mca_inertia  = atom->q;
-  double *mean_stress  = atom->p;
-  double *equiv_stress  = atom->s0;
-  double *equiv_strain  = atom->e;
-
-  const double dtImpl = 0.5*update->dt; // for implicit estimation of displacement
+  double *mca_inertia  = atom->mca_inertia;
+  double **theta = atom->theta;
+  double *mean_stress  = atom->mean_stress;
+  double *equiv_stress  = atom->equiv_stress;
+  double *equiv_strain  = atom->equiv_strain;
+  // Used for implicit estimation of displacement in case of hard loading (applying velocity)
+  const double dtImpl = 0.5*update->dt; /// TODO Allow to set in coeffs
   const double cutsq = 5.76*mca_radius*mca_radius; // 1.44*d*d
 
   int *type = atom->type;
@@ -123,7 +121,7 @@ void PairMCA::compute(int eflag, int vflag)
 
 //fprintf(stderr, "PairMCA::compute dtImpl= %g\n", dtImpl);
 
-  // loop over neighbors of my atoms
+  /* / loop over neighbors of my atoms
 
   for (ii = 0; ii < inum; ii++) {
     i = ilist[ii];
@@ -170,7 +168,7 @@ void PairMCA::compute(int eflag, int vflag)
       }
     }
   }
-
+*/
   if (vflag_fdotr) virial_fdotr_compute();
 }
 

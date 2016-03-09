@@ -46,6 +46,7 @@
 #include "domain.h"
 #include "comm.h"
 #include "force.h"
+#include "pair_mca.h"
 #include "memory.h"
 #include "modify.h"
 #include "fix_property_atom.h"
@@ -55,16 +56,10 @@
 
 using namespace LAMMPS_NS;
 
-/*NP
-large TODO list for granular bonds:  (could be a diploma thesis?)
-
-+ need a better dissipative formulation than the hardcoded 'dissipate' value which produces plastic deformation
-  need some vel-dependant damping
-+ need to carefully debug and validate this bond style
-  valiation against fix rigid
-+ check whether run this bond style w/ or w/o gran pair style active,
+/*AS
+ TODO list for mca bonds:
++ check whether run this bond style w/ or w/o mca pair style active,
   (neigh_modify command)
-+ need to store bond radii per particle, not per type
 + parallel debugging and testing not yet done
 + need evtally implemetation
 */
@@ -75,25 +70,79 @@ enum{
      BREAKSTYLE_STRESS_TEMP
     };
 
+enum{
+  R,      // 0 distance to neighbor,
+  R_PREV, // 1 distance to neighbor at previous time step,
+  A,      // 2 contact area
+  E,      // 3 normal strain of i
+///can be computed !!  QI, 4 distance to contact point of i 
+  P,      // 4 normal force of i
+  P_PREV, // 5 normal force of i at previous time step,
+  NX,     // 6 unit vector from i to j
+  NY,     // 7 unit vector from i to j
+  NZ,     // 8 unit vector from i to j
+  NX_PREV,// 9 unit vector from i to j at previous time step,
+  NY_PREV,// 10 unit vector from i to j at previous time step,
+  NZ_PREV,// 11 unit vector from i to j at previous time step,
+  YX,     // 12 history of shear force of i
+  YY,     // 13 history of shear force of i
+  YZ,     // 14 history of shear force of i
+  YX_PREV,// 15 history of shear force of i at previous time step,
+  YY_PREV,// 16 history of shear force of i at previous time step,
+  YZ_PREV,// 17 history of shear force of i at previous time step,
+  SHX,    // 18 shear strain of i
+  SHY,    // 19 shear strain of i
+  SHZ,    // 20 shear strain of i
+  SHX_PREV,// 21 shear strain of i at previous time step,
+  SHY_PREV,// 22 shear strain of i at previous time step,
+  SHZ_PREV,// 23 shear strain of i at previous time step,
+  MX,     // 24 bending-torsion torque of i
+  MY,     // 25 bending-torsion torque of i
+  MZ,     // 26 bending-torsion torque of i
+  SX,     // 27 shear force of i
+  SY,     // 28 shear force of i
+  SZ,     // 29 shear force of i
+  };      // 30 in total
+/* in case of newton is 'on' we need also these
+  EJ,     // 4 normal strain of j
+  PJ,     // 7 normal force of j
+  PJ_PREV,// 8 normal force of j at previous time step,
+  YJX,    // 21 history of shear force of j
+  YJY,    // 22 history of shear force of j
+  YjZ,    // 23 history of shear force of j
+  YJX_PREV,// 24 history of shear force of j at previous time step,
+  YJY_PREV,// 25 history of shear force of j at previous time step,
+  YJZ_PREV,// 26 history of shear force of J at previous time step,
+  SHJX,   // 33 shear strain of j
+  SHJY,   // 34 shear strain of j
+  SHJZ,   // 35 shear strain of J
+  SHJX_PREV,// 36 shear strain of j at previous time step,
+  SHJY_PREV,// 37 shear strain of j at previous time step,
+  SHJZ_PREV,// 38 shear strain of J at previous time step,
+  MJX,    // 42 bending-torsion torque of j
+  MJY,    // 43 bending-torsion torque of j
+  MJZ,    // 44 bending-torsion torque of j
+  SJX,    // 48 shear force of j
+  SJY,    // 49 shear force of j
+  SJZ     // 50 shear force of j
+*/
+
 /* ---------------------------------------------------------------------- */
 
 BondMCA::BondMCA(LAMMPS *lmp) : Bond(lmp)
 {
-    // we need 12 history values - the 6 forces and 6 torques from the last time-step
-    n_granhistory(12);
-    /*	NP
     /* number of entries in bondhistlist. bondhistlist[number of bond][number of value (from 0 to number given here)]
-    /* so with this number you can modify how many pieces of information you savae with every bond
-    /* following dependencies and processes for saving,copying,growing the bondhistlist: */
+     * so with this number you can modify how many pieces of information you savae with every bond
+     * following dependencies and processes for saving,copying,growing the bondhistlist:
+     * For mca we need 51 history values
+     */
+    n_granhistory(51);
      
-    /* NP
-    /* gibt groesse der gespeicherten werte  pro bond wieder 
-    /* neighbor.cpp:       memory->create(bondhistlist,maxbond,atom->n_bondhist,"neigh:bondhistlist");
-    /* neigh_bond.cpp:     memory->grow(bondhistlist,maxbond,atom->n_bondhist,"neighbor:bondhistlist");
-    /* bond.cpp: void Bond::n_granhistory(int nhist) {ngranhistory = nhist;     atom->n_bondhist = ngranhistory; if(){FLERR}}
-    /* atom_vec_bond_gran.cpp:  memory->grow(atom->bond_hist,nmax,atom->bond_per_atom,atom->n_bondhist,"atom:bond_hist");
-
-    /* 
+    /* allocation of memory are here:
+     * neighbor.cpp:       memory->create(bondhistlist,maxbond,atom->n_bondhist,"neigh:bondhistlist");
+     * neigh_bond.cpp:     memory->grow(bondhistlist,maxbond,atom->n_bondhist,"neighbor:bondhistlist");
+     * bond.cpp: void Bond::n_granhistory(int nhist) {ngranhistory = nhist;     atom->n_bondhist = ngranhistory; if(){FLERR}}
+     * atom_vec_bond_gran.cpp:  memory->grow(atom->bond_hist,nmax,atom->bond_per_atom,atom->n_bondhist,"atom:bond_hist");
      */
     if(!atom->style_match("mca"))
       error->all(FLERR,"A granular bond style can only be used together with atom style mca");
@@ -129,58 +178,202 @@ void  BondMCA::init_style()
 
 /* ---------------------------------------------------------------------- */
 
-void BondMCA::compute(int eflag, int vflag)
+void BondMCA::compute_total_force(int eflag, int vflag)
 {
 
-  double rsq,r,rinv,rsqinv;
-  double vr1,vr2,vr3,vnnr,vn1,vn2,vn3,vt1,vt2,vt3;
-  double wr1,wr2,wr3,vtr1,vtr2,vtr3,vrel,tor1,tor2,tor3;
-  double wnnr,wn1,wn2,wn3,wt1,wt2,wt3;
-  double fs1,fs2,fs3;
-
-  int i1,i2,n,type;
-  double delx,dely,delz,ebond;
-  double dnforce[3],dtforce[3];
-  double dntorque[3],dttorque[3];
-  double rot;
-  double A,J;
-  double rbmin;
-
-  ebond = 0.0;
   if (eflag || vflag) ev_setup(eflag,vflag);
   else evflag = 0;
 
-  double **x = atom->x;
-  double **v = atom->v;
-  double **f = atom->f;
-  double *radius = atom->radius;
-  double **torque = atom->torque;
+  double mca_radius  = atom->mca_radius;
+  double contact_area  = atom->contact_area;
   int *tag = atom->tag; // tag of atom is their ID number
-  double **omega = atom->omega;
+  double **x = atom->x;
+  double **f = atom->f;
+  double **torque = atom->torque;
+  double *mean_stress  = atom->mean_stress;
   int **bondlist = neighbor->bondlist;
-  double **bondhistlist = neighbor->bondhistlist;
+///AS I do not whant to use it, because it requires to be copied every step///  double **bondhistlist = neighbor->bondhistlist;
+  double ***bond_hist = atom->bond_hist;
+  int *num_bond = atom->num_bond;
+  int **bond_atom = atom->bond_atom;
 
   int nbondlist = neighbor->nbondlist;
   int nlocal = atom->nlocal;
   int newton_bond = force->newton_bond;
-  double dt = update->dt;
+  PairMCA *mca_pair = (PairMCA*) force->pair;
+
+// fprintf(logfile, "BondMCA::compute_total_force \n"); ///AS DEBUG
+
+  for (int n = 0; n < nbondlist; n++) {
+	//1st check if bond is broken,
+    if(bondlist[n][3])
+    {
+	//fprintf(screen,"bond %d allready broken\n",n);
+        continue;
+    }
+
+    int i1,i2,n1,n2;
+    double rsq,r,rinv;
+    double vt1,vt2,vt3;
+    double tor1,tor2,tor3;
+    double delx,dely,delz;
+    double dnforce[3],dtforce[3],nv[3];
+    double dttorque[3];
+    double A;
+    double q1,q2;// distance to contact point
+    
+    i1 = bondlist[n][0];
+    i2 = bondlist[n][1];
+// fprintf(logfile, "BondMCA::compute_total_force n=%d i1=%d i2=%d (tags= %d %d)\n", n, i1, i2, tag[i1], tag[i2]); ///AS DEBUG
+
+    for (n1 = 0; n1 < num_bond[i1]; n1++) {
+      if (bond_atom[i1][n1]==tag[i2]) break;
+// fprintf(logfile, "BondMCA::compute_total_force bond_atom[i1][%d]=%d \n", n1, bond_atom[i1][n1]); ///AS DEBUG
+    }
+    if (n1 == num_bond[i1]) error->all(FLERR,"Internal error in BondMCA: n1 not found");
+
+    for (n2 = 0; n2 < num_bond[i2]; n2++) {
+      if (bond_atom[i2][n2]==tag[i1]) break;
+// fprintf(logfile, "BondMCA::compute_total_force bond_atom[i2][%d]=%d \n", n2, bond_atom[i2][n2]); ///AS DEBUG
+    }
+    if (n2 == num_bond[i2]) error->all(FLERR,"Internal error in BondMCA: n2 not found");
+
+    double *bond_hist1 = bond_hist[i1][n1];
+    double *bond_hist2 = bond_hist[i2][n2];
+
+    double pi = bond_hist1[P];
+    double pj = bond_hist2[P];
+// fprintf(logfile, "BondMCA::compute_total_force pi=%f pj=%f\n", pi, pj); ///AS DEBUG
+    if ( bondlist[n][3] && ((pi>0.)||(pj>0.)) ) {
+      error->warning(FLERR,"BondMCA::compute_total_force (pi>0.)||(pj>0.) - be careful!");
+      continue;
+    }
+
+    q1 = mca_radius*(1. + bond_hist1[E]);
+    q2 = mca_radius*(1. + bond_hist2[E]);
+
+    //int type = bondlist[n][2];
+
+    double rD0 = 2.0*mca_radius;
+    double rDij = bond_hist1[R];
+    int itype = atom->type[i1];
+    double rKi =  mca_pair->K[itype][itype];
+    int jtype = atom->type[i2];
+    double rKj =  mca_pair->K[jtype][jtype];
+    double rDStress = 0.5*(mean_stress[i1]/rKi + mean_stress[i2]/rKj);
+    A = contact_area * (1. + rDStress) * rD0 / rDij; // Новая площадь контакта по пирамидкам;
+    //bond_hist1[A] = A;
+    //bond_hist2[A] = A;
+
+    delx = x[i1][0] - x[i2][0];
+    dely = x[i1][1] - x[i2][1];
+    delz = x[i1][2] - x[i2][2];
+    //domain->minimum_image(delx,dely,delz); ??
+
+    rsq = delx*delx + dely*dely + delz*delz;
+    r = sqrt(rsq);
+    rinv = -1. / r; // "-" means that unit vector is from i1 to i2
+
+    // normal unit vector
+    nv[0] = delx*rinv;
+    nv[1] = dely*rinv;
+    nv[2] = delz*rinv;
+    //bond_hist1[NX] = nv[0];
+    //bond_hist1[NY] = nv[1];
+    //bond_hist1[NZ] = nv[2];
+    //bond_hist2[NX] = -nv[0];
+    //bond_hist2[NY] = -nv[1];
+    //bond_hist2[NZ] = -nv[2];
+
+    // change in normal forces
+    pi += pj; pi *= 0.5;
+    vectorScalarMult3D(nv, pi, dnforce);
+    //dnforce[0] = pi * nv[0];
+    //dnforce[1] = pi * nv[1];
+    //dnforce[2] = pi * nv[2];
+
+    // tangential force
+    vt1 = (bond_hist1[SX] - bond_hist2[SX])*0.5;
+    vt2 = (bond_hist1[SY] - bond_hist2[SY])*0.5;
+    vt3 = (bond_hist1[SZ] - bond_hist2[SZ])*0.5;
+
+    // change in shear forces
+    dtforce[0] = vt1;
+    dtforce[1] = vt2;
+    dtforce[2] = vt3;
+
+    // torque due to tangential force
+
+    vectorCross3D(nv,dtforce,dttorque);
+
+    // torque due to torsion and bending
+
+    tor1 = 0.5 * A * (bond_hist1[MX] - bond_hist2[MX]);
+    tor2 = 0.5 * A * (bond_hist1[MY] - bond_hist2[MY]);
+    tor3 = 0.5 * A * (bond_hist2[MZ] - bond_hist2[MZ]);
+
+    // energy
+    //if (eflag) error->all(FLERR,"MCA bonds currently do not support energy calculation");
+
+    // apply force to each of 2 atoms
+
+    if (newton_bond || i1 < nlocal) {
+      f[i1][0] += (dnforce[0] + dtforce[0]) * A;
+      f[i1][1] += (dnforce[1] + dtforce[1]) * A;
+      f[i1][2] += (dnforce[2] + dtforce[2]) * A;
+      torque[i1][0] += q1*dttorque[0] - tor1;
+      torque[i1][1] += q1*dttorque[1] - tor2;
+      torque[i1][2] += q1*dttorque[2] - tor3;
+    }
+
+    if (newton_bond || i2 < nlocal) {
+      f[i2][0] -= (dnforce[0] + dtforce[0]) * A;
+      f[i2][1] -= (dnforce[1] + dtforce[1]) * A;
+      f[i2][2] -= (dnforce[2] + dtforce[2]) * A;
+      torque[i2][0] -= q2*dttorque[0] + tor1;
+      torque[i2][1] -= q2*dttorque[1] + tor2;
+      torque[i2][2] -= q2*dttorque[2] + tor3;
+    }
+
+    //if (evflag) ev_tally(i1,i2,nlocal,newton_bond,ebond,0./*fbond*/,delx,dely,delz);
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+
+void BondMCA::compute_bond_state()
+{
+  int *num_bond = atom->num_bond;
+  int **bond_atom = atom->bond_atom;
+  int *tag = atom->tag; // tag of atom is their ID number
+  double ***bond_hist = atom->bond_hist;
+  double **x = atom->x;
+
+  int nbondlist = neighbor->nbondlist;
+  int **bondlist = neighbor->bondlist;
   double cutoff=neighbor->skin;
+  ///AS I do not whant to use it, because it requires to be copied every step/// double **bondhistlist = neighbor->bondhistlist;
+
+fprintf(logfile, "BondMCA::compute_bond_state \n"); ///AS DEBUG
 
   if(breakmode == BREAKSTYLE_STRESS_TEMP)
   {
-      if(!fix_Temp) error->all(FLERR,"Internal error in BondMCA");
+      if(!fix_Temp) error->all(FLERR,"Internal error in BondMCA::compute_bond_state");
       Temp = fix_Temp->vector_atom;
   }
 
-  for (n = 0; n < nbondlist; n++) {
+  for (int n = 0; n < nbondlist; n++) {
     
-	
 	//1st check if bond is broken,
     if(bondlist[n][3])
     {
 		//printf("bond %d allready broken\n",n);
         continue;
     }
+
+    int i1,i2,type;
+    double delx,dely,delz;
+    double rsq,r;
 
     i1 = bondlist[n][0];
     i2 = bondlist[n][1];
@@ -226,143 +419,17 @@ void BondMCA::compute(int eflag, int vflag)
     }
 
     type = bondlist[n][2];
-    rbmin=rb[type]*MIN(radius[i1],radius[i2]); //lamda * min(rA,rB) see P.Cundall, "A bonded particle model for rock"
-
-	A = M_PI * rbmin* rbmin;
-    J = A * 0.5 * rbmin * rbmin;
+    //rbmin=rb[type]*MIN(q1,q2); //lamda * min(rA,rB) see P.Cundall, "A bonded particle model for rock"
 
     delx = x[i1][0] - x[i2][0];
     dely = x[i1][1] - x[i2][1];
     delz = x[i1][2] - x[i2][2];
-    domain->minimum_image(delx,dely,delz);
+    //domain->minimum_image(delx,dely,delz); ??
 
     rsq = delx*delx + dely*dely + delz*delz;
-    rsqinv = 1./rsq;
     r = sqrt(rsq);
-    rinv = 1./r;
 
-    // relative translational velocity
-
-        vr1 = v[i1][0] - v[i2][0];
-        vr2 = v[i1][1] - v[i2][1];
-        vr3 = v[i1][2] - v[i2][2];
-
-        // normal component
-
-        vnnr = vr1*delx + vr2*dely + vr3*delz;
-        vn1 = delx*vnnr * rsqinv;
-        vn2 = dely*vnnr * rsqinv;
-        vn3 = delz*vnnr * rsqinv;
-
-        // tangential component
-
-        vt1 = vr1 - vn1;
-        vt2 = vr2 - vn2;
-        vt3 = vr3 - vn3;
-
-    // relative rotational velocity for shear
-
-        wr1 = (radius[i1]*omega[i1][0] + radius[i2]*omega[i2][0]) * rinv;
-        wr2 = (radius[i1]*omega[i1][1] + radius[i2]*omega[i2][1]) * rinv;
-        wr3 = (radius[i1]*omega[i1][2] + radius[i2]*omega[i2][2]) * rinv;
-
-        // relative velocities for shear
-
-        vtr1 = vt1 - (delz*wr2-dely*wr3);
-        vtr2 = vt2 - (delx*wr3-delz*wr1);
-        vtr3 = vt3 - (dely*wr1-delx*wr2);
-
-        // relative rotational velocity for torsion and bending
-
-        wr1 = (radius[i1]*omega[i1][0] - radius[i2]*omega[i2][0]) * rinv;
-        wr2 = (radius[i1]*omega[i1][1] - radius[i2]*omega[i2][1]) * rinv;
-        wr3 = (radius[i1]*omega[i1][2] - radius[i2]*omega[i2][2]) * rinv;
-
-        // normal component
-
-        wnnr = wr1*delx + wr2*dely + wr3*delz;
-        wn1 = delx*wnnr * rsqinv;
-        wn2 = dely*wnnr * rsqinv;
-        wn3 = delz*wnnr * rsqinv;
-
-    //fprintf(screen,"omega[i1] %f %f %f, omega[i2] %f %f %f, wn %f %f %f\n",omega[i1][0],omega[i1][1],omega[i1][2],omega[i2][0],omega[i2][1],omega[i2][2],wn1,wn2,wn3);
-
-        // tangential component
-
-        wt1 = wr1 - wn1;
-        wt2 = wr2 - wn2;
-        wt3 = wr3 - wn3;
-
-    // calc change in normal forces
-    dnforce[0] = - vn1 * Sn[type] * A * dt;
-    dnforce[1] = - vn2 * Sn[type] * A * dt;
-    dnforce[2] = - vn3 * Sn[type] * A * dt;
-
-        // calc change in shear forces
-        dtforce[0] = - vtr1 * St[type] * A * dt;
-        dtforce[1] = - vtr2 * St[type] * A * dt;
-        dtforce[2] = - vtr3 * St[type] * A * dt;
-
-    // calc change in normal torque
-    dntorque[0] = - wn1 * St[type] * J * dt;
-    dntorque[1] = - wn2 * St[type] * J * dt;
-    dntorque[2] = - wn3 * St[type] * J * dt;
-
-    // calc change in tang torque
-    dttorque[0] = - wt1 * Sn[type] * J*0.5 * dt;
-    dttorque[1] = - wt2 * Sn[type] * J*0.5 * dt;
-    dttorque[2] = - wt3 * Sn[type] * J*0.5 * dt;
-
-    // rotate forces
-
-    //rotate normal force
-        rot = bondhistlist[n][0]*delx + bondhistlist[n][1]*dely + bondhistlist[n][2]*delz;
-        rot *= rsqinv;
-    bondhistlist[n][0] = rot*delx;
-    bondhistlist[n][1] = rot*dely;
-    bondhistlist[n][2] = rot*delz;
-
-    //rotate tangential force
-    rot = bondhistlist[n][3]*delx + bondhistlist[n][4]*dely + bondhistlist[n][5]*delz;
-    rot *= rsqinv;
-    bondhistlist[n][3] -= rot*delx;
-    bondhistlist[n][4] -= rot*dely;
-    bondhistlist[n][5] -= rot*delz;
-
-    //rotate normal torque
-        rot = bondhistlist[n][6]*delx + bondhistlist[n][7]*dely + bondhistlist[n][8]*delz;
-        rot *= rsqinv;
-    bondhistlist[n][6] = rot*delx;
-    bondhistlist[n][7] = rot*dely;
-    bondhistlist[n][8] = rot*delz;
-
-    //rotate tangential torque
-    rot = bondhistlist[n][9]*delx + bondhistlist[n][10]*dely + bondhistlist[n][11]*delz;
-    rot *= rsqinv;
-    bondhistlist[n][ 9] -= rot*delx;
-    bondhistlist[n][10] -= rot*dely;
-    bondhistlist[n][11] -= rot*delz;
-
-    //increment normal and tangential force and torque
-    double dissipate = 1;
-    bondhistlist[n][0] = dissipate * bondhistlist[n][0] + dnforce[0];
-    bondhistlist[n][1] = dissipate * bondhistlist[n][1] + dnforce[1];
-    bondhistlist[n][2] = dissipate * bondhistlist[n][2] + dnforce[2];
-    bondhistlist[n][3] = dissipate * bondhistlist[n][3] + dtforce[0];
-    bondhistlist[n][4] = dissipate * bondhistlist[n][4] + dtforce[1];
-    bondhistlist[n][5] = dissipate * bondhistlist[n][5] + dtforce[2];
-    bondhistlist[n][6] = dissipate * bondhistlist[n][6] + dntorque[0];
-    bondhistlist[n][7] = dissipate * bondhistlist[n][7] + dntorque[1];
-    bondhistlist[n][8] = dissipate * bondhistlist[n][8] + dntorque[2];
-    bondhistlist[n][ 9] = dissipate * bondhistlist[n][ 9] + dttorque[0];
-    bondhistlist[n][10] = dissipate * bondhistlist[n][10] + dttorque[1];
-    bondhistlist[n][11] = dissipate * bondhistlist[n][11] + dttorque[2];
-
-        tor1 = - rinv * (dely*bondhistlist[n][5] - delz*bondhistlist[n][4]);
-        tor2 = - rinv * (delz*bondhistlist[n][3] - delx*bondhistlist[n][5]);
-        tor3 = - rinv * (delx*bondhistlist[n][4] - dely*bondhistlist[n][3]);
-
-        //flag breaking of bond if criterion met
+    //flag breaking of bond if criterion met
     if(breakmode == BREAKSTYLE_SIMPLE)
     {
         if(r > 2. * r_break[type])
@@ -374,59 +441,47 @@ void BondMCA::compute(int eflag, int vflag)
     }
     else //NP stress or stress_temp
     {
-        double nforce_mag = vectorMag3D(&bondhistlist[n][0]);
-        double tforce_mag = vectorMag3D(&bondhistlist[n][3]);
-        double ntorque_mag = vectorMag3D(&bondhistlist[n][6]);
-        double ttorque_mag = vectorMag3D(&bondhistlist[n][9]);
+      int n1;
 
-        bool nstress = sigman_break[type] < (nforce_mag/A + 2.*ttorque_mag/J*rbmin);
-        bool tstress = tau_break[type]    < (tforce_mag/A +    ntorque_mag/J*rbmin);
-        bool toohot = false;
+      for (n1 = 0; n1 < num_bond[i1]; n1++) {
+        if (bond_atom[i1][n1]==tag[i2]) break;
+fprintf(logfile, "BondMCA::compute_bond_state bond_atom[i1][%d]=%d \n", n1, bond_atom[i1][n1]); ///AS DEBUG
+      }
+      if (n1 == num_bond[i1]) error->all(FLERR,"Internal error in BondMCA::compute_bond_state n1 not found");
 
-        if(breakmode == BREAKSTYLE_STRESS_TEMP)
-        {
-            toohot = 0.5 * (Temp[i1] + Temp[i2]) > T_break[type];
-            /*NL*/ //fprintf(screen,"Temp[i1] %f Temp[i2] %f, T_break[type] %f\n",Temp[i1],Temp[i2],T_break[type]);
-        }
+      double *bond_hist1 = bond_hist[i1][n1];
+      double nforce_mag = bond_hist1[P];
+      double tforce_mag = vectorMag3D(&bond_hist1[SX]);
 
-        if(nstress || tstress || toohot)
-        {
-            bondlist[n][3] = 1;
-            //fprintf(screen,"broken bond %d at step %d\n",n,update->ntimestep);
-            /*NL*/ //if(toohot)fprintf(screen,"   it was too hot\n");
-            /*NL*/ //if(nstress)fprintf(screen,"   it was nstress\n");
-            /*NL*/ //if(tstress)fprintf(screen,"   it was tstress\n");
-        }
+      bool nstress = sigman_break[type] < (nforce_mag/* + 2.*ttorque_mag/J*rbmin*/);
+      bool tstress = tau_break[type]    < (tforce_mag/* +    ntorque_mag/J*rbmin*/);
+      bool toohot = false;
+      if(breakmode == BREAKSTYLE_STRESS_TEMP)
+      {
+         toohot = 0.5 * (Temp[i1] + Temp[i2]) > T_break[type];
+         //NL //fprintf(screen,"Temp[i1] %f Temp[i2] %f, T_break[type] %f\n",Temp[i1],Temp[i2],T_break[type]);
+      }
+
+      if(nstress || tstress || toohot)
+      {
+         bondlist[n][3] = 1;
+         //fprintf(screen,"broken bond %d at step %d\n",n,update->ntimestep);
+         //NL //if(toohot)fprintf(screen,"   it was too hot\n");
+         //NL //if(nstress)fprintf(screen,"   it was nstress\n");
+         //NL //if(tstress)fprintf(screen,"   it was tstress\n");
+      }
     }
-
-
-        //NP fprintf(screen,"ts %d, particles %d %d - shear %f %f %f - tor %f %f %f\n",update->ntimestep,tag[i1],tag[i2],bondhistlist[n][3],bondhistlist[n][4],bondhistlist[n][5],tor1,tor2,tor3);
-
-    // energy
-    //if (eflag) error->all(FLERR,"MCA bonds currently do not support energy calculation");
-
-    // apply force to each of 2 atoms
-
-    if (newton_bond || i1 < nlocal) {
-      f[i1][0] += (bondhistlist[n][0] + bondhistlist[n][3]);
-      f[i1][1] += (bondhistlist[n][1] + bondhistlist[n][4]);
-      f[i1][2] += (bondhistlist[n][2] + bondhistlist[n][5]);
-      torque[i1][0] += radius[i1]*tor1 + (bondhistlist[n][6] + bondhistlist[n][ 9]);
-      torque[i1][1] += radius[i1]*tor2 + (bondhistlist[n][7] + bondhistlist[n][10]);
-      torque[i1][2] += radius[i1]*tor3 + (bondhistlist[n][8] + bondhistlist[n][11]);
-    }
-
-    if (newton_bond || i2 < nlocal) {
-      f[i2][0] -= (bondhistlist[n][0] + bondhistlist[n][3]);
-      f[i2][1] -= (bondhistlist[n][1] + bondhistlist[n][4]);
-      f[i2][2] -= (bondhistlist[n][2] + bondhistlist[n][5]);
-      torque[i2][0] += radius[i2]*tor1 - (bondhistlist[n][6] + bondhistlist[n][ 9]);
-      torque[i2][1] += radius[i2]*tor2 - (bondhistlist[n][7] + bondhistlist[n][10]);
-      torque[i2][2] += radius[i2]*tor3 - (bondhistlist[n][8] + bondhistlist[n][11]);
-    }
-
-    //if (evflag) ev_tally(i1,i2,nlocal,newton_bond,ebond,0./*fbond*/,delx,dely,delz);
   }
+}
+
+/* ---------------------------------------------------------------------- */
+
+void BondMCA::compute(int eflag, int vflag)
+{
+
+  compute_total_force(eflag, vflag);
+  ///AS compute_bond_state();
+
 }
 
 /* ---------------------------------------------------------------------- */

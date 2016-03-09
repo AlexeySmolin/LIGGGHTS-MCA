@@ -210,7 +210,7 @@ fix 	tipF tipball addforce  $F 0 0    #1kip=4.4482216kN
 
 timestep	${dt}
 
-#run 10
+#run 2
 #quit
 
 variable t equal 1/${dt} 	#run 0.0005 second

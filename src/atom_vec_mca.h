@@ -119,12 +119,25 @@ class AtomVecMCA : public AtomVec {
   double mca_radius; //!! Change from array to single variable: all automata have the same radius
   double contact_area; //!! Initial contact area defined by packing. Remember about heat transfer through contact_area in granular!!
 
-  double *q; //!! mca_inertia moment of inertia is a scalar as for sphere
-  double **mu;    //!! We need orientation vector to describe rotation as a first approximation
-                  //!! Later we must use Rodrigues rotation vector or quaternions, as in AtomVecEllipsoid 'struct Bonus {double quat[4]...};'
-  double *p;  //!! 'pressure == -mean_stress' - is used for many-body interaction
-  double *s0; //!! equiv_stress~ equivalent (or von Mises, shear) stress - is used for plasticity
-  double *e; //!! equiv_strain~ equivalent (shear) strain - is used for plasticity
+  double *mca_inertia; // moment of inertia is a scalar as for sphere
+  double **theta;      // We need orientation vector to describe rotation as a first approximation
+  double **theta_prev; // orientation vector at previous time step
+                       // Later we must use Rodrigues rotation vector or quaternions, as in AtomVecEllipsoid 'struct Bonus {double quat[4]...};'
+  double *mean_stress; // is used for many-body interaction
+  double *mean_stress_prev; // at previous time step
+  double *equiv_stress;// ~ equivalent (or von Mises, shear) stress - is used for plasticity
+  double *equiv_stress_prev;// equivalent stress at previous time step
+  double *equiv_strain;// ~ equivalent (shear) strain - is used for plasticity
+  /// Below is the list of vaiables existing  in 'atom.h' that can be used for mca instead of new ones
+  //double *q;  //!! mca_inertia - moment of inertia is a scalar as for sphere
+  //double **mu;//!! theta  - orientation vector to describe rotation as a first approximation
+  //double **angmom; //!! theta_prev - orientation vector at previous time step
+  //double *p;  //!! 'mean_stress == -pressure' - is used for many-body interaction
+  //double *?;  //!! 'mean_stress+prev' at previous time step
+  //double *s0; //!! equiv_stress ~ equivalent (or von Mises, shear) stress - is used for plasticity
+  //double *??; //!! equiv_stress_prev - equivalent stress at previous time step
+  //double *e;  //!! equiv_strain ~ equivalent (shear) strain - is used for plasticity
+
 /*
 For the MCA style, the number of mca bonds per atom is stored, and the information associated to it:
  the type of each bond, the ID of the bonded atom and the so-called bond history.

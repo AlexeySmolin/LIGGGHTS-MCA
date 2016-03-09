@@ -48,10 +48,12 @@ FixStyle(bond/create/mca,FixBondCreateMCA)
 #define LMP_FIX_BOND_CREATE_MCA_H
 
 #include "fix.h"
+#include "pair_mca.h"
 
 namespace LAMMPS_NS {
 
 class FixBondCreateMCA : public Fix {
+  friend class PairMCA;
  public:
   FixBondCreateMCA(class LAMMPS *, int, char **);
   ~FixBondCreateMCA();
@@ -103,6 +105,11 @@ class FixBondCreateMCA : public Fix {
   class NeighList *list;
   int countflag,commflag;
   int nlevels_respa;
+
+  void prev_swap();
+  void predict_mean_stress();
+  void compute_elastic_force();
+  void compute_equiv_stress();
 };
 
 }

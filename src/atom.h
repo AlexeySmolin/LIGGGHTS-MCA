@@ -146,15 +146,18 @@ class Atom : protected Pointers {
   int wavepacket_flag,sph_flag;
   // Used for MCA
   int mca_flag;
-  int packing;   //!! Packing of movable callular automata: 'sc' or 'fcc' or 'hcp'
-  int coord_num; //!! Coordination number is defined by packing (6 for cubic or 12 for fcc and hcp)
-  double mca_radius; //!! Change from array to single variable: all automata have the same radius
-  double contact_area; //!! Initial contact area defined by packing. Remember about heat transfer through contact_area in granular!!
-  //double *q; //!! mca_inertia moment of inertia is a scalar as for sphere
-  //double **mu;    //!! We need orientation vector to describe rotation as a first approximation
-  //double *p;  //!! 'pressure == -mean_stress' - is used for many-body interaction
-  //double *s0; //!! equiv_stress~ equivalent (or von Mises, shear) stress - is used for plasticity
-  //double *e; //!! equiv_strain~ equivalent (shear) strain - is used for plasticity
+  int packing;         // Packing of movable callular automata: 'sc' or 'fcc' or 'hcp'
+  int coord_num;       // Coordination number is defined by packing (6 for cubic or 12 for fcc and hcp)
+  double mca_radius;   // Change from array to single variable: all automata have the same radius
+  double contact_area; // Initial contact area defined by packing. Remember about heat transfer through contact_area in granular!!
+  double *mca_inertia; // moment of inertia is a scalar as for sphere
+  double **theta;      // We need orientation vector to describe rotation as a first approximation
+  double **theta_prev; // orientation vector at previous time step
+  double *mean_stress; // is used for many-body interaction
+  double *mean_stress_prev; // at previous time step
+  double *equiv_stress;// ~ equivalent (or von Mises, shear) stress - is used for plasticity
+  double *equiv_stress_prev;// equivalent stress at previous time step
+  double *equiv_strain;// ~ equivalent (shear) strain - is used for plasticity
 
   int molecule_flag,q_flag,mu_flag;
   int rmass_flag,radius_flag,omega_flag,torque_flag,angmom_flag;

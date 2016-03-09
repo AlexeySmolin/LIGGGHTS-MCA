@@ -93,7 +93,7 @@ void FixNVEMCA::init()
 
 void FixNVEMCA::initial_integrate(int vflag)
 {
-  double dtfm,dtirotate,msq,scale;
+  double dtfm,dtirotate;
 
   double **x = atom->x;
   double **v = atom->v;
@@ -101,8 +101,8 @@ void FixNVEMCA::initial_integrate(int vflag)
   double **omega = atom->omega;
   double **torque = atom->torque;
   double *rmass = atom->rmass;
-  double *inertia = atom->q;
-  double **theta = atom->mu;
+  double *inertia = atom->mca_inertia;
+  double **theta = atom->theta;
   int *mask = atom->mask;
   int nlocal = atom->nlocal;
   if (igroup == atom->firstgroup) nlocal = atom->nfirst;
@@ -115,8 +115,8 @@ void FixNVEMCA::initial_integrate(int vflag)
 
   // update 1/2 step for v and omega, and full step for  x for all particles
   // d_omega/dt = torque / inertia
-//fprintf(stderr, "FixNVEMCA::initial_integrate dtv= %g dtf= %g\n",dtv,dtf);
-//fprintf(stderr, "rmass[%d]= %20.12e mca_radius= %g\n",nlocal,rmass[nlocal-1],atom->mca_radius);
+//fprintf(logfile, "FixNVEMCA::initial_integrate dtv= %g dtf= %g\n",dtv,dtf); ///AS DEBUG
+//fprintf(logfile, "rmass[%d]= %20.12e mca_radius= %g\n",nlocal,rmass[nlocal-1],atom->mca_radius); ///AS DEBUG
 
   for (int i = 0; i < nlocal; i++) {
     if (mask[i] & groupbit) {
@@ -161,14 +161,14 @@ void FixNVEMCA::final_integrate()
   double **omega = atom->omega;
   double **torque = atom->torque;
   double *rmass = atom->rmass;
-  double *inertia = atom->q;
+  double *inertia = atom->mca_inertia;
   int *mask = atom->mask;
   int nlocal = atom->nlocal;
   if (igroup == atom->firstgroup) nlocal = atom->nfirst;
 
   // update 1/2 step for v,omega for all particles
   // d_omega/dt = torque / inertia
-fprintf(stderr, "FixNVEMCA::final_integrate \n");
+//fprintf(logfile, "FixNVEMCA::final_integrate \n"); ///AS DEBUG
 
   for (int i = 0; i < nlocal; i++)
     if (mask[i] & groupbit) {
@@ -178,7 +178,7 @@ fprintf(stderr, "FixNVEMCA::final_integrate \n");
       v[i][0] += dtfm * f[i][0];
       v[i][1] += dtfm * f[i][1];
       v[i][2] += dtfm * f[i][2];
-//fprintf(stderr, "velo[%d]= %20.12e %20.12e %20.12e\n",i,v[i][0],v[i][1],v[i][2]);
+//fprintf(stderr, "velo[%d]= %20.12e %20.12e %20.12e\n",i,v[i][0],v[i][1],v[i][2]); ///AS DEBUG
 
       // rotation update
       dtirotate = dtf / (inertia[i]);
