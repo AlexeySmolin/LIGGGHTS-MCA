@@ -174,6 +174,65 @@ bond_coeff 	1 0.0025 10000000000 10000000000 ${simplebreak} 0.002501
 
 };
 
+// Indices of values in 'bond_hist' array
+namespace MCAAtomConst {
+  static const int R =        0; // distance to neighbor
+  static const int R_PREV =   1; // distance to neighbor at previous time step
+  static const int A =        2; // contact area
+  static const int E =        3; // normal strain of i
+///can be computed !!  QI, 4 distance to contact point of i 
+  static const int P =        4; // normal force of i
+  static const int P_PREV =   5; // normal force of i at previous time step
+  static const int NX =       6; // unit vector from i to j
+  static const int NY =       7; // unit vector from i to j
+  static const int NZ =       8; // unit vector from i to j
+  static const int NX_PREV =  9; // unit vector from i to j at previous time step
+  static const int NY_PREV =  10;// unit vector from i to j at previous time step
+  static const int NZ_PREV =  11;// unit vector from i to j at previous time step
+  static const int YX =       12;// history of shear force of i
+  static const int YY =       13;// history of shear force of i
+  static const int YZ =       14;// history of shear force of i
+  static const int YX_PREV =  15;// history of shear force of i at previous time step
+  static const int YY_PREV =  16;// history of shear force of i at previous time step
+  static const int YZ_PREV =  17;// history of shear force of i at previous time step
+  static const int SHX =      18;// shear strain of i
+  static const int SHY =      19;// shear strain of i
+  static const int SHZ =      20;// shear strain of i
+  static const int SHX_PREV = 21;// shear strain of i at previous time step
+  static const int SHY_PREV = 22;// shear strain of i at previous time step
+  static const int SHZ_PREV = 23;// shear strain of i at previous time step
+  static const int MX       = 24;// bending-torsion torque of i
+  static const int MY       = 25;// bending-torsion torque of i
+  static const int MZ       = 26;// bending-torsion torque of i
+  static const int SX       = 27;// shear force of i
+  static const int SY       = 28;// shear force of i
+  static const int SZ       = 29;// shear force of i
+  static const int BOND_HIST_LEN = 30;// 30 in total
+/* in case of newton is 'on' we need also these
+  EJ,     // 4 normal strain of j
+  PJ,     // 7 normal force of j
+  PJ_PREV,// 8 normal force of j at previous time step,
+  YJX,    // 21 history of shear force of j
+  YJY,    // 22 history of shear force of j
+  YjZ,    // 23 history of shear force of j
+  YJX_PREV,// 24 history of shear force of j at previous time step,
+  YJY_PREV,// 25 history of shear force of j at previous time step,
+  YJZ_PREV,// 26 history of shear force of J at previous time step,
+  SHJX,   // 33 shear strain of j
+  SHJY,   // 34 shear strain of j
+  SHJZ,   // 35 shear strain of J
+  SHJX_PREV,// 36 shear strain of j at previous time step,
+  SHJY_PREV,// 37 shear strain of j at previous time step,
+  SHJZ_PREV,// 38 shear strain of J at previous time step,
+  MJX,    // 42 bending-torsion torque of j
+  MJY,    // 43 bending-torsion torque of j
+  MJZ,    // 44 bending-torsion torque of j
+  SJX,    // 48 shear force of j
+  SJY,    // 49 shear force of j
+  SJZ     // 50 shear force of j
+*/
+}
+
 }
 
 #endif

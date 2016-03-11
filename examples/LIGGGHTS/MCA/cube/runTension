@@ -1,0 +1,12 @@
+#!/bin/sh
+
+THEPWD=`pwd`
+
+#cd ../../../../src
+#make serial
+#
+#cd $THEPWD
+
+rm -rf post
+
+../../../../src/lmp_serial -in cube_tension.in

@@ -1,8 +1,11 @@
 post
 Obj_*
+lmp_*
 MyAnalysis
 *.a
 *.o
 *~
+version_liggghts.h
 log.liggghts
 *.csv
+*.dat
