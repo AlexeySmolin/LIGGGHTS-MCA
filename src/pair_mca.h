@@ -77,6 +77,13 @@ class PairMCA : public Pair {
  protected:
   double cut_global;
 
+  void swap_prev();
+  void predict_mean_stress();
+  void compute_elastic_force();
+  void compute_equiv_stress();
+  void correct_for_plasticity();
+  void compute_total_force(int, int);
+
   void allocate();
 };
 

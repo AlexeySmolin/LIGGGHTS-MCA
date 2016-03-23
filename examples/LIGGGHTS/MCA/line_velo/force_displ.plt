@@ -10,8 +10,13 @@ set grid
 set autoscale
 
 X0=5.08
-Y=6.895e10
 A=0.258064
+
+Y=6.895e10
+p=0.3
+G=Y/(2*(1+p))
+K=Y/(3*(1-2.0*p))
+print "2G=",2*G
 
 set xlabel "dX/L, %"
 set ylabel "F/A, MPa"

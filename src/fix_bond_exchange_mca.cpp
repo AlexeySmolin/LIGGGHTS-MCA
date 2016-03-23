@@ -167,7 +167,7 @@ void FixBondExchangeMCA::pre_exchange()
     int broken = bondlist[n][3];
     if(!broken) continue;
 
-    //printf("detected bond %d:%d<->%d as broken at step %ld\n",n,atom->tag[i1],atom->tag[i2],update->ntimestep);
+    fprintf(logfile,"FixBondExchangeMCA::pre_exchange detected bond %d:%d<->%d as broken at step %ld\n",n,atom->tag[i1],atom->tag[i2],update->ntimestep);
     //NP if the bond is broken, we remove it from
     //NP both atom data
 

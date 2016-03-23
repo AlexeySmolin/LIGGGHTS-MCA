@@ -38,42 +38,44 @@
     Copyright 2016-     ISPMS SB RAS, Tomsk, Russia
 ------------------------------------------------------------------------- */
 
-#ifdef BOND_CLASS
+#ifdef FIX_CLASS
 
-BondStyle(mca,BondMCA)
+FixStyle(mca/setvelocity,FixMCASetVel)
 
 #else
 
-#ifndef LMP_BOND_MCA_H
-#define LMP_BOND_MCA_H
+#ifndef LMP_FIX_MCA_SET_VELOCITY_H
+#define LMP_FIX_MCA_SET_VELOCITY_H
 
-#include "stdio.h"
-#include "bond.h"
+#include "fix.h"
 
 namespace LAMMPS_NS {
 
-class BondMCA : public Bond {
+class FixMCASetVel : public Fix {
  public:
-  BondMCA(class LAMMPS *);
-  ~BondMCA();
-  void init_style();
-  void compute(int, int);
-  void coeff(int, char **);
-  double equilibrium_distance(int);
-  void write_restart(FILE *);
-  void read_restart(FILE *);
-  //double single(int, double, int, int);
-  double single(int, double, int, int, double &);
+  FixMCASetVel(class LAMMPS *, int, char **);
+  ~FixMCASetVel();
+  int setmask();
+  void init();
+  void setup(int);
+  void min_setup(int);
+  //void initial_integrate(int);
+  void post_force(int);
+  double compute_vector(int);
+  double memory_usage();
 
- protected:
-  int breakmode;
-  double *rb,*Sn,*St; //!! Breaking parameters: distance, normal stress, shear stress
-  double *r_break,*sigman_break,*tau_break,*T_break;
-  void allocate();
+ private:
+  double xvalue,yvalue,zvalue;
+  int varflag,iregion;
+  char *xstr,*ystr,*zstr;
+  char *idregion;
+  int xvar,yvar,zvar,xstyle,ystyle,zstyle;
+  double foriginal[3],foriginal_all[3];
+  int force_flag;
+  int nlevels_respa;
 
-  class FixPropertyAtom *fix_Temp;
-  double *Temp;
-
+  int maxatom;
+  double **sforce;
 };
 
 }
@@ -83,8 +85,27 @@ class BondMCA : public Bond {
 
 /* ERROR/WARNING messages:
 
-E: Incorrect args for bond coefficients
+E: Illegal ... command
 
-Self-explanatory.  Check the input script or data file.
+Self-explanatory.  Check the input script syntax and compare to the
+documentation for the command.  You can use -echo screen as a
+command-line option when running LAMMPS to see the offending line.
+
+E: Region ID for fix setforce does not exist
+
+Self-explanatory.
+
+E: Variable name for fix setforce does not exist
+
+Self-explanatory.
+
+E: Variable for fix setforce is invalid style
+
+Only equal-style variables can be used.
+
+E: Cannot use non-zero forces in an energy minimization
+
+Fix setforce cannot be used in this manner.  Use fix addforce
+instead.
 
 */

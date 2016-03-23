@@ -106,10 +106,6 @@ class FixBondCreateMCA : public Fix {
   int countflag,commflag;
   int nlevels_respa;
 
-  void prev_swap();
-  void predict_mean_stress();
-  void compute_elastic_force();
-  void compute_equiv_stress();
 };
 
 }

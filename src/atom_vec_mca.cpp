@@ -64,6 +64,8 @@ using namespace MathConst;
 
 enum{NONE,SC,BCC,FCC,HCP,DIAMOND,SQ,SQ2,HEX,CUSTOM};///AS taken from 'lattice.c'
 
+using namespace MCAAtomConst;
+
 /* ---------------------------------------------------------------------- */
 
 AtomVecMCA::AtomVecMCA(LAMMPS *lmp) : AtomVec(lmp)
@@ -86,7 +88,7 @@ AtomVecMCA::AtomVecMCA(LAMMPS *lmp) : AtomVec(lmp)
 
   atom->molecule_flag = 1;
 
-  atom->mca_flag = 1; //!! mca is not a sphere, similar but different
+  atom->mca_flag = 1; //!! mca uses this flag
   atom->radius_flag = 0; ///AS mca uses the same radius for all particles
   atom->density_flag = 0; ///AS if 1 then in set density we get 'rmass=density'
   atom->rmass_flag = atom->omega_flag = atom->torque_flag = 1;

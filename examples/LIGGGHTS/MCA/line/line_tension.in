@@ -59,7 +59,7 @@ communicate	single vel yes
 ####################################################################################################
 variable	L  equal 10*${d}+${rp}
 variable	2L equal 2*$L
-region		box block -$L ${2L} -1 1 -1 1 units box
+region		box block -$L ${2L} -$L $L -$L $L units box
 		# Regions are used to group atoms, delete atoms to create a void, insert atoms in a specified region, etc.
 		# Use: region ID style args keyword arg 
 		#               block args = xlo xhi ylo yhi zlo zhi
@@ -70,7 +70,7 @@ create_box	${nat} box	# create a simulation box
 ####################################################################################################
 # DISCRETIZATION PARAMETERS
 ####################################################################################################
-variable	skin equal 2*${d}	# extra distance beyond force cutoff
+variable	skin equal ${d}*1.02	# extra distance beyond force cutoff
 neighbor	${skin} bin	# style = bin or nsq or multi; bin style creates the list by binning
 timestep	1.0e-9		# Small step for initialization ???
 
@@ -92,7 +92,7 @@ variable	ks     equal 12*$I*$Y/($A*$d*$d*$d) #${kn}/2.5
 #print $A
 #print ${kn}
 #print ${ks}
-bond_coeff 	1 ${rb} ${kn} ${ks} 1 1e4 1e4 # N rb Sn_bond St_bond TYPE_OF_BOND r_break|sigma_break tau_break (temp)
+bond_coeff 	1 ${rb} ${kn} ${ks} 1 1e8 1e8 # N rb Sn_bond St_bond TYPE_OF_BOND r_break|sigma_break tau_break (temp)
 
 mass 		1 1.0 #dummy
 

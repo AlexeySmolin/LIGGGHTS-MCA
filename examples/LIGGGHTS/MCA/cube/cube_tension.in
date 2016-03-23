@@ -92,7 +92,7 @@ variable	ks     equal 12*$I*$Y/($A*$d*$d*$d) #${kn}/2.5
 #print $A
 #print ${kn}
 #print ${ks}
-bond_coeff 	1 ${rb} ${kn} ${ks} 1 1e4 1e4 # N rb Sn_bond St_bond TYPE_OF_BOND r_break|sigma_break tau_break (temp)
+bond_coeff 	1 ${rb} ${kn} ${ks} 1 1e9 1e9 # N rb Sn_bond St_bond TYPE_OF_BOND r_break|sigma_break tau_break (temp)
 
 mass 		1 1.0 #dummy
 
@@ -100,8 +100,7 @@ mass 		1 1.0 #dummy
 # CREATE PARTICLES
 ####################################################################################################
 region		bc block 0.0 $L 0.0 $L 0.0 $L units box
-variable 	sc equal $d*(1.0-0.00001) # lattice spacing for creating particles
-                           # ????????????
+variable 	sc equal $d	# lattice spacing for creating particles
 lattice		sc ${sc}
 create_atoms	1 region bc	# create particles in the cube
 #run 1
@@ -137,7 +136,7 @@ set		group all density ${rho} # diameter ${d} - for mca we set their size in 'at
 #fix boxwalls_z2 all wall/gran model hertz tangential history primitive type 1 zplane +1
 
 ####################################################################################################
-# DEFINE BOUNDARY CONDITIONS
+# DEFINE VELOCITY BOUNDARY CONDITIONS
 ####################################################################################################
 variable	Height equal 10*${sc}
 region          top block EDGE EDGE EDGE EDGE ${Height} EDGE units box
@@ -145,21 +144,25 @@ region          bot block EDGE EDGE EDGE EDGE EDGE 0.0 units box
 group           top region top
 group           bot region bot
 
-fix             bot_fix bot freeze		#fixed bearing
 
 # Loading parameters
-#variable        vel0 equal 0.005 # pull velocity
-#variable        vel_up equal ${vel0}*(1.0-exp(-0.01*time))
-#fix             veltop_fix top mca/setvelocity 0 v_vel_up 0
-variable	KIP equal 4448.2216		#N
-variable	inch equal 0.0254		#mm
-variable	M equal 100*${KIP}/${inch}
-variable	F equal 10*${KIP}		#N 10
+variable        vel0 equal 0.01 # pull velocity
+variable        ts equal 3000.0*4.E-5 # speed-up time = 3000 steps
+variable        vel_up equal ${vel0}*(1.0-exp(-(2.4*time/${ts})*(2.4*time/${ts})))
+#variable        vel_down equal -v_vel_up
+fix             topV_fix top mca/setvelocity 0 0 v_vel_up
+fix             botV_fix bot mca/setvelocity 0 0 0
+
+#fix             bot_fix bot freeze		#fixed bearing
+#variable	KIP equal 4448.2216		#N
+#variable	inch equal 0.0254		#mm
+#variable	M equal 100*${KIP}/${inch}
+#variable	F equal 10*${KIP}		#N 10
 #compression
 #fix 		topF top addforce 0 0 -$F	#1kip=4.4482216kN
 #run 10000
 #tension
-fix		topV top move linear 0 0 0.01    #0.01 m/s
+#fix		topV_fix top move linear 0 0 0.01    #0.01 m/s
 #fix		topF top addforce 0 0 $F	#1kip=4.4482216kN
 #fix		topM top addtorque 0 $M 0	#not possible 
 
@@ -177,10 +180,14 @@ fix		integr nve_group nve/mca
 ####################################################################################################
 # SIMULATION TIME PARAMETERS
 ####################################################################################################
-variable	dt equal 0.00001	# Time step = ${rp}/(sqrt($Y/${rho}))
-variable	fulltime equal 1.	# Simulation time
+variable	TimeStep equal ${rp}/(sqrt((${K}+4.*${G}/3.)/${rho})) # Time step = ${rp}/(sqrt((${K}+4.*${G}/3.)/${rho}))
+variable	dt equal 4.0E-5
+if "${TimeStep} < ${dt}" then &
+  "print 'Recommended time step ${TimeStep} is smaller than dt= ${dt}'" &
+  quit
+variable	fulltime equal 4.	# Simulation time
 variable	runstep equal  ${fulltime}/${dt}
-variable	savetime equal 0.01	# 0.0001
+variable	savetime equal 0.04	# 0.0001
 variable	filestep equal ${savetime}/${dt}
 timestep	${dt}
 
@@ -195,7 +202,7 @@ shell mkdir post
 ####################################################################################################
 # STATUS OUTPUT
 ####################################################################################################
-#output settings, include total thermal energyg
+#output settings, include total thermal energy
 thermo_style	custom step atoms #numbond
 thermo		100
 thermo_modify	lost ignore norm no
@@ -211,12 +218,12 @@ variable mytime equal time	# step*${dt}
 variable px equal xcm(top,x)	#x[${lastone}]
 variable py equal xcm(top,y)	#y[${lastone}]
 variable pz equal xcm(top,z)	#z[${lastone}]
-variable pfx equal fcm(top,x)	#fx[${lastone}]
-variable pfy equal fcm(top,y)	#fy[${lastone}]
-variable pfz equal fcm(top,z)	#fz[${lastone}]
-#variable pfx equal f_topV[1]	#fx[${lastone}]
-#variable pfy equal f_topV[2]	#fy[${lastone}]
-#variable pfz equal f_topV[3]	#fz[${lastone}]
+#variable pfx equal fcm(top,x)	#fx[${lastone}]
+#variable pfy equal fcm(top,y)	#fy[${lastone}]
+#variable pfz equal fcm(top,z)	#fz[${lastone}]
+variable pfx equal f_topV_fix[1]	#fx[${lastone}]
+variable pfy equal f_topV_fix[2]	#fy[${lastone}]
+variable pfz equal f_topV_fix[3]	#fz[${lastone}]
 fix outfile all print ${filestep} "${mytime} ${px} ${py} ${pz} ${pfx} ${pfy} ${pfz}" file cube.dat screen no title "# t x y z fx fy fz"
 
 #variable        stress equal 0.5*(f_velbot_fix[2]-f_veltop_fix[2])/20 # stress = force / initial width
