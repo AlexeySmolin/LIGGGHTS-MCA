@@ -161,8 +161,8 @@ bond_coeff 	1 0.0025 10000000000 10000000000 ${simplebreak} 0.002501
 
 */
   int *molecule; //!! This allows to have bonds. Do we really need it?
-  int **nspecial,**special;
-  int *num_bond; //!! Do we really need it?
+  int *num_bond; // number of bonds for each atom
+  int **nspecial,**special; // MCA does not need this, but it required by 'molecular' we need 'molecular' for bonds!
   int **bond_type,**bond_atom;
   int num_bondhist;
   double ***bond_hist; //???

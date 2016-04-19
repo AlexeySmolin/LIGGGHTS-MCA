@@ -67,7 +67,7 @@ using namespace FixConst;
 FixBondExchangeMCA::FixBondExchangeMCA(LAMMPS *lmp, int narg, char **arg) :
   Fix(lmp, narg, arg)
 {
-	//printf("constructor FixBondExchangeMCA ###########\n");
+    fprintf(logfile,"constructor FixBondExchangeMCA ###########\n");
     restart_global = 1;
 	laststep=-1;
 }
@@ -97,32 +97,34 @@ void FixBondExchangeMCA::pre_exchange()
 
   int **bond_atom = atom->bond_atom;
   int *num_bond = atom->num_bond;
-  double ***bond_hist = atom->bond_hist;// schickt eig. in. neighlist zu per atom arrays
+  double ***bond_hist = atom->bond_hist;
   int n_bondhist = atom->n_bondhist;
   int nlocal = atom->nlocal;
   int *tag = atom->tag;
 
   int newton_bond = force->newton_bond;
 
-  //NP task 1
-  //NP propagate bond contact history
+fprintf(logfile,"FixBondExchangeMCA::pre_exchange\n");
+fprintf(stderr,"FixBondExchangeMCA::pre_exchange\n");
+
+  /* task 1: propagate bond contact history
   if (!n_bondhist) return;
 
   for (n = 0; n < nbondlist; n++) {
-    i1 = bondlist[n][0];
-    i2 = bondlist[n][1];
     int broken = bondlist[n][3];
 
     if(broken) continue; //do not copy broken bonds
 
+    i1 = bondlist[n][0];
+    i2 = bondlist[n][1];
     if (newton_bond || i1 < nlocal)
     {
         found = false;
         for(int k = 0; k < num_bond[i1]; k++)
            if(bond_atom[i1][k] == tag[i2])
            {
-         found = true;
-         for(int q = 0; q < n_bondhist; q++) bond_hist[i1][k][q] = bondhistlist[n][q];
+              found = true;
+              for(int q = 0; q < n_bondhist; q++) bond_hist[i1][k][q] = bondhistlist[n][q];
               break;
            }
         if(!found) error->one(FLERR,"Failed to operate on MCA bond history during copy i1");
@@ -134,17 +136,16 @@ void FixBondExchangeMCA::pre_exchange()
         for(int k = 0; k < num_bond[i2]; k++)
            if(bond_atom[i2][k] == tag[i1])
            {
-         found = true;
-         for(int q = 0; q < n_bondhist; q++) bond_hist[i2][k][q] = -bondhistlist[n][q];
+              found = true;
+              for(int q = 0; q < n_bondhist; q++) bond_hist[i2][k][q] = -bondhistlist[n][q];
               break;
            }
         if(!found) error->one(FLERR,"Failed to operate on MCA bond history during copy i2");
 
     }
   }
-
-  //NP task 2
-  //NP remove broken bonds
+*/
+  // task 2: remove broken bonds
   //NP should be done equally on all processors
 
   //NP P.F. create list for all BOND-IDs, erase all the broken bonds compress bondlist with new value list
@@ -155,7 +156,7 @@ void FixBondExchangeMCA::pre_exchange()
                                 list_bond_id.push_back(n);// load all broken bond ids into the list
 
   //DEBUG
-  //if (list_bond_id.size()>0) printf("will delete %d broken bonds at step %d\n",list_bond_id.size(),update->ntimestep);
+  if (list_bond_id.size()>0) fprintf(logfile,"FixBondExchangeMCA::pre_exchange will delete %d broken bonds at step %d\n",list_bond_id.size(),update->ntimestep);
 
   for (it1=list_bond_id.begin(); it1!=list_bond_id.end(); ++it1)
   {
@@ -168,8 +169,7 @@ void FixBondExchangeMCA::pre_exchange()
     if(!broken) continue;
 
     fprintf(logfile,"FixBondExchangeMCA::pre_exchange detected bond %d:%d<->%d as broken at step %ld\n",n,atom->tag[i1],atom->tag[i2],update->ntimestep);
-    //NP if the bond is broken, we remove it from
-    //NP both atom data
+    // if the bond is broken, we remove it from both atom data
 
     // delete bond from atom I if I stores it
     // atom J will also do this
@@ -217,8 +217,8 @@ void FixBondExchangeMCA::pre_exchange()
 
 inline void FixBondExchangeMCA::remove_bond(int ilocal,int ibond, int bondnumber) //NP P.F. added bondnumber
 {
-    /*NL*///fprintf(screen,"removing bond\n");
-    /*NL*///error->one(FLERR,"romoving bond");
+    fprintf(logfile,"FixBondExchangeMCA::remove_bond %d\n",bondnumber);
+    ///error->one(FLERR,"romoving bond");
     int nbond = atom->num_bond[ilocal];
     atom->bond_atom[ilocal][ibond] = atom->bond_atom[ilocal][nbond-1];
     atom->bond_type[ilocal][ibond] = atom->bond_type[ilocal][nbond-1];

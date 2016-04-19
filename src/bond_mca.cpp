@@ -141,10 +141,9 @@ void BondMCA::compute(int eflag, int vflag)
 
 //fprintf(logfile, "BondMCA::compute \n"); ///AS DEBUG
 
-  if(breakmode == BREAKSTYLE_STRESS_TEMP)
-  {
-      if(!fix_Temp) error->all(FLERR,"Internal error in BondMCA::compute");
-      Temp = fix_Temp->vector_atom;
+  if(breakmode == BREAKSTYLE_STRESS_TEMP) {
+    if(!fix_Temp) error->all(FLERR,"Internal error in BondMCA::compute");
+    Temp = fix_Temp->vector_atom;
   }
 
 //fprintf(logfile,"boxlo[0]=%g boxhi[0]=%g cutoff=%g \n",domain->boxlo[0],domain->boxhi[0],cutoff);
@@ -152,12 +151,11 @@ void BondMCA::compute(int eflag, int vflag)
 //fprintf(logfile,"boxlo[2]=%g boxhi[2]=%g cutoff=%g \n",domain->boxlo[2],domain->boxhi[2],cutoff);
 
   for (int n = 0; n < nbondlist; n++) {
-    
-	//1st check if bond is broken,
-    if(bondlist[n][3])
-    {
-        fprintf(logfile,"BondMCA::compute bond %d allready broken\n",n);
-        continue;
+
+    //1st check if bond is broken,
+    if(bondlist[n][3]) {
+      fprintf(logfile,"BondMCA::compute bond %d allready broken\n",n);
+      continue;
     }
 
     int i1,i2,type;
@@ -168,47 +166,39 @@ void BondMCA::compute(int eflag, int vflag)
     i2 = bondlist[n][1];
 
     //2nd check if bond overlap the box-borders
-    if (x[i1][0]<(domain->boxlo[0]+cutoff)) {
-	bondlist[n][3]=1;
-	continue;
-    } else if (x[i1][0]>(domain->boxhi[0]-cutoff)) {
-	bondlist[n][3]=1;
-	continue;
-    } else if (x[i1][1]<(domain->boxlo[1]+cutoff)) {
-	bondlist[n][3]=1;
-	continue;
-    } else if (x[i1][1]>(domain->boxhi[1]-cutoff)) {
-	bondlist[n][3]=1;
-	continue;
-    } else if (x[i1][2]<(domain->boxlo[2]+cutoff)) {
-	bondlist[n][3]=1;
-	continue;
-    } else if (x[i1][2]>(domain->boxhi[2]-cutoff)) {
-	bondlist[n][3]=1;
-	continue;
-    } 
-    if (x[i2][0]<(domain->boxlo[0]+cutoff)) {
-	bondlist[n][3]=1;
-	continue;
-    } else if (x[i2][0]>(domain->boxhi[0]-cutoff)) {
-	bondlist[n][3]=1;
-	continue;
-    } else if (x[i2][1]<(domain->boxlo[1]+cutoff)) {
-	bondlist[n][3]=1;
-	continue;
-    } else if (x[i2][1]>(domain->boxhi[1]-cutoff)) {
-	bondlist[n][3]=1;
-	continue;
-    } else if (x[i2][2]<(domain->boxlo[2]+cutoff)) {
-	bondlist[n][3]=1;
-	continue;
-    } else if (x[i2][2]>(domain->boxhi[2]-cutoff)) {
-	bondlist[n][3]=1;
-	continue;
+    if (x[i1][0]<(domain->boxlo[0]-cutoff)) {
+      bondlist[n][3]=1;
+    } else if (x[i1][0]>(domain->boxhi[0]+cutoff)) {
+      bondlist[n][3]=1;
+    } else if (x[i1][1]<(domain->boxlo[1]-cutoff)) {
+      bondlist[n][3]=1;
+    } else if (x[i1][1]>(domain->boxhi[1]+cutoff)) {
+      bondlist[n][3]=1;
+    } else if (x[i1][2]<(domain->boxlo[2]-cutoff)) {
+      bondlist[n][3]=1;
+    } else if (x[i1][2]>(domain->boxhi[2]+cutoff)) {
+      bondlist[n][3]=1;
     }
+    if(bondlist[n][3]==1)fprintf(logfile,"BondMCA::compute bond %d broken by domain overlap x[%d]= %g %g %g\n",n,i1,x[i1][0],x[i1][1],x[i1][2]);
+    continue;
+
+    if (x[i2][0]<(domain->boxlo[0]-cutoff)) {
+      bondlist[n][3]=1;
+    } else if (x[i2][0]>(domain->boxhi[0]+cutoff)) {
+      bondlist[n][3]=1;
+    } else if (x[i2][1]<(domain->boxlo[1]-cutoff)) {
+      bondlist[n][3]=1;
+    } else if (x[i2][1]>(domain->boxhi[1]+cutoff)) {
+      bondlist[n][3]=1;
+    } else if (x[i2][2]<(domain->boxlo[2]-cutoff)) {
+      bondlist[n][3]=1;
+    } else if (x[i2][2]>(domain->boxhi[2]+cutoff)) {
+      bondlist[n][3]=1;
+    }
+    if(bondlist[n][3]==1)fprintf(logfile,"BondMCA::compute bond %d broken by domain overlap x[%d]= %g %g %g\n",n,i2,x[i2][0],x[i2][1],x[i2][2]);
+    continue;
 
     type = bondlist[n][2];
-    //rbmin=rb[type]*MIN(q1,q2); //lamda * min(rA,rB) see P.Cundall, "A bonded particle model for rock"
 
     delx = x[i1][0] - x[i2][0];
     dely = x[i1][1] - x[i2][1];
@@ -218,17 +208,15 @@ void BondMCA::compute(int eflag, int vflag)
     rsq = delx*delx + dely*dely + delz*delz;
     r = sqrt(rsq);
 
-    //flag breaking of bond if criterion met
-    if(breakmode == BREAKSTYLE_SIMPLE)
-    {
-        if(r > (2. * r_break[type]))
-        {
-            fprintf(logfile,"r= %f > 2.*r_break[%d]= %f \n",r,type,2.*r_break[type]);
-            bondlist[n][3] = 1;
-            error->all(FLERR,"broken");
-        }
+    // breaking the bond if criterion met
+    if(breakmode == BREAKSTYLE_SIMPLE) {
+      if(r > (2. * r_break[type])) {
+        fprintf(logfile,"r= %f > 2.*r_break[%d]= %f \n",r,type,2.*r_break[type]);
+        bondlist[n][3] = 1;
+        error->all(FLERR,"broken");
+      }
     }
-    else //NP stress or stress_temp
+    else // stress or stress_temp
     {
       int n1;
 
@@ -240,24 +228,22 @@ void BondMCA::compute(int eflag, int vflag)
 
       double *bond_hist1 = bond_hist[i1][n1];
       double nforce_mag = bond_hist1[P]; // - atom->mean_stress[i1]
-      double tforce_mag = vectorMag3D(&bond_hist1[SX]);
+      double tforce_mag = sqrt(vectorMag3D(&bond_hist1[SX]));
 
       bool nstress = sigman_break[type] < (nforce_mag/* + 2.*ttorque_mag/J*rbmin*/);
       bool tstress = tau_break[type]    < (tforce_mag/* +    ntorque_mag/J*rbmin*/);
       bool toohot = false;
-      if(breakmode == BREAKSTYLE_STRESS_TEMP)
-      {
-         toohot = 0.5 * (Temp[i1] + Temp[i2]) > T_break[type];
-         //NL //fprintf(screen,"Temp[i1] %f Temp[i2] %f, T_break[type] %f\n",Temp[i1],Temp[i2],T_break[type]);
+      if(breakmode == BREAKSTYLE_STRESS_TEMP) {
+        toohot = 0.5 * (Temp[i1] + Temp[i2]) > T_break[type];
+        //fprintf(screen,"Temp[i1] %f Temp[i2] %f, T_break[type] %f\n",Temp[i1],Temp[i2],T_break[type]);
       }
 
-      if(nstress || tstress || toohot)
-      {
-         bondlist[n][3] = 1;
-         fprintf(logfile,"broken bond %d at step %d\n",n,update->ntimestep);
-         if(toohot) fprintf(logfile,"   it was too hot\n");
-         if(nstress) fprintf(logfile,"   it was nstress: sigman_break[%d]=%g < nforce_mag=%g\n", type, sigman_break[type], nforce_mag);
-         if(tstress) fprintf(logfile,"   it was tstress: tau_break[%d]=%g < tstress=%g\n", type, tau_break[type], tstress);
+      if(nstress || tstress || toohot) {
+        bondlist[n][3] = 1;
+        fprintf(logfile,"broken bond %d at step %d\n",n,update->ntimestep);
+        if(toohot) fprintf(logfile,"   it was too hot\n");
+        if(nstress) fprintf(logfile,"   it was nstress: sigman_break[%d]=%g < nforce_mag=%g\n", type, sigman_break[type], nforce_mag);
+        if(tstress) fprintf(logfile,"   it was tstress: tau_break[%d]=%g < tstress=%g\n", type, tau_break[type], tforce_mag);
       }
     }
   }
@@ -298,18 +284,15 @@ void BondMCA::coeff(int narg, char **arg)
 
   /*NL*///fprintf(screen,"Sn %f, St%f\n",Sn_one,St_one);
 
-  if(force->numeric(FLERR,arg[4]) == 0. )
-  {
+  if(force->numeric(FLERR,arg[4]) == 0. ) {
       breakmode = BREAKSTYLE_SIMPLE;
       if (narg != 6) error->all(FLERR,"Incorrect SIMPLE arg for MCA bond coefficients");
   }
-  else if(force->numeric(FLERR,arg[4]) == 1. )
-  {
+  else if(force->numeric(FLERR,arg[4]) == 1. ) {
       breakmode = BREAKSTYLE_STRESS;
       if (narg != 7) error->all(FLERR,"Incorrect STRESS arg for MCA bond coefficients");
   }
-  else if(force->numeric(FLERR,arg[4]) == 2. )
-  {
+  else if(force->numeric(FLERR,arg[4]) == 2. ) {
       breakmode = BREAKSTYLE_STRESS_TEMP;
       if (narg != 8) error->all(FLERR,"Incorrect STRESS_TEMP arg for MCA bond coefficients");
   }
@@ -320,11 +303,10 @@ void BondMCA::coeff(int narg, char **arg)
   double r_break_one,sigman_break_one,tau_break_one,T_break_one;
 
   if(breakmode == BREAKSTYLE_SIMPLE) r_break_one = force->numeric(FLERR,arg[5]);
-  else
-  {
-      sigman_break_one = force->numeric(FLERR,arg[5]);
-      tau_break_one = force->numeric(FLERR,arg[6]);
-      if(breakmode == BREAKSTYLE_STRESS_TEMP) T_break_one = force->numeric(FLERR,arg[7]);
+  else {
+   sigman_break_one = force->numeric(FLERR,arg[5]);
+   tau_break_one = force->numeric(FLERR,arg[6]);
+   if(breakmode == BREAKSTYLE_STRESS_TEMP) T_break_one = force->numeric(FLERR,arg[7]);
   }
 
   int ilo,ihi;
@@ -335,11 +317,10 @@ void BondMCA::coeff(int narg, char **arg)
     Sn[i] = Sn_one;
     St[i] = St_one;
     if(breakmode == BREAKSTYLE_SIMPLE) r_break[i] = r_break_one;
-    else
-    {
-        sigman_break[i] = sigman_break_one;
-        tau_break[i] = tau_break_one;
-        if(breakmode == BREAKSTYLE_STRESS_TEMP) T_break[i] = T_break_one;
+    else {
+      sigman_break[i] = sigman_break_one;
+      tau_break[i] = tau_break_one;
+      if(breakmode == BREAKSTYLE_STRESS_TEMP) T_break[i] = T_break_one;
     }
     setflag[i] = 1;
     count++;

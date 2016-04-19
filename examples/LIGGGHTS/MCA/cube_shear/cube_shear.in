@@ -1,6 +1,6 @@
 ####################################################################################################
 #
-# MCA example:  elongate a cube of atoms of linear elastic material by pulling one its end  
+# MCA example:  shear a cube of atoms of linear elastic material by shifting one its end  
 #
 # unit sytem: Pa / m / s
 #
@@ -59,7 +59,7 @@ communicate	single vel yes
 ####################################################################################################
 variable	L  equal 10*${d}+${rp}
 variable	2L equal 2*$L
-region		box block -$L ${2L} -$L ${2L} -$L ${2L} units box
+region		box block 0 ${L} 0 ${L} 0 ${L} units box	#-$L ${2L} -$L ${2L} -$L ${2L} units box
 		# Regions are used to group atoms, delete atoms to create a void, insert atoms in a specified region, etc.
 		# Use: region ID style args keyword arg 
 		#               block args = xlo xhi ylo yhi zlo zhi
@@ -99,10 +99,10 @@ mass 		1 1.0 #dummy
 ####################################################################################################
 # CREATE PARTICLES
 ####################################################################################################
-region		bc block 0.0 $L 0.0 $L 0.0 $L units box
+#region		bc block 0.0 $L 0.0 $L 0.0 $L units box
 variable 	sc equal $d	# lattice spacing for creating particles
 lattice		sc ${sc}
-create_atoms	1 region bc	# create particles in the cube
+create_atoms	1 region box	#bc	# create particles in the cube
 #run 1
 
 ####################################################################################################
@@ -146,11 +146,11 @@ group           bot region bot
 
 
 # Loading parameters
-variable        vel0 equal 0.01 # pull velocity
+variable        vel0 equal 0.01 # shifting velocity
 variable        ts equal 3000.0*4.E-5 # speed-up time = 3000 steps
 variable        vel_up equal ${vel0}*(1.0-exp(-(2.4*time/${ts})*(2.4*time/${ts})))
 #variable        vel_down equal -v_vel_up
-fix             topV_fix top mca/setvelocity 0 0 v_vel_up
+fix             topV_fix top mca/setvelocity 0 v_vel_up 0
 fix             botV_fix bot mca/setvelocity 0 0 0
 
 #fix             bot_fix bot freeze		#fixed bearing
@@ -181,13 +181,13 @@ fix		integr nve_group nve/mca
 # SIMULATION TIME PARAMETERS
 ####################################################################################################
 variable	TimeStep equal ${rp}/(sqrt((${K}+4.*${G}/3.)/${rho})) # Time step = ${rp}/(sqrt((${K}+4.*${G}/3.)/${rho}))
-variable	dt equal 2.0E-5
+variable	dt equal 1.e-6	#4.0E-5
 if "${TimeStep} < ${dt}" then &
   "print 'Recommended time step ${TimeStep} is smaller than dt= ${dt}'" &
   quit
-variable	fulltime equal 2.	# Simulation time
+variable	fulltime equal 0.1	#1.	##4.	# Simulation time
 variable	runstep equal  ${fulltime}/${dt}
-variable	savetime equal 0.02	# 0.0001
+variable	savetime equal 0.001 #0.01	##0.04	# 0.0001
 variable	filestep equal ${savetime}/${dt}
 timestep	${dt}
 
@@ -208,7 +208,7 @@ thermo		100
 thermo_modify	lost ignore norm no
 compute_modify	thermo_temp dynamic yes
 
-dump	dmp all custom  ${filestep} post/dump*.liggghts id type x y z vx vy vz fx fy fz omegax omegay omegaz
+dump	dmp all custom  ${filestep} post/dump*.liggghts id type x y z vx vy vz fx fy fz omegax omegay omegaz tqx tqy tqz
 
 ####################################################################################################
 # OUTPUT PLOT PARAMETERS
@@ -237,6 +237,6 @@ fix outfile all print ${filestep} "${mytime} ${px} ${py} ${pz} ${pfx} ${pfy} ${p
 run 1
 fix_modify	bondcr every 0  #do not create new bonds after this line
 
-#run 2
+#run 10
 #quit
 run ${runstep}

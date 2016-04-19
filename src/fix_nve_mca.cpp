@@ -122,20 +122,17 @@ void FixNVEMCA::initial_integrate(int vflag)
     if (mask[i] & groupbit) {
 
       // velocity update for 1/2 step
-      dtfm = dtf / (rmass[i]*onePlusCAddRhoFluid_);
-//fprintf(stderr, "rmass[%d]= %20.12e onePlusCAddRhoFluid_= %20.12e f= %20.12e %20.12e %20.12e \n",i,rmass[i],onePlusCAddRhoFluid_,f[i][0],f[i][1],f[i][2]);
+      dtfm = dtf / rmass[i]; //(rmass[i]*onePlusCAddRhoFluid_);
       v[i][0] += dtfm * f[i][0];
       v[i][1] += dtfm * f[i][1];
       v[i][2] += dtfm * f[i][2];
 
-//fprintf(stderr, "coord[%d]= %20.12e %20.12e %20.12e velo= %20.12e %20.12e %20.12e \n",i,x[i][0],x[i][1],x[i][2],v[i][0],v[i][1],v[i][2]);
       // position update
       x[i][0] += dtv * v[i][0];
       x[i][1] += dtv * v[i][1];
       x[i][2] += dtv * v[i][2];
-//fprintf(stderr, "coord[%d]= %20.12e %20.12e %20.12e\n",i,x[i][0],x[i][1],x[i][2]);
       // rotation update
-      dtirotate = dtf / (inertia[i]);
+      dtirotate = dtf / inertia[i];
       omega[i][0] += dtirotate * torque[i][0];
       omega[i][1] += dtirotate * torque[i][1];
       omega[i][2] += dtirotate * torque[i][2];
@@ -174,14 +171,13 @@ void FixNVEMCA::final_integrate()
     if (mask[i] & groupbit) {
 
       // velocity update for 1/2 step
-      dtfm = dtf / (rmass[i]*onePlusCAddRhoFluid_);
+      dtfm = dtf / rmass[i]; //(rmass[i]*onePlusCAddRhoFluid_);
       v[i][0] += dtfm * f[i][0];
       v[i][1] += dtfm * f[i][1];
       v[i][2] += dtfm * f[i][2];
-//fprintf(stderr, "velo[%d]= %20.12e %20.12e %20.12e\n",i,v[i][0],v[i][1],v[i][2]); ///AS DEBUG
 
       // rotation update
-      dtirotate = dtf / (inertia[i]);
+      dtirotate = dtf / inertia[i];
       omega[i][0] += dtirotate * torque[i][0];
       omega[i][1] += dtirotate * torque[i][1];
       omega[i][2] += dtirotate * torque[i][2];

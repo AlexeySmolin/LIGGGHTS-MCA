@@ -204,10 +204,10 @@ FixBondCreateMCA::~FixBondCreateMCA()
 
 void FixBondCreateMCA::post_create()
 {
-    //NP register a fix to excange mca bonds across processors
-   // char* fixarg[4];
+   // register a fix to excange mca bonds across processors
+   /* char* fixarg[4];
 
-   /* fixarg[0]="exchange_bonds_mca";
+    fixarg[0]="exchange_bonds_mca";
     fixarg[1]="all";
     fixarg[2]="bond/exchange/mca";
     modify->add_fix(3,fixarg);*/
@@ -486,11 +486,20 @@ void FixBondCreateMCA::post_integrate()
     for(k = 0; k < npartner[i]; k++)
     {
         j = atom->map(partner[i][k]);
+        if(tag[j] != partner[i][k]) {
+            fprintf(logfile,"FixBondCreateMCA::post_integrate: for i=%d partner k=%d j=%d (tag=%d) != partner[i][k]=%d at step %ld\n",i,k,j,tag[j],partner[i][k],update->ntimestep);
+            error->one(FLERR,"tag != partner in fix bond/create");
+        }
 
         int found = 0;
         for(int jp = 0; jp < npartner[j]; jp++)
             if(partner[j][jp] == tag[i]) found = 1;
         if (!found) error->all(FLERR,"Internal fix bond/create error");
+
+        if(already_bonded(i,j)) {
+          fprintf(logfile,"Existing bond btw atoms %d and %d \n",i,j);
+          continue;
+        }
 
         // apply probability constraint
         // MIN,MAX insures values are added in same order on different procs
@@ -506,7 +515,7 @@ void FixBondCreateMCA::post_integrate()
 
         if (!newton_bond /*|| tag[i] < tag[j]*/) 
         {
-          fprintf(logfile,"creating bond btw atoms i=%d and j=%d (i has now %d bonds) at step %ld\n",i,j,num_bond[i]+1,update->ntimestep);
+if(i==0)          fprintf(logfile,"FixBondCreateMCA::post_integrate: creating bond btw atoms i=%d and j=%d (tag=%d) (i has now %d bonds) at step %ld\n",i,j,tag[j],num_bond[i]+1,update->ntimestep);
 
           if (num_bond[i] == atom->bond_per_atom)  
             error->one(FLERR,"New bond exceeded bonds per atom in fix bond/create");

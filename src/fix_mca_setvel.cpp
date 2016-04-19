@@ -258,6 +258,7 @@ void FixMCASetVel::post_force(int vflag) {
 	double **x = atom->x;
 	double **f = atom->f;
 	double **v = atom->v;
+        double **omega = atom->omega;
 ///SPH	double **vest = atom->vest;
 	int *mask = atom->mask;
 	int nlocal = atom->nlocal;
@@ -292,16 +293,19 @@ void FixMCASetVel::post_force(int vflag) {
 				if (xstyle) {
 					v[i][0] = xvalue;
 ///SPH					vest[i][0] = xvalue;
+//                                        omega[i][0] = omega[i][1] = omega[i][2] = 0.0;
 					f[i][0] = 0.0;
 				}
 				if (ystyle) {
 					v[i][1] = yvalue;
 ///SPH					vest[i][1] = yvalue;
 					f[i][1] = 0.0;
+//                                        omega[i][0] = omega[i][1] = omega[i][2] = 0.0;
 				}
 				if (zstyle) {
 					v[i][2] = zvalue;
 ///SPH					vest[i][2] = zvalue;
+//                                        omega[i][0] = omega[i][1] = omega[i][2] = 0.0;
 					f[i][2] = 0.0;
 				}
 			}
@@ -339,30 +343,36 @@ void FixMCASetVel::post_force(int vflag) {
 				if (xstyle == ATOM) {
 ///SPH					vest[i][0] = 
 					v[i][0] = sforce[i][0];
+//                                        omega[i][0] = omega[i][1] = omega[i][2] = 0.0;
 					f[i][0] = 0.0;
 				} else if (xstyle) {
 ///SPH					vest[i][0] = 
 					v[i][0] = xvalue;
+//                                        omega[i][0] = omega[i][1] = omega[i][2] = 0.0;
 					f[i][0] = 0.0;
 				}
 
 				if (ystyle == ATOM) {
 ///SPH					vest[i][1] = 
 					v[i][1] = sforce[i][1];
+//                                        omega[i][0] = omega[i][1] = omega[i][2] = 0.0;
 					f[i][1] = 0.0;
 				} else if (ystyle) {
 ///SPH					vest[i][1] = 
 					v[i][1] = yvalue;
+//                                        omega[i][0] = omega[i][1] = omega[i][2] = 0.0;
 					f[i][1] = 0.0;
 				}
 
 				if (zstyle == ATOM) {
 ///SPH					vest[i][2] = 
 					v[i][2] = sforce[i][2];
+//                                        omega[i][0] = omega[i][1] = omega[i][2] = 0.0;
 					f[i][2] = 0.0;
 				} else if (zstyle) {
 ///SPH					vest[i][2] = 
 					v[i][2] = zvalue;
+//                                        omega[i][0] = omega[i][1] = omega[i][2] = 0.0;
 					f[i][2] = 0.0;
 				}
 
