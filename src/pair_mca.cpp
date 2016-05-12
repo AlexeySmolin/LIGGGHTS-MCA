@@ -57,6 +57,7 @@
 #include "atom_vec_mca.h"
 #include "vector_liggghts.h"
 #include "rotations_mca.h"
+#include "fix_mca_meanstress.h"
 
 using namespace LAMMPS_NS;
 using namespace MathConst;
@@ -89,7 +90,7 @@ PairMCA::~PairMCA()
 
 /* ---------------------------------------------------------------------- */
 
-inline void  PairMCA::swap_prev()
+inline void  FixMCAMeanStress::swap_prev()
 {
   int i,k;
 
@@ -130,7 +131,7 @@ inline void  PairMCA::swap_prev()
 
 /* ---------------------------------------------------------------------- */
 
-inline void  PairMCA::predict_mean_stress()
+inline void  FixMCAMeanStress::predict_mean_stress()
 {
   int i,j,k,itype,jtype;
   double xtmp,ytmp,ztmp,delx,dely,delz,vxtmp,vytmp,vztmp,r,r0,rsq,rinv;

@@ -205,12 +205,13 @@ FixBondCreateMCA::~FixBondCreateMCA()
 void FixBondCreateMCA::post_create()
 {
    // register a fix to excange mca bonds across processors
-   /* char* fixarg[4];
+    char* fixarg[4];
 
     fixarg[0]="exchange_bonds_mca";
     fixarg[1]="all";
     fixarg[2]="bond/exchange/mca";
-    modify->add_fix(3,fixarg);*/
+    modify->add_fix(3,fixarg);
+
 }
 
 
