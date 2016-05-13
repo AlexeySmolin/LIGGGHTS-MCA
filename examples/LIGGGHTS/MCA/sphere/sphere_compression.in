@@ -1,6 +1,11 @@
 # sphere compression
 
 ######## variables for simulation setup #########
+
+variable bt  equal 1	#n_bondtypes, in futur may be 2:linked|unlinked
+variable bpa equal 6	#bonds_per_atom, should be >= Coordination Number: 6 for cubuc, 12 for fcc 
+variable nat equal 2	#number of atom types in simulation
+
 variable rp equal 10*0.0254   #particle radius 10 inches
 variable d  equal 2*${rp}
 variable sc equal $d-0.000000001
@@ -14,7 +19,9 @@ variable runstep equal 10/${dt}
 variable filestep equal 0.01/${dt}
 ################################################
 
-atom_style	hybrid granular mca n_bondtypes 1 bonds_per_atom 6
+# atom_style	hybrid granular mca n_bondtypes ${bt} bonds_per_atom ${bpa}
+atom_style	mca radius ${rp} packing sc n_bondtypes ${bt} bonds_per_atom ${bpa}
+
 atom_modify	map array
 boundary	f f f
 newton		off

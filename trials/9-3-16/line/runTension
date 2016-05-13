@@ -1,0 +1,6 @@
+#!/bin/sh
+
+rm -rf post
+
+../../../../src/lmp_serial -in line_tension.in
+#gdb --args ../../../../src/lmp_serial_debug -in line_tension.in

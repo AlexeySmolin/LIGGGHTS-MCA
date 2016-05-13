@@ -1,0 +1,199 @@
+# line of mca atoms - tension
+
+######## variables for simulation setup #########
+variable bt  equal 1	#n_bondtypes, in futur may be 2:linked|unlinked
+variable bpa equal 6	#bonds_per_atom, should be >= Coordination Number: 6 for cubic, 12 for fcc 
+variable nat equal 2	#number of atom types in simulation
+
+variable rp equal 10*0.0254	#particle radius 10 inches
+variable d  equal 2*${rp}       #particle diameter
+variable skin equal 2*${d}	# extra distance beyond force cutoff
+variable sc equal $d*(1.0-0.00001) #packing
+variable c  equal ${d}*(1.0+0.01)
+variable rb equal 0.8*${rp}
+variable L  equal 10*${d}+${rp} 
+variable 2L equal 2*$L
+
+# material parameters (aliminium)
+variable rho equal 2700			# density
+variable Y  equal 6.894757291e10	# Young modulus 70 GPa
+variable p  equal 0.3			# Poisson ratio
+variable G  equal $Y/(2*(1+$p))		# Shear modulus
+variable K  equal $Y/(3*(1-2.0*$p))	# Bulk modulus
+
+#Y=1.0/(1.0/(9.0*K) + 1.0/(3.0*G))
+#p=0.5*(3.0*K - 2.0*G)/(3.0*K + G)
+
+# Loading parameters
+variable KIP equal 4448.2216		#N
+variable inch equal 0.0254		#mm
+
+variable M equal 100*${KIP}/${inch}
+variable F equal 10*${KIP}		#N 10
+
+
+# Time step = ${rp}/(sqrt($Y/${rho}))
+variable dt equal 0.00001
+
+# Simulation time parameters
+variable fulltime equal 10
+variable runstep equal ${fulltime}/${dt}
+variable savetime equal 0.01	# 0.0001
+variable filestep equal ${savetime}/${dt}
+################################################
+
+
+atom_style	mca radius ${rp} packing sc n_bondtypes ${bt} bonds_per_atom ${bpa}
+atom_modify	map array 
+boundary	f f f
+newton		off
+
+communicate	single vel yes  #used for granular
+
+units		si
+
+#Create regions
+region		whole block 0.0 ${2L} 0.0 ${2L} 0.0 ${2L} units box
+create_box	2 whole
+region		piston   block 0.0 ${L} 0.0 ${L} 0.0 ${L} units box
+region		specimen block 0.0 ${rp} 0.0 ${rp} 0.0 ${rp} units box
+region		support  block 0.0 ${L} 0.0 ${L} 0.0 ${L} units box 
+
+#Insert particles
+lattice		sc ${sc}
+create_atoms	1 region piston 
+lattice		sc ${sc}
+create_atoms	1 region specimen
+lattice		sc ${sc}
+create_atoms	1 region support   
+
+
+neighbor	${skin} bin
+neigh_modify	delay 0
+
+
+pair_style 	mca ${skin} # cutoff as for 'pair_soft' - just for working now
+pair_coeff	* * $G $K   # pair_coeff I J shear_modulus bulk_modulus
+
+
+bond_style 	mca
+
+
+variable I equal 0.25*PI*${rb}*${rb}*${rb}*${rb}
+variable A equal PI*${rb}*${rb}
+
+#double kn = E/lenght;
+#double ks = 12*I*E/(A*lenght*lenght*lenght);
+variable kn equal 2*$Y/$d 		 #grain behaivior ?
+variable ks equal 12*$I*$Y/($A*$d*$d*$d) #${kn}/2.5
+
+print $Y
+print $G
+print $I
+print $A
+print ${kn}
+print ${ks}
+
+bond_coeff 	1 ${rb} ${kn} ${ks} 1 1e4 1e4
+
+
+#Material properties required for new pair styles
+
+#fix 		m1 all property/global youngsModulus peratomtype $Y $Y
+#fix 		m2 all property/global poissonsRatio peratomtype $p $p
+#fix 		m3 all property/global coefficientRestitution peratomtypepair 2 0.2 0.2 0.2 0.2
+#fix 		m4 all property/global coefficientFriction peratomtypepair 2 0.3 0.3 0.3 0.3
+
+mass 		1 1.0 #dummy
+mass 		2 1.0 #dummy
+
+timestep	1.0e-9 # Small step for initialization ???
+
+# ================================================
+# create just 11 particles in a line
+# ================================================
+#region		bc cylinder x 0.00 0.00 ${rp} 0.0 $L units box
+#lattice		sc ${sc}
+#create_atoms	1 region bc
+#run		1
+
+#group 		bonded id >= 1
+#set		group all density ${rho} # for mca we set their size in 'atom_style mca radius'
+#run 		1
+
+#variable lastone equal atoms
+
+#group		freezed id == 1
+#group		tipball id == ${lastone}
+
+
+
+#run 		1
+#fix 		f1	freezed freeze	#fixed bearing
+
+#fix 		bondcr all bond/create/mca 1 1 1 ${c} 1 ${bpa} #every itype jtype cutoff btype newperts
+
+#fix		gravi all gravity 9.81 vector 0.0 0.0 -1.0
+
+#atoms may not be lost, insert wall at box bounds
+#fix boxwalls_x1 all wall/gran model hertz tangential history primitive type 1 xplane -$L
+#fix boxwalls_x2 all wall/gran model hertz tangential history primitive type 1 xplane +${2L}
+#fix boxwalls_y1 all wall/gran model hertz tangential history primitive type 1 yplane -1
+#fix boxwalls_y2 all wall/gran model hertz tangential history primitive type 1 yplane +1
+#fix boxwalls_z1 all wall/gran model hertz tangential history primitive type 1 zplane -$L
+#fix boxwalls_z2 all wall/gran model hertz tangential history primitive type 1 zplane +1
+
+#region and insertion
+
+group		nve_group region whole
+
+#apply nve integration to all particles that are inserted as single particles
+fix		integr nve_group nve/mca
+
+#output settings, include total thermal energyg
+thermo_style	custom step atoms #numbond
+thermo		100
+thermo_modify	lost ignore norm no
+compute_modify	thermo_temp dynamic yes
+
+#insert the first particles so that dump is not empty
+#shell -rf post		# does not work
+shell rm    post/*	# does not work
+shell rmdir post	# does not work
+shell mkdir post
+
+##dump		dmp 	all custom  ${filestep} post/dump*.liggghts id type x y z vx vy vz fx fy fz omegax omegay omegaz radius
+dump		dmp 	all custom  ${filestep} post/dump*.liggghts id type x y z vx vy vz fx fy fz omegax omegay omegaz
+
+#get coordinates of the last particle
+variable time equal step*${dt}
+#variable px equal x[${lastone}]
+#variable py equal y[${lastone}]
+#variable pz equal z[${lastone}]
+#variable pfx equal fx[${lastone}]
+#variable pfy equal fy[${lastone}]
+#variable pfz equal fz[${lastone}]
+
+#variable filestep equal 1
+#fix outfile all print ${filestep} "${time};${px};${py};${pz}" file line.csv screen no title "t;x;y;z"
+#fix outfile all print ${filestep} "${time} ${px} ${py} ${pz} ${pfx} ${pfy} ${pfz}" file line.dat screen no title "# t x y z fx fy fz"
+
+#insert particles
+run		1		#run one step
+#fix_modify	bondcr every 0  #do not create new bonds after this line
+
+#compression
+#fix 	tipF tipball addforce  -$F 0 0    #1kip=4.4482216kN
+#run 10000
+#tension
+#fix 	tipV tipball move linear  0.01 0 0    #0.01 m/s
+#fix 	tipF tipball addforce  $F 0 0    #1kip=4.4482216kN
+#fix 	tipM tipball addtorque 0 $M  0	  #not possible 
+
+timestep	${dt}
+
+#run 10
+#quit
+
+variable t equal 1/${dt} 	#run 0.0005 second
+run $t

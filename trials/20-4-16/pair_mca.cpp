@@ -56,16 +56,12 @@
 #include "bond_mca.h"
 #include "atom_vec_mca.h"
 #include "vector_liggghts.h"
-#include "rotations_mca.h"
-
 
 using namespace LAMMPS_NS;
 using namespace MathConst;
 using namespace MCAAtomConst;
 
-#define IMPLFACTOR 1.0
 ///#define NO_MEANSTRESS
-///#define NO_ROTATIONS
 
 /* ---------------------------------------------------------------------- */
 
@@ -113,7 +109,6 @@ inline void  PairMCA::swap_prev()
     for(k = 0; k < num_bond[i]; k++)
     {
       double *bond_hist_ik = bond_hist[i][k];
-///if(i == 13) fprintf(logfile,"PairMCA::swap_prev i=%d j=%d nv_pre= %20.12e %20.12e %20.12e nv= %20.12e %20.12e %20.12e \n",i,k,bond_hist_ik[NX_PREV],bond_hist_ik[NY_PREV],bond_hist_ik[NZ_PREV],bond_hist_ik[NX],bond_hist_ik[NY],bond_hist_ik[NZ]); ///AS DEBUG
       bond_hist_ik[R_PREV] = bond_hist_ik[R];
       bond_hist_ik[P_PREV] = bond_hist_ik[P];
       bond_hist_ik[NX_PREV] = bond_hist_ik[NX];
@@ -140,16 +135,18 @@ inline void  PairMCA::predict_mean_stress()
 
   double **x = atom->x;
   double **v = atom->v;
+  double *mean_stress = atom->mean_stress;
   double *mean_stress_prev = atom->mean_stress_prev;
   const double mca_radius = atom->mca_radius;
   int *tag = atom->tag;
+  int *mask = atom->mask;
   int *type = atom->type;
 
   int **bond_atom = atom->bond_atom;
   int *num_bond = atom->num_bond;
   int newton_bond = force->newton_bond;
   double ***bond_hist = atom->bond_hist;
-  const double dtImpl = IMPLFACTOR*update->dt; ///AS it is equivalent to damping force. TODO set in coeffs some value 0.0..1 instead of 0.5
+  const double dtImpl = 1.0*update->dt; ///AS it is equivalent to damping force. TODO set in coeffs some value 0.0..1 instead of 0.5
 
   int Nc = atom->coord_num;
   int nlocal = atom->nlocal;
@@ -176,8 +173,10 @@ inline void  PairMCA::predict_mean_stress()
 
     rKHi = mca_pair->K[itype][itype]; rKHi = 1. - rHi / (3. * rKHi);
     rK1 = (double)Nc / (Nc - rKHi);
+//AS fprintf(logfile,"PairMCA::predict_mean_stress i=%d Ni=%d rHi=%g rKHi=%g\n",i,Ni,rHi,rKHi);
+//    std::cout << "rHi = "<<rHi<<" rKHi = "<<rKHi <<std::endl;
     rKn = (Nc + rKHi/(1.0 - rKHi)) / ((double)Nc);
-    rHi *= rK1 + ((rKn-rK1)*(Ni-1))/((double)(Nc-1)); // fix "rigidity" with accounting of # of bonds
+    rHi *= rK1 + ((rKn-rK1)*(Ni-1))/((double)(Nc-1)); // fix "rigidity" with accounting of on # of bonds
 
     xtmp = x[i][0];
     ytmp = x[i][1];
@@ -203,6 +202,7 @@ inline void  PairMCA::predict_mean_stress()
       rHj = 2.0*mca_pair->G[jtype][jtype];
       rKHj = mca_pair->K[jtype][jtype]; rKHj = 1. - rHj / (3. * rKHj);
       rK1 = (double)Nc / (Nc - rKHj);
+//AS fprintf(logfile,"PairMCA::predict_mean_stress j=%d Nj=%d rHj=%g rKHj=%g\n",j,Nj,rHj,rKHj);
       rKn = (Nc + rKHj/(1.0 - rKHj)) / ((double)Nc);
       rHj *= rK1 + ((rKn-rK1)*(Nj-1))/((double)(Nc-1)); // fix "rigidity" with accounting of on # of bonds
 
@@ -211,7 +211,7 @@ inline void  PairMCA::predict_mean_stress()
       delz = ztmp - x[j][2] + dtImpl*(vztmp - v[j][2]);
       rsq = delx*delx + dely*dely + delz*delz;
       r = sqrt(rsq);
-      rinv = -1. / r; // "-" means that unit vector is from i1 to i2
+      ///rinv = 1. / r;
 
       r0 = bond_hist_ik[R_PREV];
       pi = bond_hist_ik[P_PREV];
@@ -227,10 +227,8 @@ inline void  PairMCA::predict_mean_stress()
 
       rdSgmi += d_p;
       bond_hist_ik[R] = r;
-//      bond_hist[j][jk][R] = r; //TODO do we need it for j?
-      bond_hist_ik[NX] = delx*rinv; ///TODO will do it later in BondMCA::compute_total_force because here we use implicit distance
-      bond_hist_ik[NY] = dely*rinv;
-      bond_hist_ik[NZ] = delz*rinv;
+      bond_hist[j][jk][R] = r; //TODO do we need it for j?
+      /// bond_hist_ik[NX] = delx*rinv; TODO will do it later in BondMCA::compute_total_force because here we use implicit distance
     }
 #ifndef NO_MEANSTRESS
     mean_stress_prev[i] += rdSgmi / Nc; // optimized if use _prev as current here and in compute_elastic_force()
@@ -244,31 +242,27 @@ inline void  PairMCA::predict_mean_stress()
 inline void  PairMCA::compute_elastic_force()
 {
   int i,j,k,itype,jtype;
-  double r,r0;
-///  double xtmp,ytmp,ztmp,delx,dely,delz,r,r0;
-///  double rsq,rinv;
-///  double vxtmp,vytmp,vztmp;
+  double xtmp,ytmp,ztmp,delx,dely,delz,r,r0,rsq,rinv;
+  double vxtmp,vytmp,vztmp;
 
   int jk;
 
   double **x = atom->x;
   double **v = atom->v;
-  double **theta = atom->theta;
-  double **theta_prev = atom->theta_prev;
-  double **omega = atom->omega;
-  double *mean_stress = atom->mean_stress_prev; // it looks a little bit confusing but this works faster in predict_mean_stress()
+  double *mean_stress = atom->mean_stress_prev; // looks a little bit confused but this works faster in predict_mean_stress()
   double *mean_stress_prev = atom->mean_stress;
   const double mca_radius = atom->mca_radius;
   int *tag = atom->tag;
-//  int *mask = atom->mask;
+  int *mask = atom->mask;
   int *type = atom->type;
 
   int **bond_atom = atom->bond_atom;
   int *num_bond = atom->num_bond;
   int newton_bond = force->newton_bond;
   double ***bond_hist = atom->bond_hist;
-  const double dtImpl = IMPLFACTOR*update->dt; /// TODO Allow to set in coeffs
+//  const double dtImpl = 0.5*update->dt; /// TODO Allow to set in coeffs
 
+//  int Nc = atom->coord_num;
   int nlocal = atom->nlocal;
   PairMCA *mca_pair = (PairMCA*) force->pair;
 
@@ -282,7 +276,6 @@ inline void  PairMCA::compute_elastic_force()
     double ei,d_e,d_e0;
     double rdSgmi,rdSgmj;
     double rGi,rGj;
-    double qi,qj;
 
     itype = type[i];
     ///AS TODO make this property global as in 'fix_check_timestep_gran.cpp' :
@@ -291,23 +284,35 @@ inline void  PairMCA::compute_elastic_force()
     rHi = 2. * rGi;
     rKHi = mca_pair->K[itype][itype]; rKHi = 1. - rHi / (3. * rKHi);
 
+    xtmp = x[i][0];
+    ytmp = x[i][1];
+    ztmp = x[i][2];
+    vxtmp = v[i][0];
+    vytmp = v[i][1];
+    vztmp = v[i][2];
+
     rdSgmi = rKHi*(mean_stress[i] - mean_stress_prev[i]); // rKHi*(arMS0[i]-arMS1[i]);
     for(k = 0; k < num_bond[i]; k++)
     {
       j = atom->map(bond_atom[i][k]);
 
-      double *bond_hist_ik = &(bond_hist[i][k][0]);
+      double *bond_hist_ik = bond_hist[i][k];
       int found = 0;
       for(jk = 0; jk < num_bond[j]; jk++)
         if(bond_atom[j][jk] == tag[i]) {found = 1; break; }
       if (!found) error->all(FLERR,"PairMCA::compute_elastic_force 'jk' not found");
-      double *bond_hist_jk = &(bond_hist[j][jk][0]);
 
       jtype = type[j];
       rGj = mca_pair->G[jtype][jtype];
       rHj = 2. * rGj;
       rKHj = mca_pair->K[jtype][jtype]; rKHj = 1. - rHj / (3. * rKHj);
-
+/* Later we will use it for shear and torque
+      delx = xtmp - x[j][0];
+      dely = ytmp - x[j][1];
+      delz = ztmp - x[j][2];
+      rsq = delx*delx + dely*dely + delz*delz;
+      //rinv = 1. / r;
+*/
       r = bond_hist_ik[R];
       r0 = bond_hist_ik[R_PREV];
       ei = bond_hist_ik[E];
@@ -316,7 +321,7 @@ inline void  PairMCA::compute_elastic_force()
         //pj = bond_hist_ik[PJ_PREV];
         error->all(FLERR,"PairMCA::compute_elastic_force does not support 'newton on'");
       } else
-        pj = bond_hist_jk[P_PREV];
+        pj = bond_hist[j][jk][P_PREV];
 
       /// BEGIN central force
       d_e0 = (r - r0) / mca_radius;
@@ -325,115 +330,17 @@ inline void  PairMCA::compute_elastic_force()
       d_p = rHi*d_e + rdSgmi;
       ei += d_e;
       pi += d_p;
+//if(i == nlocal-1) fprintf(logfile,"PairMCA::compute_elastic_force i=%d j=%d pi=%g ei=%g d_e0=%g d_e=%g rdSgmi=%g rdSgmj=%g\n",i,j,pi,ei,d_e0,d_e,rdSgmi,rdSgmj); ///AS DEBUG
+//if(i == nlocal-1) fprintf(logfile,"PairMCA::compute_elastic_force mean_stress[%d]==%g mean_stress[%d]=%g\n",i,mean_stress[i],j,mean_stress[j]); ///AS DEBUG
+//if(i == nlocal-1) fprintf(logfile,"PairMCA::compute_elastic_force PREV mean_stress[%d]==%g mean_stress[%d]=%g\n",i,mean_stress_prev[i],j,mean_stress_prev[j]); ///AS DEBUG
       /// END central force
-
-      /// BEGIN shear force
-      
-      double *nv = &(bond_hist_ik[NX]);       // normal unit vector
-      double *nv0 = &(bond_hist_ik[NX_PREV]); // normal unit vector at prev time step
-      double dYij[3];
-      vectorCross3D(nv0, nv, dYij); // rotaion of the pair
-///if(i == 13) fprintf(logfile,"PairMCA::compute_elastic_force i=%d j=%d nv0= %20.12e %20.12e %20.12e nv= %20.12e %20.12e %20.12e \n",i,j,nv0[0],nv0[1],nv0[2],nv[0],nv[1],nv[2]); ///AS DEBUG
-///if(i == 13) fprintf(logfile,"PairMCA::compute_elastic_force i=%d j=%d nv0xnv= %20.12e %20.12e %20.12e \n",i,j,dYij[0],dYij[1],dYij[2]); ///AS DEBUG
-
-      double vdLij[3];
-      vectorCopy3D(dYij, vdLij);
-      vectorScalarMult3D(vdLij, r); // tangent displacement of the pair
-
-      qi = mca_radius * (1. + bond_hist_ik[E]); // distance to the contact point from i
-      qj = mca_radius * (1. + bond_hist_jk[E]); // distance to the contact point from j
-      double vdTHi[3], vdTHj[3];
-      double vR1[3], vR2[3], vRsum[3];
-#ifdef NO_ROTATIONS
-      vdTHi[0]=vdTHi[2]=vdTHi[2]=vdTHj[0]=vdTHj[1]=vdTHj[2]= 0.0;
-#else
-      vectorCopy3D(&(theta[i][0]), vR1);
-      vectorCopy3D(&(theta_prev[i][0]), vR2);
-      vectorFlip3D(vR2); //vectorScalarMult3D(vR2, -1.)
-      SmallRotationSum(vR1, vR2, vdTHi); // rotation increment for i
-      vectorCopy3D(&(theta[j][0]), vR1);
-      vectorCopy3D(&(theta_prev[j][0]), vR2);
-      vectorFlip3D(vR2); //vectorScalarMult3D(vR2, -1.)
-      SmallRotationSum(vR1, vR2, vdTHj); // rotation increment for j
-// implicit vvvv
-      vectorCopy3D(&(omega[i][0]), vR2);
-      vectorScalarMult3D(vR2, dtImpl);
-      vectorCopy3D(vdTHi, vR1);
-      SmallRotationSum(vR1, vR2, vdTHi);
-      vectorCopy3D(&(omega[j][0]), vR2);
-      vectorScalarMult3D(vR2, dtImpl);
-      vectorCopy3D(vdTHj, vR1);
-      SmallRotationSum(vR1, vR2, vdTHj);
-// inmplicit ^^^^
-      vectorCopy3D(vdTHi, vR1); vectorScalarMult3D(vR1, qi);
-      vectorCopy3D(vdTHj, vR2); vectorScalarMult3D(vR2, qj);
-      SmallRotationSum(vR1, vR2, vRsum);
-
-      vectorCopy3D(nv, vR1);
-      double proj = vectorDot3D(vRsum, nv); // projection of rotational part to the normal
-      vectorScalarMult3D(vR1, proj);
-      vectorSubtract3D(vRsum, vR1, vR2);    // tangential component of rotation
-      vectorCopy3D(vdLij, vR1);
-      vectorFlip3D(vR2);
-      SmallRotationSum(vR1, vR2, vdLij);
-#endif
-
-      double rKS = 1. / (qj*rGi + qi*rGj);
-      double rQR = qi * 0.5 * rKS;
-      double vShear[3], vYi[3], vYj[3], vYij[3];
-      vectorCopy3D(&(bond_hist_ik[SHX_PREV]), vShear);
-      vectorCopy3D(&(bond_hist_ik[YX_PREV]), vYi);
-      vectorCopy3D(&(bond_hist_jk[YX_PREV]), vYj);
-      vectorCopy3D(vYj, vR1); vectorScalarMult3D(vR1, rQR);
-      vectorCopy3D(vYi, vR2); vectorScalarMult3D(vR2, -rQR);
-      vectorAdd3D(vR1, vR2, vYij);
-      vectorScalarMult3D(vdLij, -rGj*rKS);
-      SmallRotationSum(vdLij, vYij, dYij);
-      vectorCopy3D(vShear, vR1);
-      RotationSum(vR1, dYij, vShear);
-      vectorScalarMult3D(vYi, 1./rHi);
-      vectorCopy3D(vYi, vR1);
-      RotationSum(vR1, dYij, vYi);
-      vectorScalarMult3D(vYi, rHi);
-      double vSij[3];
-/* TODO      if(!azNbr0[iNbIndx].bL) {
-        ///BEGIN correction due to sliding friction
-        ...
-        ///END correction due to sliding friction
-        } else */
-      {
-        vectorCross3D(vYi, nv, vSij);
-      }
-      /// END shear force
-
-      /// BEGIN bending-torsion torque
-      double vdMij[3], vdMji[3], vMij[3];
-#ifdef NO_ROTATIONS
-vMij[0]= vMij[1]= vMij[2]=0.;
-#else
-      vectorCopy3D(vdTHi, vdMij);
-      vectorCopy3D(vdTHj, vdMji);
-      vectorScalarMult3D(vdMij, qi);
-      vectorScalarMult3D(vdMji, -qj);
-      RotationSum(vdMij, vdMji, vMij);
-      vectorScalarMult3D(vMij, rGi*rGj/(rGi+rGj));
-#endif
-      /// END bending-torsion torque
 
       bond_hist_ik[E] = ei;
       bond_hist_ik[P] = pi;
-      bond_hist_ik[SHX] = vShear[0];
-      bond_hist_ik[SHY] = vShear[1];
-      bond_hist_ik[SHZ] = vShear[2];
-      bond_hist_ik[YX] = vYi[0];
-      bond_hist_ik[YY] = vYi[1];
-      bond_hist_ik[YZ] = vYi[2];
-      bond_hist_ik[SX] = vSij[0];
-      bond_hist_ik[SY] = vSij[1];
-      bond_hist_ik[SZ] = vSij[2];
-      bond_hist_ik[MX] = vMij[0];
-      bond_hist_ik[MY] = vMij[1];
-      bond_hist_ik[MZ] = vMij[2];
+      //TODO bond_hist_ik[SHX]
+      //TODO bond_hist_ik[YX]
+      //TODO bond_hist_ik[SX]
+      //TODO bond_hist_ik[MX]
     }
   }
 }
@@ -447,23 +354,16 @@ inline void  PairMCA::compute_equiv_stress()
 
   double *mean_stress = atom->mean_stress;
   double *equiv_stress = atom->equiv_stress;
-  double *theta;
-  double *theta_prev;
 
   int *num_bond = atom->num_bond;
+  int newton_bond = force->newton_bond;
   double ***bond_hist = atom->bond_hist;
 
   int Nc = atom->coord_num;
   int nlocal = atom->nlocal;
 
-  for (i = 0; i < nlocal; i++) {
-    theta = &(atom->theta[i][0]);
-    theta_prev = &(atom->theta_prev[i][0]);
-    theta_prev[0] = theta[0];
-    theta_prev[1] = theta[1];
-    theta_prev[2] = theta[2];
-
 #ifndef NO_MEANSTRESS
+  for (i = 0; i < nlocal; i++) {
     if (num_bond[i] == 0) continue;
 
     rdSgmi = 0.0;
@@ -471,8 +371,9 @@ inline void  PairMCA::compute_equiv_stress()
       rdSgmi += bond_hist[i][k][P];
 
     mean_stress[i] = rdSgmi / Nc;
-#endif
+//if(i == nlocal-1) fprintf(logfile,"PairMCA::compute_equiv_stress mean_stress[%d]==%g Nc=%d\n",i,mean_stress[i],Nc); ///AS DEBUG
   }
+#endif
 
   for (i = 0; i < nlocal; i++) {
     if (num_bond[i] == 0) continue;
@@ -524,7 +425,7 @@ void PairMCA::compute_total_force(int eflag, int vflag)
 // fprintf(logfile, "PairMCA::compute_total_force \n"); ///AS DEBUG
 
   for (int n = 0; n < nbondlist; n++) {
-    //1st check if bond is broken,
+	//1st check if bond is broken,
     if(bondlist[n][3])
     {
         fprintf(logfile,"PairMCA::compute_total_force bond %d has been already broken\n",n);
@@ -533,6 +434,7 @@ void PairMCA::compute_total_force(int eflag, int vflag)
 
     int i1,i2,n1,n2;
     double rsq,r,rinv;
+    double vt1,vt2,vt3;
     double tor1,tor2,tor3;
     double delx,dely,delz;
     double dnforce[3],dtforce[3],nv[3];
@@ -542,14 +444,17 @@ void PairMCA::compute_total_force(int eflag, int vflag)
     
     i1 = bondlist[n][0];
     i2 = bondlist[n][1];
+// fprintf(logfile, "PairMCA::compute_total_force n=%d i1=%d i2=%d (tags= %d %d)\n", n, i1, i2, tag[i1], tag[i2]); ///AS DEBUG
 
     for (n1 = 0; n1 < num_bond[i1]; n1++) {
       if (bond_atom[i1][n1]==tag[i2]) break;
+// fprintf(logfile, "PairMCA::compute_total_force bond_atom[i1][%d]=%d \n", n1, bond_atom[i1][n1]); ///AS DEBUG
     }
     if (n1 == num_bond[i1]) error->all(FLERR,"Internal error in PairMCA: n1 not found");
 
     for (n2 = 0; n2 < num_bond[i2]; n2++) {
       if (bond_atom[i2][n2]==tag[i1]) break;
+// fprintf(logfile, "PairMCA::compute_total_force bond_atom[i2][%d]=%d \n", n2, bond_atom[i2][n2]); ///AS DEBUG
     }
     if (n2 == num_bond[i2]) error->all(FLERR,"Internal error in PairMCA: n2 not found");
 
@@ -558,6 +463,7 @@ void PairMCA::compute_total_force(int eflag, int vflag)
 
     double pi = bond_hist1[P];
     double pj = bond_hist2[P];
+// fprintf(logfile, "PairMCA::compute_total_force pi=%f pj=%f\n", pi, pj); ///AS DEBUG
     if ( bondlist[n][3] && ((pi>0.)||(pj>0.)) ) {
       error->warning(FLERR,"PairMCA::compute_total_force (pi>0.)||(pj>0.) - be careful!");
       continue;
@@ -574,7 +480,7 @@ void PairMCA::compute_total_force(int eflag, int vflag)
     double rKi =  mca_pair->K[itype][itype];
     int jtype = atom->type[i2];
     double rKj =  mca_pair->K[jtype][jtype];
-    double rDStress = 0.5 * (mean_stress[i1]/rKi + mean_stress[i2]/rKj);
+    double rDStress = 0.5*(mean_stress[i1]/rKi + mean_stress[i2]/rKj);
     A = contact_area * (1. + rDStress) * rD0 / rDij; // contact area updated for pyramid
 
     //bond_hist1[A] = A;
@@ -583,36 +489,49 @@ void PairMCA::compute_total_force(int eflag, int vflag)
     delx = x[i1][0] - x[i2][0];
     dely = x[i1][1] - x[i2][1];
     delz = x[i1][2] - x[i2][2];
+    //domain->minimum_image(delx,dely,delz); ??
 
     rsq = delx*delx + dely*dely + delz*delz;
     r = sqrt(rsq);
     rinv = -1. / r; // "-" means that unit vector is from i1 to i2
 
     // normal unit vector
-    nv[0] = delx*rinv; // compute normal here because in bond_hist1[NX] it has implicit increment
+    nv[0] = delx*rinv;
     nv[1] = dely*rinv;
     nv[2] = delz*rinv;
+    //bond_hist1[NX] = nv[0];
+    //bond_hist1[NY] = nv[1];
+    //bond_hist1[NZ] = nv[2];
+    //bond_hist2[NX] = -nv[0];
+    //bond_hist2[NY] = -nv[1];
+    //bond_hist2[NZ] = -nv[2];
 
-    // normal force
+    // change in normal forces
     pi += pj; pi *= 0.5;
     vectorScalarMult3D(nv, pi, dnforce);
+    //dnforce[0] = pi * nv[0];
+    //dnforce[1] = pi * nv[1];
+    //dnforce[2] = pi * nv[2];
 
     // tangential force
-    dtforce[0] = 0.5 * (bond_hist2[SX] - bond_hist1[SX]);
-    dtforce[1] = 0.5 * (bond_hist2[SY] - bond_hist1[SY]);
-    dtforce[2] = 0.5 * (bond_hist2[SZ] - bond_hist1[SZ]);
+    vt1 = (bond_hist1[SX] - bond_hist2[SX])*0.5;
+    vt2 = (bond_hist1[SY] - bond_hist2[SY])*0.5;
+    vt3 = (bond_hist1[SZ] - bond_hist2[SZ])*0.5;
+
+    // change in shear forces
+    dtforce[0] = vt1;
+    dtforce[1] = vt2;
+    dtforce[2] = vt3;
 
     // torque due to tangential force
-    vectorCross3D(nv, dtforce, dttorque);
+
+    vectorCross3D(nv,dtforce,dttorque);
 
     // torque due to torsion and bending
-#ifdef NO_ROTATIONS
-    tor1 = tor2 = tor3 = 0.;
-#else
-    tor1 = 0.5 * A * (bond_hist2[MX] - bond_hist1[MX]);
-    tor2 = 0.5 * A * (bond_hist2[MY] - bond_hist1[MY]);
-    tor3 = 0.5 * A * (bond_hist2[MZ] - bond_hist1[MZ]);
-#endif
+
+    tor1 = 0.5 * A * (bond_hist1[MX] - bond_hist2[MX]);
+    tor2 = 0.5 * A * (bond_hist1[MY] - bond_hist2[MY]);
+    tor3 = 0.5 * A * (bond_hist2[MZ] - bond_hist2[MZ]);
 
     // energy
     //if (eflag) error->all(FLERR,"MCA bonds currently do not support energy calculation");
@@ -623,18 +542,18 @@ void PairMCA::compute_total_force(int eflag, int vflag)
       f[i1][0] += (dnforce[0] + dtforce[0]) * A;
       f[i1][1] += (dnforce[1] + dtforce[1]) * A;
       f[i1][2] += (dnforce[2] + dtforce[2]) * A;
-      torque[i1][0] += q1 * A * dttorque[0] + tor1;
-      torque[i1][1] += q1 * A * dttorque[1] + tor2;
-      torque[i1][2] += q1 * A * dttorque[2] + tor3;
+      torque[i1][0] += q1*dttorque[0] - tor1;
+      torque[i1][1] += q1*dttorque[1] - tor2;
+      torque[i1][2] += q1*dttorque[2] - tor3;
     }
 
     if (newton_bond || i2 < nlocal) {
       f[i2][0] -= (dnforce[0] + dtforce[0]) * A;
       f[i2][1] -= (dnforce[1] + dtforce[1]) * A;
       f[i2][2] -= (dnforce[2] + dtforce[2]) * A;
-      torque[i2][0] += q2 * A * dttorque[0] - tor1;
-      torque[i2][1] += q2 * A * dttorque[1] - tor2;
-      torque[i2][2] += q2 * A * dttorque[2] - tor3;
+      torque[i2][0] -= q2*dttorque[0] + tor1;
+      torque[i2][1] -= q2*dttorque[1] + tor2;
+      torque[i2][2] -= q2*dttorque[2] + tor3;
     }
 
     //if (evflag) ev_tally(i1,i2,nlocal,newton_bond,ebond,0./*fbond*/,delx,dely,delz);
@@ -655,9 +574,95 @@ void PairMCA::compute(int eflag, int vflag)
 
   if (eflag || vflag) ev_setup(eflag,vflag);
   else evflag = vflag_fdotr = 0;
+/*
+  int i,j,ii,jj,inum,jnum,itype,jtype;
+  double xtmp,ytmp,ztmp,delx,dely,delz,fpair;
+  double evdwl,factor_lj; ///AS
+  double r,rsq;
+  double e_ij;
+  int *ilist,*jlist,*numneigh,**firstneigh;
 
-  swap_prev(); /// TODO Move to fixMCAExchangeMeanStress::post_integrate()
-  predict_mean_stress(); /// TODO Move to fixMCAExchangeMeanStress::post_integrate()
+  evdwl = 0.0;
+
+  int coord_num  = atom->coord_num;
+  double mca_radius  = atom->mca_radius;
+  double contact_area  = atom->contact_area;
+  double **x = atom->x;
+  double **v = atom->v;
+  double **f = atom->f;
+  double **omega = atom->omega;
+  double **torque = atom->torque;
+  double *mca_inertia  = atom->mca_inertia;
+  double **theta = atom->theta;
+  double *mean_stress  = atom->mean_stress;
+  double *equiv_stress  = atom->equiv_stress;
+  double *equiv_strain  = atom->equiv_strain;
+  // Used for implicit estimation of displacement in case of hard loading (applying velocity)
+  const double dtImpl = 0.5*update->dt; /// TODO Allow to set in coeffs
+  const double cutsq = 5.76*mca_radius*mca_radius; // 1.44*d*d
+
+  int *type = atom->type;
+  int nlocal = atom->nlocal;
+ ///AS  double *special_lj = force->special_lj;
+  int newton_pair = force->newton_pair;
+
+  inum = list->inum;
+  ilist = list->ilist;
+  numneigh = list->numneigh;
+  firstneigh = list->firstneigh;
+
+//fprintf(stderr, "PairMCA::compute dtImpl= %g\n", dtImpl);
+
+  // loop over neighbors of my atoms
+
+  for (ii = 0; ii < inum; ii++) {
+    i = ilist[ii];
+    xtmp = x[i][0];
+    ytmp = x[i][1];
+    ztmp = x[i][2];
+    itype = type[i];
+    jlist = firstneigh[i];
+    jnum = numneigh[i];
+
+    for (jj = 0; jj < jnum; jj++) {
+      j = jlist[jj];
+///AS      factor_lj = special_lj[sbmask(j)];
+      j &= NEIGHMASK;
+
+      delx = xtmp - x[j][0] + dtImpl*(v[i][0] - v[j][0]);
+      dely = ytmp - x[j][1] + dtImpl*(v[i][1] - v[j][1]);
+      delz = ztmp - x[j][2] + dtImpl*(v[i][2] - v[j][2]);
+      rsq = delx*delx + dely*dely + delz*delz;
+      jtype = type[j];
+
+//if(ii == (inum-2)) fprintf(stderr, "PairMCA::compute i= %d j= %d rsq= %g cutsq = %g\n", i, j, rsq, cutsq);
+      if (rsq < cutsq) {
+        r = sqrt(rsq);
+        e_ij = (0.5*r - mca_radius) / mca_radius;
+        fpair = contact_area * e_ij * 2.0 * G[itype][jtype]
+                / r; //this allows to get cos of normal direction by mult on delx 
+//if(ii == (inum-2)) fprintf(stderr, "PairMCA::compute i= %d j= %d e_ij= %g fpair = %g G=%g mass[i]= %g\n", i, j, e_ij, fpair*r,G[itype][jtype],rmass[i]);
+
+        f[i][0] -= delx*fpair;
+        f[i][1] -= dely*fpair;
+        f[i][2] -= delz*fpair;
+        if (newton_pair || j < nlocal) {
+          f[j][0] += delx*fpair;
+          f[j][1] += dely*fpair;
+          f[j][2] += delz*fpair;
+        }
+
+        if (eflag)
+          evdwl = 2.0 * G[itype][jtype] * e_ij * e_ij;///AS ??? energy?
+
+        if (evflag) ev_tally(i,j,nlocal,newton_pair,
+                             evdwl,0.0,fpair,delx,dely,delz);
+      }
+    }
+  }
+*/
+  swap_prev();
+  predict_mean_stress();
   compute_elastic_force();
   compute_equiv_stress();
   correct_for_plasticity();

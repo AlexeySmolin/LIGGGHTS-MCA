@@ -33,36 +33,46 @@
 -------------------------------------------------------------------------
     Contributing author and copyright for this file:
 
-    Andreas Aigner (JKU Linz)
+    Alexey Smolin (ISPMS SB RAS, Tomsk, Russia, http://www.ispms.ru)
 
-    Copyright 2009-2012 JKU Linz
+    Copyright 2016-     ISPMS SB RAS, Tomsk, Russia
 ------------------------------------------------------------------------- */
 
-#ifdef FIX_CLASS
+#ifdef BOND_CLASS
 
-FixStyle(mca/meanstress,FixMCAMeanStress)
+BondStyle(mca,BondMCA)
 
 #else
 
-#ifndef LMP_FIX_MCA_MEANSTRESS_H
-#define LMP_FIX_MCA_MEANSTRESS_H
+#ifndef LMP_BOND_MCA_H
+#define LMP_BOND_MCA_H
 
-#include "fix_sph.h"
+#include "stdio.h"
+#include "bond.h"
 
 namespace LAMMPS_NS {
 
-class FixMCAMeanStress : public FixSph {
+class BondMCA : public Bond {
  public:
-  FixMCAMeanStress(class LAMMPS *, int, char **);
-  ~FixMCAMeanStress();
-  virtual int setmask();
-  virtual void init();
-  virtual void post_integrate();
-  virtual void swap_prev();
-  virtual void predict_mean_stress();
+  BondMCA(class LAMMPS *);
+  ~BondMCA();
+  void init_style();
+  void compute(int, int);
+  void coeff(int, char **);
+  double equilibrium_distance(int);
+  void write_restart(FILE *);
+  void read_restart(FILE *);
+  //double single(int, double, int, int);
+  double single(int, double, int, int, double &);
 
- private:
-  template <int> void post_integrate_eval();
+ protected:
+  int breakmode;
+  double *rb,*Sn,*St; //!! расстояние, Нормальное напряжние, Сдвиговое напряжение
+  double *r_break,*sigman_break,*tau_break,*T_break;
+  void allocate();
+
+  class FixPropertyAtom *fix_Temp;
+  double *Temp;
 
 };
 
@@ -70,3 +80,11 @@ class FixMCAMeanStress : public FixSph {
 
 #endif
 #endif
+
+/* ERROR/WARNING messages:
+
+E: Incorrect args for bond coefficients
+
+Self-explanatory.  Check the input script or data file.
+
+*/

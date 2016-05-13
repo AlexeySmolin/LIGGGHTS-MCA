@@ -33,40 +33,68 @@
 -------------------------------------------------------------------------
     Contributing author and copyright for this file:
 
-    Andreas Aigner (JKU Linz)
+    Alexey Smolin (ISPMS SB RAS, Tomsk, Russia, http://www.ispms.ru)
+    Nadia Salman (iT-CDT, Leeds, UK)
 
-    Copyright 2009-2012 JKU Linz
+    Copyright 2016-     ISPMS SB RAS, Tomsk, Russia
 ------------------------------------------------------------------------- */
 
-#ifdef FIX_CLASS
+#ifdef PAIR_CLASS
 
-FixStyle(mca/meanstress,FixMCAMeanStress)
+PairStyle(mca,PairMCA)
 
 #else
 
-#ifndef LMP_FIX_MCA_MEANSTRESS_H
-#define LMP_FIX_MCA_MEANSTRESS_H
+#ifndef LMP_PAIR_MCA_H
+#define LMP_PAIR_MCA_H
 
-#include "fix_sph.h"
+#include "pair.h"
 
 namespace LAMMPS_NS {
 
-class FixMCAMeanStress : public FixSph {
+class PairMCA : public Pair {
+  friend class Pair;
+
  public:
-  FixMCAMeanStress(class LAMMPS *, int, char **);
-  ~FixMCAMeanStress();
-  virtual int setmask();
-  virtual void init();
-  virtual void post_integrate();
-  virtual void swap_prev();
-  virtual void predict_mean_stress();
+  PairMCA(class LAMMPS *);
+  virtual ~PairMCA();
 
- private:
-  template <int> void post_integrate_eval();
+  virtual void compute(int, int);
+  void settings(int, char **);
+  void coeff(int, char **);
+  double init_one(int, int);
+  void write_restart(FILE *);
+  void read_restart(FILE *);
+  void write_restart_settings(FILE *);
+  void read_restart_settings(FILE *);
+  void write_data(FILE *);
+  void write_data_all(FILE *);
+///AS  double single(int, int, int, int, double, double, double, double &);
+  void *extract(const char *, int &);
 
+  double **G; // shear modulus
+  double **K; // bulk modulus
+ protected:
+  double cut_global;
+
+  void allocate();
 };
 
 }
 
 #endif
 #endif
+
+/* ERROR/WARNING messages:
+
+E: Illegal ... command
+
+Self-explanatory.  Check the input script syntax and compare to the
+documentation for the command.  You can use -echo screen as a
+command-line option when running LAMMPS to see the offending line.
+
+E: Incorrect args for pair coefficients
+
+Self-explanatory.  Check the input script or data file.
+
+*/
