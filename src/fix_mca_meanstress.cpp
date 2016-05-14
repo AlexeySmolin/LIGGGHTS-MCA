@@ -33,16 +33,16 @@
 -------------------------------------------------------------------------
     Contributing author and copyright for this file:
 
-    Andreas Aigner (JKU Linz)
+    Alexey Smolin (ISPMS SB RAS, Tomsk, Russia, http://www.ispms.ru)
+    Nadia Salman (iT-CDT, Leeds, UK)
 
-    Copyright 2009-2012 JKU Linz
+    Copyright 2016-     ISPMS SB RAS, Tomsk, Russia
 ------------------------------------------------------------------------- */
 
 #include "math.h"
 #include "mpi.h"
 #include "string.h"
 #include "stdlib.h"
-#include "fix_mca_meanstress.h"
 #include "update.h"
 #include "respa.h"
 #include "atom.h"
@@ -58,49 +58,22 @@
 #include "sph_kernels.h"
 #include "fix_property_atom.h"
 #include "timer.h"
-
-#include "pair_mca.cpp"
-
+#include "fix_mca_meanstress.h"
+#include "atom_vec_mca.h"
 
 using namespace LAMMPS_NS;
 using namespace FixConst;
+using namespace MCAAtomConst;
 
-
+///#define NO_MEANSTRESS
 
 /* ---------------------------------------------------------------------- */
 
 FixMCAMeanStress::FixMCAMeanStress(LAMMPS *lmp, int narg, char **arg) :
-  FixSph(lmp, narg, arg)
+  Fix(lmp, narg, arg)
 {
-  int iarg = 0;
-
-  if (iarg+3 > narg) error->fix_error(FLERR,this,"Not enough input arguments");
-
-  iarg += 3;
-
-  while (iarg < narg) {
-    // kernel style
-    if (strcmp(arg[iarg],"sphkernel") == 0) {
-          if (iarg+2 > narg) error->fix_error(FLERR,this,"Illegal use of keyword 'sphkernel'. Not enough input arguments");
-
-          if(kernel_style) delete []kernel_style;
-          kernel_style = new char[strlen(arg[iarg+1])+1];
-          strcpy(kernel_style,arg[iarg+1]);
-
-          // check uniqueness of kernel IDs
-
-          int flag = SPH_KERNEL_NS::sph_kernels_unique_id();
-          if(flag < 0) error->fix_error(FLERR,this,"Cannot proceed, sph kernels need unique IDs, check all sph_kernel_* files");
-
-          // get kernel id
-
-          kernel_id = SPH_KERNEL_NS::sph_kernel_id(kernel_style);
-          if(kernel_id < 0) error->fix_error(FLERR,this,"Unknown sph kernel");
-
-          iarg += 2;
-
-    } else error->fix_error(FLERR,this,"Wrong keyword.");
-  }
+    fprintf(logfile,"constructor FixMCAMeanStress ###########\n");
+    restart_global = 1; ///?
 }
 
 /* ---------------------------------------------------------------------- */
@@ -108,7 +81,28 @@ FixMCAMeanStress::FixMCAMeanStress(LAMMPS *lmp, int narg, char **arg) :
 FixMCAMeanStress::~FixMCAMeanStress()
 {
 
+}
 
+/* ---------------------------------------------------------------------- */
+
+int FixMCAMeanStress::setmask()
+{
+  int mask = 0;
+  mask |= POST_INTEGRATE;
+  mask |= POST_INTEGRATE_RESPA;
+  return mask;
+}
+
+/* ---------------------------------------------------------------------- */
+
+void FixMCAMeanStress::init()
+{
+  if(force->pair == NULL) error->all(FLERR,"Fix mca/meanstress force->pair is NULL");
+  if(!(force->pair_match("mca",1)))
+     error->all(FLERR,"Fix mca/meanstress can only be used together with dedicated 'mca' pair styles");
+
+  if(!(force->bond_match("mca")))
+     error->all(FLERR,"Fix mca/meanstress can only be used together with dedicated 'mca' bond styles");
 }
 
 /* ---------------------------------------------------------------------- */
@@ -116,6 +110,7 @@ FixMCAMeanStress::~FixMCAMeanStress()
 inline void  FixMCAMeanStress::swap_prev()
 {
   int i,k;
+//fprintf(logfile,"FixMCAMeanStress::swap_prev\n"); ///AS DEBUG TRACE
 
   int *num_bond = atom->num_bond;
   double ***bond_hist = atom->bond_hist;
@@ -178,6 +173,7 @@ inline void  FixMCAMeanStress::predict_mean_stress()
   int nlocal = atom->nlocal;
   PairMCA *mca_pair = (PairMCA*) force->pair;
 
+//fprintf(logfile,"FixMCAMeanStress::predict_mean_stress\n"); ///AS DEBUG TRACE
   for (i = 0; i < nlocal; i++) {
     if (num_bond[i] == 0) continue;
 
@@ -218,7 +214,7 @@ inline void  FixMCAMeanStress::predict_mean_stress()
       int found = 0;
       for(jk = 0; jk < num_bond[j]; jk++)
         if(bond_atom[j][jk] == tag[i]) {found = 1; break; }
-      if (!found) error->all(FLERR,"PairMCA::mean_stress_predict 'jk' not found");
+      if (!found) error->all(FLERR,"FixMCAMeanStress::mean_stress_predict 'jk' not found");
 
       Nj = num_bond[j];
       if (Nj > Nc) Nj = Nc; // not increse "rigidity" if atom has more bonds
@@ -240,7 +236,7 @@ inline void  FixMCAMeanStress::predict_mean_stress()
       pi = bond_hist_ik[P_PREV];
       if (newton_bond) {
         //pj = bond_hist_ik[PJ_PREV]; it means we store bonds only for i < j, but allocate memory for both. why?
-        error->all(FLERR,"PairMCA::mean_stress_predict does not support 'newton_bond on'");
+        error->all(FLERR,"FixMCAMeanStress::mean_stress_predict does not support 'newton_bond on'");
       } else
         pj = bond_hist[j][jk][P_PREV];
 
@@ -262,201 +258,11 @@ inline void  FixMCAMeanStress::predict_mean_stress()
   }
 }
 
-
-
 /* ---------------------------------------------------------------------- */
-
-
-
-int FixMCAMeanStress::setmask()
-{
-  int mask = 0;
-  mask |= POST_INTEGRATE;
-  mask |= POST_INTEGRATE_RESPA;
-  return mask;
-}
-
-
-
-
-/* ---------------------------------------------------------------------- */
-
-void FixMCAMeanStress::init()
-{
-  FixSph::init();
-
-  // check if there is an sph/pressure fix present
-  // must come before me, because
-  // a - it needs the rho for the pressure calculation
-  // b - i have to do the forward comm to have updated ghost properties
-
-  int pres = -1;
-  int me = -1;
-  for(int i = 0; i < modify->nfix; i++)
-  {
-    if(strcmp("sph/density/summation",modify->fix[i]->style)) {
-      me = i;
-    }
-    if(strncmp("sph/pressure",modify->fix[i]->style,12) == 0) {
-      pres = i;
-      break;
-    }
-  }
-
-  if(me == -1 && pres >= 0) error->fix_error(FLERR,this,"Fix sph/pressure has to be defined after sph/density/summation \n");
-  if(pres == -1) error->fix_error(FLERR,this,"Requires to define a fix sph/pressure also \n");
-}
-
-
-/* ---------------------------------------------------------------------- */
-
-
 
 void FixMCAMeanStress::post_integrate()
 {
-  //template function for using per atom or per atomtype smoothing length
-  if (mass_type) post_integrate_eval<1>();
-  else post_integrate_eval<0>();
-
+//fprintf(logfile,"FixMCAMeanStress::post_integrate\n"); ///AS DEBUG TRACE
   swap_prev();
   predict_mean_stress();
- 
 }
-
-/* ---------------------------------------------------------------------- */
-
-template <int MASSFLAG>
-void FixMCAMeanStress::post_integrate_eval()
-{
-  int i,j,ii,jj,inum,jnum,itype,jtype;
-  double xtmp,ytmp,ztmp,delx,dely,delz,rsq,r,s=0.0,W;
-  double sli,sliInv,slj,slCom,slComInv,cut,imass,jmass;
-  int *ilist,*jlist,*numneigh,**firstneigh;
-
-  double **x = atom->x;
-  int *mask = atom->mask;
-  double *rho = atom->rho;
-  int newton_pair = force->newton_pair;
-
-  int *type = atom->type;
-  double *mass = atom->mass;
-  double *rmass = atom->rmass;
-
-  updatePtrs(); // get sl
-
-  // reset and add rho contribution of self
-
-  int nlocal = atom->nlocal;
-  for (i = 0; i < nlocal; i++) {
-    if (MASSFLAG) {
-      itype = type[i];
-      sli = sl[itype-1];
-      imass = mass[itype];
-    } else {
-      sli = sl[i];
-      imass = rmass[i];
-    }
-
-    sliInv = 1./sli;
-
-    // this gets a value for W at self, perform error check
-
-    W = SPH_KERNEL_NS::sph_kernel(kernel_id,0.,sli,sliInv);
-    if (W < 0.)
-    {
-      fprintf(screen,"s = %f, W = %f\n",s,W);
-      error->one(FLERR,"Illegal kernel used, W < 0");
-    }
-
-    // add contribution of self
-    rho[i] = W * imass;
-  }
-
-  // need updated ghost positions and self contributions
-  timer->stamp();
-  comm->forward_comm();
-
-  timer->stamp(TIME_COMM);
-
-  // loop over neighbors of my atoms
-
-  inum = list->inum;
-  ilist = list->ilist;
-  numneigh = list->numneigh;
-  firstneigh = list->firstneigh;
-
-  for (ii = 0; ii < inum; ii++) {
-    i = ilist[ii];
-
-    if (!(mask[i] & groupbit)) continue;
-    xtmp = x[i][0];
-    ytmp = x[i][1];
-    ztmp = x[i][2];
-    jlist = firstneigh[i];
-    jnum = numneigh[i];
-
-    if (MASSFLAG) {
-      itype = type[i];
-      imass = mass[itype];
-    } else {
-      imass = rmass[i];
-      sli = sl[i];
-    }
-
-    for (jj = 0; jj < jnum; jj++) {
-      j = jlist[jj];
-
-      if (!(mask[j] & groupbit)) continue;
-
-      if (MASSFLAG) {
-        jtype = type[j];
-        jmass = mass[jtype];
-        slCom = slComType[itype][jtype];
-      } else {
-        jmass = rmass[j];
-        slj = sl[j];
-        slCom = interpDist(sli,slj);
-      }
-
-      slComInv = 1./slCom;
-      cut = slCom*kernel_cut;
-
-      delx = xtmp - x[j][0];
-      dely = ytmp - x[j][1];
-      delz = ztmp - x[j][2];
-      rsq = delx*delx + dely*dely + delz*delz;
-
-      if (rsq >= cut*cut) continue;
-      // calculate distance and normalized distance
-
-      r = sqrt(rsq);
-      slComInv = 1./slCom;
-      s = r*slComInv;
-
-      // this gets a value for W at self, perform error check
-
-      W = SPH_KERNEL_NS::sph_kernel(kernel_id,s,slCom,slComInv);
-      if (W < 0.)
-      {
-        fprintf(screen,"s = %f, W = %f\n",s,W);
-        error->one(FLERR,"Illegal kernel used, W < 0");
-      }
-
-      // add contribution of neighbor
-      // have a half neigh list, so do it for both if necessary
-
-      rho[i] += W * jmass;
-
-      if (newton_pair || j < nlocal)
-        rho[j] += W * imass;
-    }
-  }
-
-  // rho is now correct, send to ghosts
-  timer->stamp();
-  comm->forward_comm();
-  timer->stamp(TIME_COMM);
-
-}
-
-

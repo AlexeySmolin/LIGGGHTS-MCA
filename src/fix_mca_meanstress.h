@@ -33,9 +33,10 @@
 -------------------------------------------------------------------------
     Contributing author and copyright for this file:
 
-    Andreas Aigner (JKU Linz)
+    Alexey Smolin (ISPMS SB RAS, Tomsk, Russia, http://www.ispms.ru)
+    Nadia Salman (iT-CDT, Leeds, UK)
 
-    Copyright 2009-2012 JKU Linz
+    Copyright 2016-     ISPMS SB RAS, Tomsk, Russia
 ------------------------------------------------------------------------- */
 
 #ifdef FIX_CLASS
@@ -47,23 +48,23 @@ FixStyle(mca/meanstress,FixMCAMeanStress)
 #ifndef LMP_FIX_MCA_MEANSTRESS_H
 #define LMP_FIX_MCA_MEANSTRESS_H
 
-#include "fix_sph.h"
+#include "fix.h"
+#include "pair_mca.h"
 
 namespace LAMMPS_NS {
 
-class FixMCAMeanStress : public FixSph {
+class FixMCAMeanStress : public Fix {
+  friend class PairMCA;
  public:
   FixMCAMeanStress(class LAMMPS *, int, char **);
   ~FixMCAMeanStress();
-  virtual int setmask();
-  virtual void init();
-  virtual void post_integrate();
-  virtual void swap_prev();
-  virtual void predict_mean_stress();
+  int setmask();
+  void init();
+  void post_integrate();
 
  private:
-  template <int> void post_integrate_eval();
-
+  void swap_prev();
+  void predict_mean_stress();
 };
 
 }

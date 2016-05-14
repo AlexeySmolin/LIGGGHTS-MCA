@@ -176,6 +176,8 @@ bond_coeff 	1 0.0025 10000000000 10000000000 ${simplebreak} 0.002501
 
 // Indices of values in 'bond_hist' array
 namespace MCAAtomConst {
+  static const int IMPLFACTOR = 1.0;
+
   static const int R =        0; // distance to neighbor
   static const int R_PREV =   1; // distance to neighbor at previous time step
   static const int A =        2; // contact area

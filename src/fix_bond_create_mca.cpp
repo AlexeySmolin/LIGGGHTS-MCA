@@ -207,11 +207,22 @@ void FixBondCreateMCA::post_create()
    // register a fix to excange mca bonds across processors
     char* fixarg[4];
 
-    fixarg[0]="exchange_bonds_mca";
-    fixarg[1]="all";
-    fixarg[2]="bond/exchange/mca";
+    fixarg[0] = strdup("mca_meanstress");
+    fixarg[1] = strdup("all");
+    fixarg[2] = strdup("mca/meanstress");
     modify->add_fix(3,fixarg);
-
+    free(fixarg[0]);
+    free(fixarg[1]);
+    free(fixarg[2]);
+/*
+    fixarg[0] = strdup("exchange_bonds_mca");
+    fixarg[1] = strdup("all");
+    fixarg[2] = strdup("bond/exchange/mca");
+    modify->add_fix(3,fixarg);
+    free(fixarg[0]);
+    free(fixarg[1]);
+    free(fixarg[2]);
+*/
 }
 
 

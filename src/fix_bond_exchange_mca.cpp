@@ -69,7 +69,7 @@ FixBondExchangeMCA::FixBondExchangeMCA(LAMMPS *lmp, int narg, char **arg) :
 {
     fprintf(logfile,"constructor FixBondExchangeMCA ###########\n");
     restart_global = 1;
-	laststep=-1;
+    laststep=-1;
 }
 
 /* ---------------------------------------------------------------------- */
