@@ -48,6 +48,7 @@
 #include "comm.h"
 #include "force.h"
 #include "update.h"
+#include "domain.h"
 #include "neigh_list.h"
 #include "math_const.h"
 #include "memory.h"
@@ -145,6 +146,15 @@ inline void  PairMCA::compute_elastic_force()
     for(k = 0; k < num_bond[i]; k++)
     {
       j = atom->map(bond_atom[i][k]);
+      if (j == -1) {
+        char str[512];
+        sprintf(str,
+                "Bond atoms %d %d missing at step " BIGINT_FORMAT,
+                tag[i],bond_atom[i][k],update->ntimestep);
+        error->one(FLERR,str);
+      }
+      j = domain->closest_image(i,j);
+///if(tag[i]==10) fprintf(logfile,"PairMCA::compute_elastic_force bond_atom[%d][%d]=%d map()=%d \n",i,k,bond_atom[i][k],j);
 
       double *bond_hist_ik = &(bond_hist[i][k][0]);
       int found = 0;

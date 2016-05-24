@@ -11,9 +11,11 @@ set grid
 set autoscale
 
 #X0=1.6164461
-X0=3.5921
+#X0=3.5921
+X0=3.7717
 #H0=3.2328922
-H0=7.1842
+#H0=7.1842
+H0=7.36381
 A=H0*H0
 
 Y=6.895e10
@@ -23,7 +25,7 @@ K=Y/(3*(1-2.0*p))
 #print "2G=",2*G
 
 
-set xlabel "dZ/L, %"
+set xlabel "dY/L, %"
 set ylabel "F/A, MPa"
 set title "Loading diagram"
 
@@ -35,11 +37,11 @@ plot \
 pause -1 "Hit return "
 
 set xlabel "t, s"
-set ylabel "z, m"
-set title "Z vs time"
+set ylabel "y, m"
+set title "Y vs time"
 
 plot \
-     './cube.dat' using ($1):($4) not with lines
+     './cube.dat' using ($1):($3) not with lines
 
 pause -1 "Hit return "
 

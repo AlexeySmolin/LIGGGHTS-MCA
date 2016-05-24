@@ -32,7 +32,7 @@ variable	bpa equal 6		# bonds_per_atom, should be >= coordination number: 6 for 
 ####################################################################################################
 dimension	3
 units		si
-boundary	f f f	# style of boundaries for the global simulation box in each dimension
+boundary	f p f	# style of boundaries for the global simulation box in each dimension
 			# boundary x y z (x,y,z = one or two letters:
 			# p (periodic) or f (fixed) or s (shrink-wrapped) or m (shrink-wrapped with a minimum)
 
@@ -57,7 +57,7 @@ communicate	single vel yes
 ####################################################################################################
 # CREATE INITIAL GEOMETRY
 ####################################################################################################
-variable	L  equal 10*${d}+${rp}
+variable	L  equal 11*${d}	#10*${d}+${rp}
 variable	2L equal 2*$L
 region		box block 0 ${L} 0 ${L} 0 ${L} units box	#-$L ${2L} -$L ${2L} -$L ${2L} units box
 		# Regions are used to group atoms, delete atoms to create a void, insert atoms in a specified region, etc.

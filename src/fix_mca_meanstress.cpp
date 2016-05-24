@@ -44,6 +44,7 @@
 #include "string.h"
 #include "stdlib.h"
 #include "update.h"
+#include "domain.h"
 #include "respa.h"
 #include "atom.h"
 #include "force.h"
@@ -209,11 +210,50 @@ inline void  FixMCAMeanStress::predict_mean_stress()
     for(k = 0; k < num_bond[i]; k++)
     {
       j = atom->map(bond_atom[i][k]);
+      if (j == -1) {
+        char str[512];
+        sprintf(str,
+                "Bond atoms %d %d missing at step " BIGINT_FORMAT,
+                tag[i],bond_atom[i][k],update->ntimestep);
+        error->one(FLERR,str);
+      }
+      j = domain->closest_image(i,j);
+/*{
+{
+  int *sametag = atom->sametag;
+  double **x = atom->x;
+  double *xi = x[i];
 
-      double *bond_hist_ik = bond_hist[i][k];
+  int closest = j;
+  double delx = xi[0] - x[j][0];
+  double dely = xi[1] - x[j][1];
+  double delz = xi[2] - x[j][2];
+  double rsqmin = delx*delx + dely*dely + delz*delz;
+  double rsq;
+
+  while (sametag[j] >= 0) {
+    j = sametag[j];
+if(tag[i]==10) fprintf(logfile,"sametag[j]=%d (%g %g %g) \n",j,x[j][0],x[j][1],x[j][2]);
+    delx = xi[0] - x[j][0];
+    dely = xi[1] - x[j][1];
+    delz = xi[2] - x[j][2];
+    rsq = delx*delx + dely*dely + delz*delz;
+    if (rsq < rsqmin) {
+      rsqmin = rsq;
+      closest = j;
+    }
+  }
+  j = closest;
+}
+if(tag[i]==10) fprintf(logfile,"FixMCAMeanStress::predict_mean_stress bond_atom[%d][%d]=%d map()=%d \n",i,k,bond_atom[i][k],j);
+
+}*/
       int found = 0;
-      for(jk = 0; jk < num_bond[j]; jk++)
+///fprintf(logfile,"FixMCAMeanStress::mean_stress_predict: i=%d j=%d num_bond[j]=%d\n",i,j,num_bond[j]);
+      for(jk = 0; jk < num_bond[j]; jk++) {
+///fprintf(logfile,"FixMCAMeanStress::mean_stress_predict: i=%d j=%d jk=%d num_bond[j]=%d\n",i,j,jk,num_bond[j]);
         if(bond_atom[j][jk] == tag[i]) {found = 1; break; }
+      }
       if (!found) error->all(FLERR,"FixMCAMeanStress::mean_stress_predict 'jk' not found");
 
       Nj = num_bond[j];
@@ -232,6 +272,7 @@ inline void  FixMCAMeanStress::predict_mean_stress()
       r = sqrt(rsq);
       rinv = -1. / r; // "-" means that unit vector is from i1 to i2
 
+      double *bond_hist_ik = bond_hist[i][k];
       r0 = bond_hist_ik[R_PREV];
       pi = bond_hist_ik[P_PREV];
       if (newton_bond) {
