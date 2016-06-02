@@ -67,6 +67,7 @@ using namespace MCAAtomConst;
 /// see also in 'fix_mca_meanstress.cpp'
 ///#define NO_MEANSTRESS
 ///#define NO_ROTATIONS
+#define REAL_NULL_CONST 5.0E-22 // 5.0E-14
 
 /* ---------------------------------------------------------------------- */
 
@@ -74,6 +75,8 @@ PairMCA::PairMCA(LAMMPS *lmp) : Pair(lmp)
 {
   writedata = 1;
   single_enable = 0;
+  Sy = NULL;
+  Eh = NULL;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -86,6 +89,8 @@ PairMCA::~PairMCA()
 
     memory->destroy(G);
     memory->destroy(K);
+    memory->destroy(Sy);
+    memory->destroy(Eh);
   }
 }
 
@@ -188,7 +193,7 @@ inline void  PairMCA::compute_elastic_force()
       /// END central force
 
       /// BEGIN shear force
-      
+
       double *nv = &(bond_hist_ik[NX]);       // normal unit vector
       double *nv0 = &(bond_hist_ik[NX_PREV]); // normal unit vector at prev time step
       double dYij[3];
@@ -341,7 +346,7 @@ inline void  PairMCA::compute_equiv_stress()
     rdSgmi = 0.0;
     for(k = 0; k < num_bond[i]; k++)
     {
-      double *bond_hist_ik = bond_hist[i][k];
+      double *bond_hist_ik = &(bond_hist[i][k][0]);
       double xtmp,ytmp,ztmp,rStressInt;
       rStressInt = bond_hist_ik[P] - mean_stress[i];
       rStressInt = rStressInt*rStressInt;
@@ -354,6 +359,102 @@ inline void  PairMCA::compute_equiv_stress()
     rdSgmi = sqrt(4.5*(rdSgmi) / Nc);
     equiv_stress[i] = rdSgmi;
   }
+}
+
+/* ---------------------------------------------------------------------- */
+
+void PairMCA::correct_for_plasticity()
+{
+//fprintf(logfile, "PairMCA::correct_for_plasticity \n"); ///AS DEBUG TRACE
+  int i,k;
+
+  int *type = atom->type;
+  int *tag = atom->tag;
+  int *num_bond = atom->num_bond;
+  int **bond_atom = atom->bond_atom;
+  double ***bond_hist = atom->bond_hist;
+  PairMCA *mca_pair = (PairMCA*) force->pair;
+
+  double *mean_stress = atom->mean_stress;
+  double *equiv_stress = atom->equiv_stress;
+  double *equiv_stress_prev = atom->equiv_stress_prev;
+  double *equiv_strain = atom->equiv_strain;
+
+  int newton_bond = force->newton_bond;
+  int Nc = atom->coord_num;
+  int nlocal = atom->nlocal;
+
+  for (i = 0; i < nlocal; i++) {
+    if (num_bond[i] == 0) continue;
+
+    int itype = type[i];
+    double rGi = mca_pair->G[itype][itype];
+    double r3Gi = 3.0*rGi;
+    double rSgmInt = equiv_stress[i];
+    double rdSgm = rSgmInt - equiv_stress_prev[i];
+    double rSR = equiv_strain[i] + rdSgm/r3Gi;
+    double rSyi =  mca_pair->Sy[itype][itype];
+///!!!! Нужно ли нам заводить переменную для критической инт-ти деформаций ?
+///Что будет критерием пластических свойств? Ведь один материал может быть пластическим, а другой - нет ?
+    double rSR_Pla = rSyi>0. ? rSyi/r3Gi : 10.0*rSR; // equivalent yeild strain, if no plasticity make rSR_Pla > rSR
+    equiv_strain[i] = rSR;
+
+    if((rSyi>0.)&&(rSgmInt>REAL_NULL_CONST)&&(rdSgm>0.0)&&(rSR>rSR_Pla)) {
+      double rEhi =  mca_pair->Eh[itype][itype];
+//fprintf(logfile,"PairMCA::correct_for_plasticity rEhi[%d][%d]= %g \n",itype,itype,rEhi);
+      double rSgmPl = rSyi + (rSR - rSR_Pla) * rEhi; // + work harderning
+//fprintf(logfile,"PairMCA::correct_for_plasticity rSR= %g rSR_Pla= %g rSgmPl=%g\n",rSR,rSR_Pla,rSgmPl);
+      double rM = rSgmPl/rSgmInt; // radial return factor
+      double rMpli = 1.0 - rM;
+      if(rMpli > REAL_NULL_CONST) {
+        equiv_stress[i] = rSgmPl; // set according to the yeild surface
+        double rP = (rSyi*rSyi*0.5/r3Gi + (rSyi + rSgmPl)*0.5*(rSR - rSR_Pla)) - rSgmPl*rSgmPl*0.5/r3Gi; // plastic heat
+        ///TODO store plastic heat: if (rP > 0.0) arPH[i] = rP;
+        for(k = 0; k < num_bond[i]; k++) {
+          int j = atom->map(bond_atom[i][k]);
+          if (j == -1) {
+            char str[512];
+            sprintf(str,
+                "Bond atoms %d %d missing at step " BIGINT_FORMAT,
+                tag[i],bond_atom[i][k],update->ntimestep);
+            error->one(FLERR,str);
+          }
+          j = domain->closest_image(i,j);
+///if(tag[i]==10) fprintf(logfile,"PairMCA::correct_for_plasticity bond_atom[%d][%d]=%d map()=%d \n",i,k,bond_atom[i][k],j);
+
+          ///TODO if(Interact)
+	  {
+            double *bond_hist_ik = &(bond_hist[i][k][0]);
+            int found = 0;
+	    int jk;
+            for(jk = 0; jk < num_bond[j]; jk++)
+              if(bond_atom[j][jk] == tag[i]) {found = 1; break; }
+            if (!found) error->all(FLERR,"PairMCA::correct_for_plasticity 'jk' not found");
+            double *bond_hist_jk = &(bond_hist[j][jk][0]);
+
+            rP = bond_hist_ik[P];
+            rP = rP * rM + mean_stress[i] * rMpli;
+            double rMij = rM;
+            ///TODO if ((rP>0.0) && (!azNbr0[iNbIndx].bL)) {
+            ///  rP = 0.0;
+            ///  rMij = 0.0;
+            ///}
+            bond_hist_ik[P] = rP;
+            bond_hist_ik[SX] *= rMij;
+            bond_hist_ik[SY] *= rMij;
+            bond_hist_ik[SZ] *= rMij;
+            bond_hist_ik[YX] *= rMij;
+            bond_hist_ik[YY] *= rMij;
+            bond_hist_ik[YZ] *= rMij;
+            bond_hist_ik[MX] *= rMij;
+            bond_hist_ik[MY] *= rMij;
+            bond_hist_ik[MZ] *= rMij;
+	  }
+        }
+      }
+    }
+  }
+  return;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -400,7 +501,7 @@ void PairMCA::compute_total_force(int eflag, int vflag)
     double dttorque[3];
     double A;
     double q1,q2;// distance to contact point
-    
+
     i1 = bondlist[n][0];
     i2 = bondlist[n][1];
 
@@ -414,8 +515,8 @@ void PairMCA::compute_total_force(int eflag, int vflag)
     }
     if (n2 == num_bond[i2]) error->all(FLERR,"Internal error in PairMCA: n2 not found");
 
-    double *bond_hist1 = bond_hist[i1][n1];
-    double *bond_hist2 = bond_hist[i2][n2];
+    double *bond_hist1 = &(bond_hist[i1][n1][0]);
+    double *bond_hist2 = &(bond_hist[i2][n2][0]);
 
     double pi = bond_hist1[P];
     double pj = bond_hist2[P];
@@ -504,14 +605,6 @@ void PairMCA::compute_total_force(int eflag, int vflag)
 
 /* ---------------------------------------------------------------------- */
 
-void PairMCA::correct_for_plasticity()
-{
-//fprintf(logfile, "PairMCA::correct_for_plasticity \n"); ///AS DEBUG TRACE
-  return;
-}
-
-/* ---------------------------------------------------------------------- */
-
 void PairMCA::compute(int eflag, int vflag)
 {
 
@@ -547,6 +640,8 @@ void PairMCA::allocate()
 
   memory->create(G,n+1,n+1,"pair:G");
   memory->create(K,n+1,n+1,"pair:K");
+  memory->create(Sy,n+1,n+1,"pair:Sy");
+  memory->create(Eh,n+1,n+1,"pair:Eh");
 }
 
 /* ----------------------------------------------------------------------
@@ -585,14 +680,23 @@ void PairMCA::coeff(int narg, char **arg)
   force->bounds(arg[1],atom->ntypes,jlo,jhi);
 
   double G_one = force->numeric(FLERR,arg[2]);
-
   double K_one = force->numeric(FLERR,arg[3]);
+
+  double Sy_one = -1.0; // no plasticity
+  double Eh_one = 0.0; // no harderning
+  if (narg > 4) {
+    Sy_one = force->numeric(FLERR,arg[4]);
+    if (narg == 6) Eh_one = force->numeric(FLERR,arg[5]);
+    if (narg > 6) error->all(FLERR,"Incorrect args for mca pair coefficients for plasticity");
+  }
 
   int count = 0;
   for (int i = ilo; i <= ihi; i++) {
     for (int j = MAX(jlo,i); j <= jhi; j++) {
       G[i][j] = G_one;
       K[i][j] = K_one;
+      Sy[i][j] = Sy_one;
+      Eh[i][j] = Eh_one;
       setflag[i][j] = 1; // 0/1 = whether each i,j has been set
       count++;
     }
@@ -610,12 +714,16 @@ double PairMCA::init_one(int i, int j)
   // always mix Gs geometrically
 
   if (setflag[i][j] == 0) {
-    G[i][j] =(G[i][i] * G[j][j]) / (G[i][i] + G[j][j]);
+    G[i][j] = (G[i][i] * G[j][j]) / (G[i][i] + G[j][j]);
     K[i][j] = (K[i][i] * K[j][j]) / (K[i][i] + K[j][j]);
+    Sy[i][j] = (Sy[i][i] * Sy[j][j]) / (Sy[i][i] + Sy[j][j]);
+    Eh[i][j] = (Eh[i][i] * Eh[j][j]) / (Eh[i][i] + Eh[j][j]);
   }
 
   G[j][i] = G[i][j];
   K[j][i] = K[i][j];
+  Sy[j][i] = Sy[i][j];
+  Eh[j][i] = Eh[i][j];
 
   return 1.2*atom->mca_radius; // have to return cut_global
 }
@@ -635,6 +743,8 @@ void PairMCA::write_restart(FILE *fp)
       if (setflag[i][j]) {
         fwrite(&G[i][j],sizeof(double),1,fp);
         fwrite(&K[i][j],sizeof(double),1,fp);
+        fwrite(&Sy[i][j],sizeof(double),1,fp);
+        fwrite(&Eh[i][j],sizeof(double),1,fp);
       }
     }
 }
@@ -659,9 +769,13 @@ void PairMCA::read_restart(FILE *fp)
         if (me == 0) {
           fread(&G[i][j],sizeof(double),1,fp);
           fread(&K[i][j],sizeof(double),1,fp);
+          fread(&Sy[i][j],sizeof(double),1,fp);
+          fread(&Eh[i][j],sizeof(double),1,fp);
         }
         MPI_Bcast(&G[i][j],1,MPI_DOUBLE,0,world);
         MPI_Bcast(&K[i][j],1,MPI_DOUBLE,0,world);
+        MPI_Bcast(&Sy[i][j],1,MPI_DOUBLE,0,world);
+        MPI_Bcast(&Eh[i][j],1,MPI_DOUBLE,0,world);
       }
     }
 }
@@ -697,7 +811,7 @@ void PairMCA::read_restart_settings(FILE *fp)
 void PairMCA::write_data(FILE *fp)
 {
   for (int i = 1; i <= atom->ntypes; i++)
-    fprintf(fp,"%d %g\n",i,G[i][i]);
+    fprintf(fp,"%d %g %g %g %g\n",i,G[i][i],K[i][i],Sy[i][i],Eh[i][i]);
 }
 
 /* ----------------------------------------------------------------------
@@ -708,30 +822,5 @@ void PairMCA::write_data_all(FILE *fp)
 {
   for (int i = 1; i <= atom->ntypes; i++)
     for (int j = i; j <= atom->ntypes; j++)
-      fprintf(fp,"%d %d %g %g\n",i,j,G[i][j],K[i][j]);
-}
-
-/* ---------------------------------------------------------------------- (
-
-double PairMCA::single(int i, int j, int itype, int jtype, double rsq,
-                        double factor_coul, double factor_lj,
-                        double &fforce)
-{
-  double r,arg,philj;
-
-  r = sqrt(rsq);
-  arg = MY_PI*r/cut[itype][jtype];
-  fforce = factor_lj * G[itype][jtype] * sin(arg) * MY_PI/cut[itype][jtype]/r;
-
-  philj = G[itype][jtype] * (1.0+cos(arg));
-  return factor_lj*philj;
-}*/
-
-/* ---------------------------------------------------------------------- */
-
-void *PairMCA::extract(const char *str, int &dim)
-{
-  dim = 2;
-  if (strcmp(str,"a") == 0) return (void *) G; ///AS ???
-  return NULL;
+      fprintf(fp,"%d %d %g %g %g %g\n",i,j,G[i][j],K[i][j],Sy[i][j],Eh[i][j]);
 }

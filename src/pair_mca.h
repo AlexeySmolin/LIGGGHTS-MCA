@@ -69,16 +69,16 @@ class PairMCA : public Pair {
   void read_restart_settings(FILE *);
   void write_data(FILE *);
   void write_data_all(FILE *);
-///AS  double single(int, int, int, int, double, double, double, double &);
-  void *extract(const char *, int &);
 
   double **G; // shear modulus
   double **K; // bulk modulus
+  double **Sy; // yield stress
+  double **Eh; // plastic work hardening "modulus"
  protected:
   double cut_global;
 
-///  void swap_prev();
-///  void predict_mean_stress();
+///  void swap_prev(); Moved to fixMCAExchangeMeanStress
+///  void predict_mean_stress(); Moved to fixMCAExchangeMeanStress
   void compute_elastic_force();
   void compute_equiv_stress();
   void correct_for_plasticity();
