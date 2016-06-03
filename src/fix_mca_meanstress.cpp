@@ -113,11 +113,11 @@ inline void  FixMCAMeanStress::swap_prev()
   int i,k;
 //fprintf(logfile,"FixMCAMeanStress::swap_prev\n"); ///AS DEBUG TRACE
 
-  int *num_bond = atom->num_bond;
+  const int * const num_bond = atom->num_bond;
   double ***bond_hist = atom->bond_hist;
-  int nlocal = atom->nlocal;
+  const int nlocal = atom->nlocal;
 
-  for (i = 0; i < nlocal; i++) {
+  {
     double *tmp;
     tmp = atom->mean_stress;
     atom->mean_stress = atom->mean_stress_prev;
@@ -126,7 +126,12 @@ inline void  FixMCAMeanStress::swap_prev()
     tmp = atom->equiv_stress;
     atom->equiv_stress = atom->equiv_stress_prev;
     atom->equiv_stress_prev = tmp;
+  }
 
+#if defined (_OPENMP)
+#pragma omp parallel for private(i,k) shared (bond_hist) default(none) schedule(static)
+#endif
+  for (i = 0; i < nlocal; i++) {
     if (num_bond[i] == 0) continue;
 
     for(k = 0; k < num_bond[i]; k++)
@@ -152,32 +157,33 @@ inline void  FixMCAMeanStress::swap_prev()
 
 inline void  FixMCAMeanStress::predict_mean_stress()
 {
-  int i,j,k,itype,jtype;
-  double xtmp,ytmp,ztmp,delx,dely,delz,vxtmp,vytmp,vztmp,r,r0,rsq,rinv;
-
-  int jk;
+  int i,j,k,jk,itype,jtype;
 
   double **x = atom->x;
   double **v = atom->v;
   double *mean_stress_prev = atom->mean_stress_prev;
   const double mca_radius = atom->mca_radius;
-  int *tag = atom->tag;
-  int *type = atom->type;
+  const int * const tag = atom->tag;
+  const int * const type = atom->type;
 
   int **bond_atom = atom->bond_atom;
-  int *num_bond = atom->num_bond;
-  int newton_bond = force->newton_bond;
+  const int * const num_bond = atom->num_bond;
+  const int newton_bond = force->newton_bond;
   double ***bond_hist = atom->bond_hist;
   const double dtImpl = IMPLFACTOR*update->dt; ///AS it is equivalent to damping force. TODO set in coeffs some value 0.0..1 instead of 0.5
 
-  int Nc = atom->coord_num;
-  int nlocal = atom->nlocal;
-  PairMCA *mca_pair = (PairMCA*) force->pair;
+  const int Nc = atom->coord_num;
+  const int nlocal = atom->nlocal;
+  const PairMCA * const mca_pair = (PairMCA*) force->pair;
 
 //fprintf(logfile,"FixMCAMeanStress::predict_mean_stress\n"); ///AS DEBUG TRACE
+#if defined (_OPENMP)
+#pragma omp parallel for private(i,j,k,jk,itype,jtype) shared(x,v,mean_stress_prev,bond_atom,bond_hist) default(none) schedule(static)
+#endif
   for (i = 0; i < nlocal; i++) {
     if (num_bond[i] == 0) continue;
 
+    double xtmp,ytmp,ztmp,delx,dely,delz,vxtmp,vytmp,vztmp,r,r0,rsq,rinv;
     double rKHi,rKHj;// (1-2*G)/(3*K) for atom i (j)
     double rHi,rHj;  // 2*G for atom i (j)
     double pi,pj;

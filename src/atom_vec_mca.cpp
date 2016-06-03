@@ -364,7 +364,7 @@ void AtomVecMCA::copy(int i, int j, int delflag)
   equiv_stress[j] = equiv_stress[i];
   equiv_stress_prev[j] = equiv_stress_prev[i];
   equiv_strain[j] = equiv_strain[i];
-  
+
   molecule[j] = molecule[i];
 
   num_bond[j] = num_bond[i];

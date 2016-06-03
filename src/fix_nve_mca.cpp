@@ -100,10 +100,10 @@ void FixNVEMCA::initial_integrate(int vflag)
   double **f = atom->f;
   double **omega = atom->omega;
   double **torque = atom->torque;
-  double *rmass = atom->rmass;
-  double *inertia = atom->mca_inertia;
   double **theta = atom->theta;
-  int *mask = atom->mask;
+  const double * const rmass = atom->rmass;
+  const double * const inertia = atom->mca_inertia;
+  const int * const mask = atom->mask;
   int nlocal = atom->nlocal;
   if (igroup == atom->firstgroup) nlocal = atom->nfirst;
 
@@ -117,8 +117,11 @@ void FixNVEMCA::initial_integrate(int vflag)
   // d_omega/dt = torque / inertia
 //fprintf(logfile, "FixNVEMCA::initial_integrate dtv= %g dtf= %g\n",dtv,dtf); ///AS DEBUG
 //fprintf(logfile, "rmass[%d]= %20.12e mca_radius= %g\n",nlocal,rmass[nlocal-1],atom->mca_radius); ///AS DEBUG
-
-  for (int i = 0; i < nlocal; i++) {
+  int i;
+#if defined (_OPENMP)
+#pragma omp parallel for private(i,dtfm,dtirotate) shared (nlocal,x,v,f,omega,torque,theta) default(none) schedule(static)
+#endif
+  for (i = 0; i < nlocal; i++) {
     if (mask[i] & groupbit) {
 
       // velocity update for 1/2 step
@@ -157,9 +160,9 @@ void FixNVEMCA::final_integrate()
   double **f = atom->f;
   double **omega = atom->omega;
   double **torque = atom->torque;
-  double *rmass = atom->rmass;
-  double *inertia = atom->mca_inertia;
-  int *mask = atom->mask;
+  const double * const rmass = atom->rmass;
+  const double * const inertia = atom->mca_inertia;
+  const int * const mask = atom->mask;
   int nlocal = atom->nlocal;
   if (igroup == atom->firstgroup) nlocal = atom->nfirst;
 
@@ -167,7 +170,11 @@ void FixNVEMCA::final_integrate()
   // d_omega/dt = torque / inertia
 //fprintf(logfile, "FixNVEMCA::final_integrate \n"); ///AS DEBUG
 
-  for (int i = 0; i < nlocal; i++)
+  int i;
+#if defined (_OPENMP)
+#pragma omp parallel for private(i,dtfm,dtirotate) shared (nlocal,v,f,omega,torque) default(none) schedule(static)
+#endif
+  for (i = 0; i < nlocal; i++)
     if (mask[i] & groupbit) {
 
       // velocity update for 1/2 step

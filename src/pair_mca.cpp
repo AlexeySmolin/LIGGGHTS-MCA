@@ -98,36 +98,36 @@ PairMCA::~PairMCA()
 
 inline void  PairMCA::compute_elastic_force()
 {
-  int i,j,k,itype,jtype;
-  double r,r0;
+  int i,j,k,jk,itype,jtype;
 ///  double xtmp,ytmp,ztmp,delx,dely,delz,r,r0;
 ///  double rsq,rinv;
 ///  double vxtmp,vytmp,vztmp;
-
-  int jk;
 
   double **x = atom->x;
   double **v = atom->v;
   double **theta = atom->theta;
   double **theta_prev = atom->theta_prev;
   double **omega = atom->omega;
-  double *mean_stress = atom->mean_stress_prev; // it looks a little bit confusing but this works faster in predict_mean_stress()
-  double *mean_stress_prev = atom->mean_stress;
+  const double * const mean_stress = atom->mean_stress_prev; // it looks a little bit confusing but this works faster in predict_mean_stress()
+  const double * const mean_stress_prev = atom->mean_stress;
   const double mca_radius = atom->mca_radius;
-  int *tag = atom->tag;
-//  int *mask = atom->mask;
-  int *type = atom->type;
+  const int * const tag = atom->tag;
+  const int * const type = atom->type;
 
   int **bond_atom = atom->bond_atom;
-  int *num_bond = atom->num_bond;
-  int newton_bond = force->newton_bond;
+  const int * const num_bond = atom->num_bond;
+  const int newton_bond = force->newton_bond;
   double ***bond_hist = atom->bond_hist;
   const double dtImpl = IMPLFACTOR*update->dt; /// TODO Allow to set in coeffs
 
-  int nlocal = atom->nlocal;
-  PairMCA *mca_pair = (PairMCA*) force->pair;
+  const int nlocal = atom->nlocal;
+  const PairMCA * const mca_pair = (PairMCA*) force->pair;
 
 //fprintf(logfile,"PairMCA::compute_elastic_force\n"); ///AS DEBUG TRACE
+
+#if defined (_OPENMP)
+#pragma omp parallel for private(i,j,k,jk,itype,jtype) shared(x,v,omega,theta,theta_prev,bond_atom,bond_hist) default(none) schedule(static)
+#endif
   for (i = 0; i < nlocal; i++) {
     if (num_bond[i] == 0) continue;
 
@@ -139,6 +139,7 @@ inline void  PairMCA::compute_elastic_force()
     double rdSgmi,rdSgmj;
     double rGi,rGj;
     double qi,qj;
+    double r,r0;
 
     itype = type[i];
     ///AS TODO make this property global as in 'fix_check_timestep_gran.cpp' :
@@ -310,19 +311,22 @@ inline void  PairMCA::compute_equiv_stress()
   int i,k;
   double rdSgmi;
 
-  double *mean_stress = atom->mean_stress;
-  double *equiv_stress = atom->equiv_stress;
-  double *theta;
-  double *theta_prev;
-
-  int *num_bond = atom->num_bond;
+  const int * const num_bond = atom->num_bond;
   double ***bond_hist = atom->bond_hist;
 
-  int Nc = atom->coord_num;
-  int nlocal = atom->nlocal;
+  const int Nc = atom->coord_num;
+  const int nlocal = atom->nlocal;
 
 //fprintf(logfile,"PairMCA::compute_equiv_stress\n"); ///AS DEBUG TRACE
+#if defined (_OPENMP)
+#pragma omp parallel for private(i,k,rdSgmi) shared(bond_hist) default(none) schedule(static)
+#endif
   for (i = 0; i < nlocal; i++) {
+    double *theta;
+    double *theta_prev;
+    double *mean_stress = atom->mean_stress;
+    double **bond_hist_i = &(bond_hist[i][0]);
+
     theta = &(atom->theta[i][0]);
     theta_prev = &(atom->theta_prev[i][0]);
     theta_prev[0] = theta[0];
@@ -334,15 +338,20 @@ inline void  PairMCA::compute_equiv_stress()
 
     rdSgmi = 0.0;
     for(k = 0; k < num_bond[i]; k++)
-      rdSgmi += bond_hist[i][k][P];
+      rdSgmi += bond_hist_i[k][P];
 
     mean_stress[i] = rdSgmi / Nc;
 #endif
   }
 
+#if defined (_OPENMP)
+#pragma omp parallel for private(i,k,rdSgmi) shared(bond_hist) default(none) schedule(static)
+#endif
   for (i = 0; i < nlocal; i++) {
     if (num_bond[i] == 0) continue;
 
+    double *equiv_stress = atom->equiv_stress;
+    double *mean_stress = atom->mean_stress;
     rdSgmi = 0.0;
     for(k = 0; k < num_bond[i]; k++)
     {
@@ -368,25 +377,28 @@ void PairMCA::correct_for_plasticity()
 //fprintf(logfile, "PairMCA::correct_for_plasticity \n"); ///AS DEBUG TRACE
   int i,k;
 
-  int *type = atom->type;
-  int *tag = atom->tag;
-  int *num_bond = atom->num_bond;
+  const int * const type = atom->type;
+  const int * const tag = atom->tag;
+  const int * const num_bond = atom->num_bond;
   int **bond_atom = atom->bond_atom;
   double ***bond_hist = atom->bond_hist;
-  PairMCA *mca_pair = (PairMCA*) force->pair;
+  const PairMCA * const mca_pair = (PairMCA*) force->pair;
 
-  double *mean_stress = atom->mean_stress;
-  double *equiv_stress = atom->equiv_stress;
-  double *equiv_stress_prev = atom->equiv_stress_prev;
-  double *equiv_strain = atom->equiv_strain;
+  const double * const mean_stress = atom->mean_stress;
+  const double * const equiv_stress_prev = atom->equiv_stress_prev;
 
-  int newton_bond = force->newton_bond;
-  int Nc = atom->coord_num;
-  int nlocal = atom->nlocal;
+  const int newton_bond = force->newton_bond;
+  const int Nc = atom->coord_num;
+  const int nlocal = atom->nlocal;
 
+#if defined (_OPENMP)
+#pragma omp parallel for private(i,k) shared(bond_atom,bond_hist) default(none) schedule(static)
+#endif
   for (i = 0; i < nlocal; i++) {
     if (num_bond[i] == 0) continue;
 
+    double *equiv_stress = atom->equiv_stress;
+    double *equiv_strain = atom->equiv_strain;
     int itype = type[i];
     double rGi = mca_pair->G[itype][itype];
     double r3Gi = 3.0*rGi;
@@ -465,26 +477,29 @@ void PairMCA::compute_total_force(int eflag, int vflag)
   if (eflag || vflag) ev_setup(eflag,vflag);
   else evflag = 0;
 
-  double mca_radius  = atom->mca_radius;
-  double contact_area  = atom->contact_area;
-  int *tag = atom->tag; // tag of atom is their ID number
+  const double mca_radius  = atom->mca_radius;
+  const double contact_area  = atom->contact_area;
+  const int * const tag = atom->tag; // tag of atom is their ID number
   double **x = atom->x;
   double **f = atom->f;
   double **torque = atom->torque;
-  double *mean_stress  = atom->mean_stress;
+  const double * const mean_stress  = atom->mean_stress;
   int **bondlist = neighbor->bondlist;
 ///AS I do not whant to use it, because it requires to be copied every step///  double **bondhistlist = neighbor->bondhistlist;
   double ***bond_hist = atom->bond_hist;
-  int *num_bond = atom->num_bond;
+  const int * const num_bond = atom->num_bond;
   int **bond_atom = atom->bond_atom;
 
-  int nbondlist = neighbor->nbondlist;
-  int nlocal = atom->nlocal;
-  int newton_bond = force->newton_bond;
-  PairMCA *mca_pair = (PairMCA*) force->pair;
+  const int nbondlist = neighbor->nbondlist;
+  const int nlocal = atom->nlocal;
+  const int newton_bond = force->newton_bond;
+  const PairMCA * const mca_pair = (PairMCA*) force->pair;
 
 //fprintf(logfile, "PairMCA::compute_total_force \n");  ///AS DEBUG TRACE
 
+#if defined (_OPENMP)
+#pragma omp parallel for shared(x,f,torque,bondlist,bond_atom,bond_hist) default(none) schedule(static)
+#endif
   for (int n = 0; n < nbondlist; n++) {
     //1st check if bond is broken,
     if(bondlist[n][3])
