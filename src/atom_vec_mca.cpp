@@ -99,9 +99,9 @@ AtomVecMCA::AtomVecMCA(LAMMPS *lmp) : AtomVec(lmp)
 
 AtomVecMCA::~AtomVecMCA()
 {
-  if(fbe != NULL) {
-    delete fbe; //!! I do not see where it is created
-  }
+  //if(fbe != NULL) {
+  //  delete fbe; //!! It is created in AtomVecMCA::init() by calling modify->add_fix()
+  //}
 }
 
 /* ---------------------------------------------------------------------- */
@@ -228,6 +228,7 @@ void AtomVecMCA::init()
       fixarg[1] = strdup("all");
       fixarg[2] = strdup("bond/exchange/mca");
       modify->add_fix(3,fixarg);
+      fbe = (FixBondExchangeMCA*) modify->find_fix_id(fixarg[0]);
       free(fixarg[0]);
       free(fixarg[1]);
       free(fixarg[2]);
