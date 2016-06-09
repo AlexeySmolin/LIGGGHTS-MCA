@@ -101,41 +101,14 @@ mass 		1 1.0 #dummy
 ####################################################################################################
 # CREATE PARTICLES
 ####################################################################################################
-#region		bc block 0.0 $L 0.0 $L 0.0 $L units box
 variable 	sc equal $d	# lattice spacing for creating particles
 lattice		sc ${sc}
 create_atoms	1 region box	#bc	# create particles in the cube
-#run 1
 
 ####################################################################################################
 # MATERIAL PROPERTIES REQUIRED FOR NEW PAIR STYLE
 ####################################################################################################
-
-# Everything that happens during a simulation besides force computation, neighbor list construction, and output, is a "fix". 
-# This includes time integration (update of coordinates and velocities), 
-# force constraints or boundary conditions (SHAKE or walls), and diagnostics (compute a diffusion coefficient). 
-
-## These properties are used only in 'fix_check_timestep_gran.cpp'
-##fix 		m1 all property/global youngsModulus peratomtype $Y $Y
-##fix 		m2 all property/global poissonsRatio peratomtype $p $p
-##fix 		m3 all property/global coefficientRestitution peratomtypepair 2 0.2 0.2 0.2 0.2
-##fix 		m4 all property/global coefficientFriction peratomtypepair 2 0.3 0.3 0.3 0.3
-
-#group 		bonded id >= 1
 set		group all density ${rho} # diameter ${d} - for mca we set their size in 'atom_style mca radius'
-#run 1
-
-#fix		gravi all gravity 9.81 vector 0.0 0.0 -1.0
-
-####################################################################################################
-# DEFINE WALLS TO AVOID LOST OF ATOMS
-####################################################################################################
-#fix boxwalls_x1 all wall/gran model hertz tangential history primitive type 1 xplane -$L
-#fix boxwalls_x2 all wall/gran model hertz tangential history primitive type 1 xplane +${2L}
-#fix boxwalls_y1 all wall/gran model hertz tangential history primitive type 1 yplane -1
-#fix boxwalls_y2 all wall/gran model hertz tangential history primitive type 1 yplane +1
-#fix boxwalls_z1 all wall/gran model hertz tangential history primitive type 1 zplane -$L
-#fix boxwalls_z2 all wall/gran model hertz tangential history primitive type 1 zplane +1
 
 ####################################################################################################
 # DEFINE VELOCITY BOUNDARY CONDITIONS
@@ -151,22 +124,9 @@ group           bot region bot
 variable        vel0 equal 0.01 # shifting velocity
 variable        ts equal 10000.0*1.E-6 # speed-up time = 10000 steps
 variable        vel_up equal ${vel0}*(1.0-exp(-(2.4*time/${ts})*(2.4*time/${ts})))
-#variable        vel_down equal -v_vel_up
+variable        vel_down equal 0.0	#-v_vel_up
 fix             topV_fix top mca/setvelocity 0 v_vel_up 0
-fix             botV_fix bot mca/setvelocity 0 0 0
-
-#fix             bot_fix bot freeze		#fixed bearing
-#variable	KIP equal 4448.2216		#N
-#variable	inch equal 0.0254		#mm
-#variable	M equal 100*${KIP}/${inch}
-#variable	F equal 10*${KIP}		#N 10
-#compression
-#fix 		topF top addforce 0 0 -$F	#1kip=4.4482216kN
-#run 10000
-#tension
-#fix		topV_fix top move linear 0 0 0.01    #0.01 m/s
-#fix		topF top addforce 0 0 $F	#1kip=4.4482216kN
-#fix		topM top addtorque 0 $M 0	#not possible 
+fix             botV_fix bot mca/setvelocity 0 v_vel_down 0
 
 ####################################################################################################
 # CREATE BONDS BETWEEN PARTICLES
@@ -239,6 +199,23 @@ fix outfile all print ${filestep} "${mytime} ${px} ${py} ${pz} ${pfx} ${pfy} ${p
 run 1
 fix_modify	bondcr every 0  #do not create new bonds after this line
 
-#run 10
-#quit
-run ${runstep}
+run		${runstep}
+
+# Reverse loading smoothly
+variable	vel_revers equal  ${vel0}*cos((time-${fulltime})*2.0*PI/${ts})
+unfix		topV_fix
+fix		topV_fix top mca/setvelocity 0 v_vel_revers 0
+variable	revstep equal  ${ts}/(2.0*${dt})
+run		${revstep}
+
+# Uloading
+variable	vel_unload equal  -${vel0}
+unfix		topV_fix
+fix		topV_fix top mca/setvelocity 0 v_vel_unload 0
+variable	unloadstep equal  ${runstep}/3.
+run		${unloadstep}
+
+# free
+unfix		topV_fix
+fix		topV_fix top mca/setvelocity NULL NULL NULL
+run		${runstep}

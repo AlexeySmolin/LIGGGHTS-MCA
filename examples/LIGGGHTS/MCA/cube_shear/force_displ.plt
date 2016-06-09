@@ -23,6 +23,7 @@ A=0.258064*121
 
 set xlabel "dX/L, %"
 set ylabel "F/A, MPa"
+set yrange[-0.5:2.0]
 set title "Loading diagram"
 
 plot \
@@ -35,11 +36,12 @@ pause -1 "Hit return "
 #     './cube.dat' using (100.*($2-X0)/Height):(-$5*1.E-6/A) not with points
 
 set xlabel "t, s"
-set ylabel "z, m"
-set title "Z vs time"
+set ylabel "y, m"
+set title "Y vs time"
 
+set autoscale
 plot \
-     './cube.dat' using ($1):($4) not with lines
+     './cube.dat' using ($1):($3) not with lines
 
 pause -1 "Hit return "
 

@@ -77,10 +77,10 @@ void Neighbor::bond_all()
   int *num_bond = atom->num_bond;
   int **bond_atom = atom->bond_atom;
   int **bond_type = atom->bond_type;
-  double ***bond_hist = atom->bond_hist;  
+  double ***bond_hist = atom->bond_hist;
   int *tag = atom->tag;
   int newton_bond = force->newton_bond;
-  int n_bondhist = atom->n_bondhist;  
+  int n_bondhist = atom->n_bondhist;
 
   nbondlist = 0;
 
@@ -98,20 +98,19 @@ void Neighbor::bond_all()
       if (newton_bond || i < atom1) {
         if (nbondlist == maxbond) {
           maxbond += BONDDELTA;
-          memory->grow(bondlist,maxbond,4,"neighbor:bondlist");  
+          memory->grow(bondlist,maxbond,4,"neighbor:bondlist");
           if(atom->n_bondhist)
-            memory->grow(bondhistlist,maxbond,atom->n_bondhist,"neighbor:bondhistlist");  
+            memory->grow(bondhistlist,maxbond,atom->n_bondhist,"neighbor:bondhistlist");
         }
         bondlist[nbondlist][0] = i;
         bondlist[nbondlist][1] = atom1;
         bondlist[nbondlist][2] = bond_type[i][m];
-        bondlist[nbondlist][3] = 0; 
-        if(n_bondhist) { 
+        bondlist[nbondlist][3] = 0;
+        if(n_bondhist) {
 //fprintf(logfile, "Neighbor::bond_all i=%d j=%d (tag=%d) m=%d (bond_atom[i][m]=%d)\n", i, atom1, tag[atom1], m, bond_atom[i][m]); ///AS DEBUG
             for(int j = 0; j < n_bondhist; j++)
             {
                 bondhistlist[nbondlist][j] = bond_hist[i][m][j];
-                
             }
         }
         nbondlist++;
