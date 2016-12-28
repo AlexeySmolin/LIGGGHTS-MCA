@@ -161,6 +161,7 @@ inline void  FixMCAMeanStress::predict_mean_stress()
 
   double **x = atom->x;
   double **v = atom->v;
+  double *mean_stress = atom->mean_stress;
   double *mean_stress_prev = atom->mean_stress_prev;
   const double mca_radius = atom->mca_radius;
   const int * const tag = atom->tag;
@@ -178,7 +179,7 @@ inline void  FixMCAMeanStress::predict_mean_stress()
 
 //fprintf(logfile,"FixMCAMeanStress::predict_mean_stress\n"); ///AS DEBUG TRACE
 #if defined (_OPENMP)
-#pragma omp parallel for private(i,j,k,jk,itype,jtype) shared(x,v,mean_stress_prev,bond_atom,bond_hist) default(none) schedule(static)
+#pragma omp parallel for private(i,j,k,jk,itype,jtype) shared(x,v,mean_stress,mean_stress_prev,bond_atom,bond_hist) default(none) schedule(static)
 #endif
   for (i = 0; i < nlocal; i++) {
     if (num_bond[i] == 0) continue;
@@ -299,8 +300,7 @@ if(tag[i]==10) fprintf(logfile,"FixMCAMeanStress::predict_mean_stress bond_atom[
       bond_hist_ik[NZ] = delz*rinv;
     }
 #ifndef NO_MEANSTRESS
-    mean_stress_prev[i] += rdSgmi / Nc; // optimized if use _prev as current here and in compute_elastic_force()
-    //mean_stress[i] = mean_stress_prev[i] + rdSgmi / Nc;
+    mean_stress[i] = mean_stress_prev[i] + rdSgmi / Nc;
 #endif
   }
 }

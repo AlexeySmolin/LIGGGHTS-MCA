@@ -543,13 +543,13 @@ void FixBondCreateMCA::post_integrate()
         // if newton_bond is set, only store with I or J
         // if not newton_bond, store bond with both I and J
 
-        if (!newton_bond /*|| tag[i] < tag[j]*/) 
+        if (!newton_bond /*|| tag[i] < tag[j]*/)
         {
 ///if(tag[i]==10) fprintf(logfile,"FixBondCreateMCA::post_integrate: creating bond btw atoms i=%d and j=%d (tag=%d) (i has now %d bonds) at step %ld\n",i,j,tag[j],num_bond[i]+1,update->ntimestep);
 
-          if (num_bond[i] == atom->bond_per_atom)  
+          if (num_bond[i] == atom->bond_per_atom)
             error->one(FLERR,"New bond exceeded bonds per atom in fix bond/create");
-          bond_type[i][num_bond[i]] = btype;  
+          bond_type[i][num_bond[i]] = btype;
           bond_atom[i][num_bond[i]] = tag[j];
           /*  print these lines
           std::cout << "if (!newton_bond || tag["<<i<<"] (="<<tag[i]<<") < tag["<<j<<"] (="<<tag[j]<<")) "<<std::endl; // NP P.F. correct this okt-29

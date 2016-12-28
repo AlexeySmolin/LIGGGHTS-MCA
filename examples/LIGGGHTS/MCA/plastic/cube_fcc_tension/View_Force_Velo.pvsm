@@ -596,7 +596,7 @@
         <Domain name="range" id="3528.PhiResolution.range"/>
       </Property>
       <Property name="Radius" id="3528.Radius" number_of_elements="1">
-        <Element index="0" value="0.5"/>
+        <Element index="0" value="0.35"/>
         <Domain name="range" id="3528.Radius.range"/>
       </Property>
       <Property name="StartPhi" id="3528.StartPhi" number_of_elements="1">
@@ -1799,8 +1799,8 @@
       </Property>
       <Property name="DataBounds" id="3985.DataBounds" number_of_elements="6">
         <Element index="0" value="0"/>
-        <Element index="1" value="2.13436359003419e-321"/>
-        <Element index="2" value="2.13436359003419e-321"/>
+        <Element index="1" value="0"/>
+        <Element index="2" value="0"/>
         <Element index="3" value="0"/>
         <Element index="4" value="0"/>
         <Element index="5" value="0"/>
@@ -2168,7 +2168,7 @@
         <Domain name="bool" id="4303.SelectionVisibility.bool"/>
       </Property>
       <Property name="Visibility" id="4303.Visibility" number_of_elements="1">
-        <Element index="0" value="1"/>
+        <Element index="0" value="0"/>
         <Domain name="bool" id="4303.Visibility.bool"/>
       </Property>
       <Property name="AllowSpecularHighlightingWithScalarColoring" id="4303.AllowSpecularHighlightingWithScalarColoring" number_of_elements="1">
@@ -2381,9 +2381,9 @@
       <Property name="DataBounds" id="4303.DataBounds" number_of_elements="6">
         <Element index="0" value="0"/>
         <Element index="1" value="0"/>
-        <Element index="2" value="7.95445689804407e-322"/>
-        <Element index="3" value="4.95822068974838e-316"/>
-        <Element index="4" value="4.95806258874171e-316"/>
+        <Element index="2" value="0"/>
+        <Element index="3" value="0"/>
+        <Element index="4" value="0"/>
         <Element index="5" value="0"/>
       </Property>
       <Property name="Diffuse" id="4303.Diffuse" number_of_elements="1">
@@ -2735,14 +2735,7 @@
       </Property>
       <Property name="SelectionPointFieldDataArrayName" id="4380.SelectionPointFieldDataArrayName" number_of_elements="1">
         <Element index="0" value="type"/>
-        <Domain name="array_list" id="4380.SelectionPointFieldDataArrayName.array_list">
-          <String text="f"/>
-          <String text="GlyphVector"/>
-          <String text="id"/>
-          <String text="omega"/>
-          <String text="type"/>
-          <String text="v"/>
-        </Domain>
+        <Domain name="array_list" id="4380.SelectionPointFieldDataArrayName.array_list"/>
       </Property>
       <Property name="SelectionVisibility" id="4380.SelectionVisibility" number_of_elements="1">
         <Element index="0" value="1"/>
@@ -2960,10 +2953,10 @@
         <Element index="2" value="0"/>
       </Property>
       <Property name="DataBounds" id="4380.DataBounds" number_of_elements="6">
-        <Element index="0" value="5.22227387654198e-321"/>
-        <Element index="1" value="1.33065984406347e-312"/>
-        <Element index="2" value="5.27672386323885e-316"/>
-        <Element index="3" value="0"/>
+        <Element index="0" value="4.37566670097942e-316"/>
+        <Element index="1" value="3.44948234810379e-318"/>
+        <Element index="2" value="0"/>
+        <Element index="3" value="4.37566907249452e-316"/>
         <Element index="4" value="0"/>
         <Element index="5" value="0"/>
       </Property>
@@ -3316,14 +3309,22 @@
       </Property>
       <Property name="SelectionPointFieldDataArrayName" id="4064.SelectionPointFieldDataArrayName" number_of_elements="1">
         <Element index="0" value="radius"/>
-        <Domain name="array_list" id="4064.SelectionPointFieldDataArrayName.array_list"/>
+        <Domain name="array_list" id="4064.SelectionPointFieldDataArrayName.array_list">
+          <String text="f"/>
+          <String text="GlyphVector"/>
+          <String text="id"/>
+          <String text="Normals"/>
+          <String text="omega"/>
+          <String text="type"/>
+          <String text="v"/>
+        </Domain>
       </Property>
       <Property name="SelectionVisibility" id="4064.SelectionVisibility" number_of_elements="1">
         <Element index="0" value="1"/>
         <Domain name="bool" id="4064.SelectionVisibility.bool"/>
       </Property>
       <Property name="Visibility" id="4064.Visibility" number_of_elements="1">
-        <Element index="0" value="0"/>
+        <Element index="0" value="1"/>
         <Domain name="bool" id="4064.Visibility.bool"/>
       </Property>
       <Property name="AllowSpecularHighlightingWithScalarColoring" id="4064.AllowSpecularHighlightingWithScalarColoring" number_of_elements="1">
@@ -3534,11 +3535,11 @@
         <Element index="2" value="0"/>
       </Property>
       <Property name="DataBounds" id="4064.DataBounds" number_of_elements="6">
-        <Element index="0" value="0"/>
-        <Element index="1" value="0"/>
-        <Element index="2" value="0"/>
-        <Element index="3" value="0"/>
-        <Element index="4" value="0"/>
+        <Element index="0" value="2.37151510003798e-322"/>
+        <Element index="1" value="2.86731037089219e-316"/>
+        <Element index="2" value="2.86733487654822e-316"/>
+        <Element index="3" value="2.86735582493161e-316"/>
+        <Element index="4" value="2.86735582493161e-316"/>
         <Element index="5" value="0"/>
       </Property>
       <Property name="Diffuse" id="4064.Diffuse" number_of_elements="1">
@@ -4464,14 +4465,21 @@
       </Property>
       <Property name="SelectionPointFieldDataArrayName" id="4224.SelectionPointFieldDataArrayName" number_of_elements="1">
         <Element index="0" value="radius"/>
-        <Domain name="array_list" id="4224.SelectionPointFieldDataArrayName.array_list"/>
+        <Domain name="array_list" id="4224.SelectionPointFieldDataArrayName.array_list">
+          <String text="f"/>
+          <String text="GlyphVector"/>
+          <String text="id"/>
+          <String text="omega"/>
+          <String text="type"/>
+          <String text="v"/>
+        </Domain>
       </Property>
       <Property name="SelectionVisibility" id="4224.SelectionVisibility" number_of_elements="1">
         <Element index="0" value="1"/>
         <Domain name="bool" id="4224.SelectionVisibility.bool"/>
       </Property>
       <Property name="Visibility" id="4224.Visibility" number_of_elements="1">
-        <Element index="0" value="0"/>
+        <Element index="0" value="1"/>
         <Domain name="bool" id="4224.Visibility.bool"/>
       </Property>
       <Property name="AllowSpecularHighlightingWithScalarColoring" id="4224.AllowSpecularHighlightingWithScalarColoring" number_of_elements="1">
@@ -4683,10 +4691,10 @@
       </Property>
       <Property name="DataBounds" id="4224.DataBounds" number_of_elements="6">
         <Element index="0" value="0"/>
-        <Element index="1" value="0"/>
+        <Element index="1" value="2.38172743693752e-318"/>
         <Element index="2" value="0"/>
-        <Element index="3" value="0"/>
-        <Element index="4" value="0"/>
+        <Element index="3" value="3.7292565061218e-316"/>
+        <Element index="4" value="4.94065645841247e-324"/>
         <Element index="5" value="0"/>
       </Property>
       <Property name="Diffuse" id="4224.Diffuse" number_of_elements="1">
@@ -5402,7 +5410,7 @@
         <Domain name="bool" id="3550.SetOrient.bool"/>
       </Property>
       <Property name="SetScaleFactor" id="3550.SetScaleFactor" number_of_elements="1">
-        <Element index="0" value="0.509189987182617"/>
+        <Element index="0" value="0.754438018798828"/>
         <Domain name="bounds" id="3550.SetScaleFactor.bounds"/>
         <Domain name="scalar_range" id="3550.SetScaleFactor.scalar_range"/>
         <Domain name="vector_range" id="3550.SetScaleFactor.vector_range"/>
@@ -5431,7 +5439,7 @@
         </Domain>
       </Property>
       <Property name="UseMaskPoints" id="3550.UseMaskPoints" number_of_elements="1">
-        <Element index="0" value="1"/>
+        <Element index="0" value="0"/>
         <Domain name="bool" id="3550.UseMaskPoints.bool"/>
       </Property>
     </Proxy>
@@ -5621,7 +5629,7 @@
     </Proxy>
     <Proxy group="sources" type="LegacyVTKFileReader" id="3461" servers="1">
       <Property name="FileNameInfo" id="3461.FileNameInfo" number_of_elements="1">
-        <Element index="0" value="./post/liggghts1000.vtk"/>
+        <Element index="0" value="./post/liggghts100000.vtk"/>
       </Property>
       <Property name="FileNames" id="3461.FileNames" number_of_elements="100">
         <Element index="0" value="./post/liggghts1000.vtk"/>
@@ -6221,7 +6229,7 @@
         <Element index="1" value="0"/>
       </Property>
       <Property name="ViewSize" id="4392.ViewSize" number_of_elements="2">
-        <Element index="0" value="1290"/>
+        <Element index="0" value="1409"/>
         <Element index="1" value="898"/>
       </Property>
       <Property name="ViewTime" id="4392.ViewTime" number_of_elements="1">
@@ -6229,55 +6237,55 @@
         <Domain name="range" id="4392.ViewTime.range"/>
       </Property>
       <Property name="CameraClippingRange" id="4392.CameraClippingRange" number_of_elements="2">
-        <Element index="0" value="3.43811211412921"/>
-        <Element index="1" value="17.5021726197275"/>
+        <Element index="0" value="1.40738116224092"/>
+        <Element index="1" value="25.461172517002"/>
       </Property>
       <Property name="CameraClippingRangeInfo" id="4392.CameraClippingRangeInfo" number_of_elements="2">
-        <Element index="0" value="3.43811211412921"/>
-        <Element index="1" value="17.5021726197275"/>
+        <Element index="0" value="1.40738116224092"/>
+        <Element index="1" value="25.461172517002"/>
       </Property>
       <Property name="CameraFocalPoint" id="4392.CameraFocalPoint" number_of_elements="3">
-        <Element index="0" value="2.7039982836541"/>
-        <Element index="1" value="3.05132841534659"/>
-        <Element index="2" value="2.90818390135031"/>
+        <Element index="0" value="2.83506071685164"/>
+        <Element index="1" value="1.73580103845294"/>
+        <Element index="2" value="4.14461887073273"/>
       </Property>
       <Property name="CameraFocalPointInfo" id="4392.CameraFocalPointInfo" number_of_elements="3">
-        <Element index="0" value="2.7039982836541"/>
-        <Element index="1" value="3.05132841534659"/>
-        <Element index="2" value="2.90818390135031"/>
+        <Element index="0" value="2.83506071685164"/>
+        <Element index="1" value="1.73580103845294"/>
+        <Element index="2" value="4.14461887073273"/>
       </Property>
       <Property name="CameraParallelProjection" id="4392.CameraParallelProjection" number_of_elements="1">
         <Element index="0" value="1"/>
         <Domain name="bool" id="4392.CameraParallelProjection.bool"/>
       </Property>
       <Property name="CameraParallelScale" id="4392.CameraParallelScale" number_of_elements="1">
-        <Element index="0" value="3.15099901142787"/>
+        <Element index="0" value="4.95134569174121"/>
       </Property>
       <Property name="CameraParallelScaleInfo" id="4392.CameraParallelScaleInfo" number_of_elements="1">
-        <Element index="0" value="3.15099901142787"/>
+        <Element index="0" value="4.95134569174121"/>
       </Property>
       <Property name="CameraPosition" id="4392.CameraPosition" number_of_elements="3">
-        <Element index="0" value="-7.03240033501759"/>
-        <Element index="1" value="1.8650811815941"/>
-        <Element index="2" value="3.65511019907721"/>
+        <Element index="0" value="0.768840280120686"/>
+        <Element index="1" value="-7.84193203040637"/>
+        <Element index="2" value="5.01657175020152"/>
       </Property>
       <Property name="CameraPositionInfo" id="4392.CameraPositionInfo" number_of_elements="3">
-        <Element index="0" value="-7.03240033501759"/>
-        <Element index="1" value="1.8650811815941"/>
-        <Element index="2" value="3.65511019907721"/>
+        <Element index="0" value="0.768840280120686"/>
+        <Element index="1" value="-7.84193203040637"/>
+        <Element index="2" value="5.01657175020152"/>
       </Property>
       <Property name="CameraViewAngle" id="4392.CameraViewAngle" number_of_elements="1">
         <Element index="0" value="30"/>
       </Property>
       <Property name="CameraViewUp" id="4392.CameraViewUp" number_of_elements="3">
-        <Element index="0" value="0.0153124062745343"/>
-        <Element index="1" value="0.4397449715181"/>
-        <Element index="2" value="0.897992143751062"/>
+        <Element index="0" value="0.0328972133772291"/>
+        <Element index="1" value="0.083574668094841"/>
+        <Element index="2" value="0.995958356661989"/>
       </Property>
       <Property name="CameraViewUpInfo" id="4392.CameraViewUpInfo" number_of_elements="3">
-        <Element index="0" value="0.0153124062745343"/>
-        <Element index="1" value="0.4397449715181"/>
-        <Element index="2" value="0.897992143751062"/>
+        <Element index="0" value="0.0328972133772291"/>
+        <Element index="1" value="0.083574668094841"/>
+        <Element index="2" value="0.995958356661989"/>
       </Property>
       <Property name="EyeAngle" id="4392.EyeAngle" number_of_elements="1">
         <Element index="0" value="2"/>

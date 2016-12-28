@@ -85,7 +85,7 @@ BondMCA::BondMCA(LAMMPS *lmp) : Bond(lmp)
      */
     n_granhistory(BOND_HIST_LEN);
 ///AS TODO I do not whant to use it, because it requires LIGGGHTS bond.cpp
-     
+
     /* allocation of memory are here:
      * neighbor.cpp:       memory->create(bondhistlist,maxbond,atom->n_bondhist,"neigh:bondhistlist");
      * neigh_bond.cpp:     memory->grow(bondhistlist,maxbond,atom->n_bondhist,"neighbor:bondhistlist");

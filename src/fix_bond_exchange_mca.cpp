@@ -164,7 +164,7 @@ fprintf(stderr,"FixBondExchangeMCA::pre_exchange\n");
     i1 = bondlist[n][0];
     i2 = bondlist[n][1];
 
-    //ich glaube das kann mit der komprimierten Liste von PF nicht mehr eintreten ...
+    //I think this can not happen with the compressed list of PF ...
     int broken = bondlist[n][3];
     if(!broken) continue;
 
@@ -199,7 +199,7 @@ fprintf(stderr,"FixBondExchangeMCA::pre_exchange\n");
                 if(n<nbondlist)
                 {
                  neighbor->nbondlist = (nbondlist-1);                               // delete one bond -> reduce nbondlist by one
-                 for(int i = 0; i <= 3; i++)                                        
+                 for(int i = 0; i <= 3; i++)
                     neighbor->bondlist[n][i] = neighbor->bondlist[nbondlist-1][i];  // NP P.F. added also change in neighbor bondlist
                  break;
                 }

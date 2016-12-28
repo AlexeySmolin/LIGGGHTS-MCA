@@ -108,8 +108,8 @@ inline void  PairMCA::compute_elastic_force()
   double **theta = atom->theta;
   double **theta_prev = atom->theta_prev;
   double **omega = atom->omega;
-  const double * const mean_stress = atom->mean_stress_prev; // it looks a little bit confusing but this works faster in predict_mean_stress()
-  const double * const mean_stress_prev = atom->mean_stress;
+  const double * const mean_stress = atom->mean_stress;
+  const double * const mean_stress_prev = atom->mean_stress_prev;
   const double mca_radius = atom->mca_radius;
   const int * const tag = atom->tag;
   const int * const type = atom->type;
@@ -435,10 +435,10 @@ void PairMCA::correct_for_plasticity()
 ///if(tag[i]==10) fprintf(logfile,"PairMCA::correct_for_plasticity bond_atom[%d][%d]=%d map()=%d \n",i,k,bond_atom[i][k],j);
 
           ///TODO if(Interact)
-	  {
+          {
             double *bond_hist_ik = &(bond_hist[i][k][0]);
             int found = 0;
-	    int jk;
+            int jk;
             for(jk = 0; jk < num_bond[j]; jk++)
               if(bond_atom[j][jk] == tag[i]) {found = 1; break; }
             if (!found) error->all(FLERR,"PairMCA::correct_for_plasticity 'jk' not found");
@@ -461,7 +461,7 @@ void PairMCA::correct_for_plasticity()
             bond_hist_ik[MX] *= rMij;
             bond_hist_ik[MY] *= rMij;
             bond_hist_ik[MZ] *= rMij;
-	  }
+          }
         }
       }
     }
