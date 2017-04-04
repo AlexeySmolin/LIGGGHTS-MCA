@@ -1,3 +1,0 @@
-#!/bin/sh
-
-../../../../src/lmp_serial < sphere_compression.in
