@@ -70,6 +70,7 @@ class PairMCA : public Pair {
   void write_data(FILE *);
   void write_data_all(FILE *);
 
+  double **cof; // Coefficient of friction
   double **G; // shear modulus
   double **K; // bulk modulus
   double **Sy; // yield stress

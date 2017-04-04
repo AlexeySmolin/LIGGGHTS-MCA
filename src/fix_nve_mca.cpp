@@ -105,6 +105,7 @@ void FixNVEMCA::initial_integrate(int vflag)
   const double * const inertia = atom->mca_inertia;
   const int * const mask = atom->mask;
   int nlocal = atom->nlocal;
+  const int nmax = atom->nmax;
   if (igroup == atom->firstgroup) nlocal = atom->nfirst;
 
   // set timestep here since dt may have changed or come via rRESPA
@@ -121,6 +122,7 @@ void FixNVEMCA::initial_integrate(int vflag)
 #if defined (_OPENMP)
 #pragma omp parallel for private(i,dtfm,dtirotate) shared (nlocal,x,v,f,omega,torque,theta) default(none) schedule(static)
 #endif
+///  for (i = 0; i < nmax; i++) {
   for (i = 0; i < nlocal; i++) {
     if (mask[i] & groupbit) {
 
@@ -147,7 +149,6 @@ void FixNVEMCA::initial_integrate(int vflag)
       theta[i][2] += dtv * omega[i][2];
     }
   }
-
 }
 
 /* ---------------------------------------------------------------------- */
@@ -164,6 +165,7 @@ void FixNVEMCA::final_integrate()
   const double * const inertia = atom->mca_inertia;
   const int * const mask = atom->mask;
   int nlocal = atom->nlocal;
+  const int nmax = atom->nmax;
   if (igroup == atom->firstgroup) nlocal = atom->nfirst;
 
   // update 1/2 step for v,omega for all particles
@@ -174,6 +176,7 @@ void FixNVEMCA::final_integrate()
 #if defined (_OPENMP)
 #pragma omp parallel for private(i,dtfm,dtirotate) shared (nlocal,v,f,omega,torque) default(none) schedule(static)
 #endif
+///  for (i = 0; i < nmax; i++) {
   for (i = 0; i < nlocal; i++)
     if (mask[i] & groupbit) {
 

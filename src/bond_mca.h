@@ -58,6 +58,7 @@ class BondMCA : public Bond {
   ~BondMCA();
   void init_style();
   void compute(int, int);
+  void build_bond_index();
   void coeff(int, char **);
   double equilibrium_distance(int);
   void write_restart(FILE *);
@@ -66,12 +67,15 @@ class BondMCA : public Bond {
   double single(int, double, int, int, double &);
 
  protected:
-  int breakmode;
-  double *rb,*Sn,*St; //!! Breaking parameters: distance, normal stress, shear stress
-  double *r_break,*sigman_break,*tau_break,*T_break;
+  int *breakmode;
+  int *bindmode;
+  double *crackVelo; ///AS Crack propagation velocity
+  double *breakVal1,*breakVal2; // Ultimate value for bond braking. It may be Equivalent Strain OR Equivalent Stress OR Tensile Strength and Compression Strength
+  double *shapeDrPr,*volumeDrPr; // Coefficients for computing Drucker-Prager criterion
+  double *bindPressure,*bindPlastHeat; // Ultimate value for binding new bond.
   void allocate();
 
-  class FixPropertyAtom *fix_Temp;
+  class FixPropertyAtom *fix_Temp; ///AS TODO We do not use it for now in MCA
   double *Temp;
 
 };

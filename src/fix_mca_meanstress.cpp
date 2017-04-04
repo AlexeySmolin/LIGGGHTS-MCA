@@ -73,7 +73,7 @@ using namespace MCAAtomConst;
 FixMCAMeanStress::FixMCAMeanStress(LAMMPS *lmp, int narg, char **arg) :
   Fix(lmp, narg, arg)
 {
-    fprintf(logfile,"constructor FixMCAMeanStress ###########\n");
+//    fprintf(logfile,"constructor FixMCAMeanStress ###########\n");
     restart_global = 1; ///?
 }
 
@@ -89,8 +89,9 @@ FixMCAMeanStress::~FixMCAMeanStress()
 int FixMCAMeanStress::setmask()
 {
   int mask = 0;
-  mask |= POST_INTEGRATE;
-  mask |= POST_INTEGRATE_RESPA;
+  mask |= PRE_FORCE; /// ПРОБУЕМ
+///  mask |= POST_INTEGRATE;
+///  mask |= POST_INTEGRATE_RESPA;
   return mask;
 }
 
@@ -116,6 +117,7 @@ inline void  FixMCAMeanStress::swap_prev()
   const int * const num_bond = atom->num_bond;
   double ***bond_hist = atom->bond_hist;
   const int nlocal = atom->nlocal;
+  const int nmax = atom->nmax;
 
   {
     double *tmp;
@@ -131,7 +133,7 @@ inline void  FixMCAMeanStress::swap_prev()
 #if defined (_OPENMP)
 #pragma omp parallel for private(i,k) shared (bond_hist) default(none) schedule(static)
 #endif
-  for (i = 0; i < nlocal; i++) {
+  for (i = 0; i < nmax; i++) {/// i < nlocal; i++) {
     if (num_bond[i] == 0) continue;
 
     for(k = 0; k < num_bond[i]; k++)
@@ -171,17 +173,20 @@ inline void  FixMCAMeanStress::predict_mean_stress()
   const int * const num_bond = atom->num_bond;
   const int newton_bond = force->newton_bond;
   double ***bond_hist = atom->bond_hist;
-  const double dtImpl = IMPLFACTOR*update->dt; ///AS it is equivalent to damping force. TODO set in coeffs some value 0.0..1 instead of 0.5
-
+  const int nbondlist = neighbor->nbondlist;
+  int ** const bondlist = neighbor->bondlist;
+  int ** const bond_index = atom->bond_index;
+  const double dtImpl = (atom->implicit_factor)*update->dt; ///AS it is equivalent to damping force.
   const int Nc = atom->coord_num;
   const int nlocal = atom->nlocal;
+  const int nmax = atom->nmax;
   const PairMCA * const mca_pair = (PairMCA*) force->pair;
 
 //fprintf(logfile,"FixMCAMeanStress::predict_mean_stress\n"); ///AS DEBUG TRACE
 #if defined (_OPENMP)
-#pragma omp parallel for private(i,j,k,jk,itype,jtype) shared(x,v,mean_stress,mean_stress_prev,bond_atom,bond_hist) default(none) schedule(static)
+#pragma omp parallel for private(i,j,k,jk,itype,jtype) shared(x,v,mean_stress,mean_stress_prev,bond_atom,bond_hist) default(shared) schedule(static)
 #endif
-  for (i = 0; i < nlocal; i++) {
+  for (i = 0; i < nmax; i++) {/// i < nlocal; i++) {
     if (num_bond[i] == 0) continue;
 
     double xtmp,ytmp,ztmp,delx,dely,delz,vxtmp,vytmp,vztmp,r,r0,rsq,rinv;
@@ -292,10 +297,23 @@ if(tag[i]==10) fprintf(logfile,"FixMCAMeanStress::predict_mean_stress bond_atom[
       d_e  = (pj - pi + rHj*d_e0) / (rHi + rHj);
       d_p = rHi*d_e;
 
+      if (nbondlist != 0) {
+        int bond_index_i = bond_index[i][k];
+        if(bond_index_i >= nbondlist) {
+          char str[512];
+          sprintf(str,"bond_index[%d][%d]=%d > nbondlist(%d) at step " BIGINT_FORMAT,
+                  i,k,bond_index_i,nbondlist,update->ntimestep);
+          error->one(FLERR,str);
+        }
+        int bond_state = bondlist[bond_index_i][3];
+        if((!bond_state) && ((pi + d_p)>0.0)) { // if happens?!
+          d_p = 0.0;
+        }
+      }
       rdSgmi += d_p;
       bond_hist_ik[R] = r;
 //      bond_hist[j][jk][R] = r; //TODO do we need it for j?
-      bond_hist_ik[NX] = delx*rinv; ///TODO will do it later in BondMCA::compute_total_force because here we use implicit distance
+      bond_hist_ik[NX] = delx*rinv; ///TODO will do it later in PairMCA::compute_total_force because here we use implicit distance
       bond_hist_ik[NY] = dely*rinv;
       bond_hist_ik[NZ] = delz*rinv;
     }
@@ -305,11 +323,103 @@ if(tag[i]==10) fprintf(logfile,"FixMCAMeanStress::predict_mean_stress bond_atom[
   }
 }
 
-/* ---------------------------------------------------------------------- */
-
+/*
 void FixMCAMeanStress::post_integrate()
 {
-//fprintf(logfile,"FixMCAMeanStress::post_integrate\n"); ///AS DEBUG TRACE
+fprintf(logfile,"FixMCAMeanStress::post_integrate\n"); ///AS DEBUG TRACE
   swap_prev();
   predict_mean_stress();
+} */
+
+void FixMCAMeanStress::pre_force(int vflag)
+{
+//fprintf(logfile, "FixMCAMeanStress::pre_force \n");///AS DEBUG
+  swap_prev();
+  predict_mean_stress();
+
+  comm->forward_comm_fix(this); // to exchange needed fields
 }
+
+int FixMCAMeanStress::pack_comm(int n, int *list, double *buf,
+                             int pbc_flag, int *pbc)
+{
+  int i,j,m;
+  int k,l;
+
+  const int * const num_bond = atom->num_bond;
+  double ** const theta = atom->theta;
+  double ** const theta_prev = atom->theta_prev;
+  const double * const mean_stress = atom->mean_stress;
+  const double * const mean_stress_prev = atom->mean_stress_prev;
+  const double * const equiv_stress = atom->equiv_stress;
+  const double * const equiv_stress_prev = atom->equiv_stress_prev;
+  const double * const equiv_strain = atom->equiv_strain;
+  double *** const bond_hist = atom->bond_hist;
+
+  m = 0;
+  for (i = 0; i < n; i++) {
+    j = list[i];
+    buf[m++] = theta[j][0];
+    buf[m++] = theta[j][1];
+    buf[m++] = theta[j][2];
+    buf[m++] = theta_prev[j][0];
+    buf[m++] = theta_prev[j][1];
+    buf[m++] = theta_prev[j][2];
+    buf[m++] = mean_stress[j];
+    buf[m++] = mean_stress_prev[j];
+    buf[m++] = equiv_stress[j];
+    buf[m++] = equiv_stress_prev[j];
+    buf[m++] = equiv_strain[j];
+
+    if(atom->n_bondhist) {
+      for (k = 0; k < num_bond[j]; k++)
+        for (l = 0; l < MX; l++)
+          buf[m++] = bond_hist[j][k][l];
+    }
+  }
+//  fprintf(logfile,"FixMCAMeanStress::pack_comm m=%d n=%d [%d - %d]\n",m,n,list[0],list[n-1]);
+  return m;
+}
+
+/* ---------------------------------------------------------------------- */
+
+void FixMCAMeanStress::unpack_comm(int n, int first, double *buf)
+{
+  int i,m,last;
+  int k,l;
+
+  const int *num_bond = atom->num_bond;
+  double **theta = atom->theta;
+  double **theta_prev = atom->theta_prev;
+  double *mean_stress = atom->mean_stress;
+  double *mean_stress_prev = atom->mean_stress_prev;
+  double *equiv_stress = atom->equiv_stress;
+  double *equiv_stress_prev = atom->equiv_stress_prev;
+  double *equiv_strain = atom->equiv_strain;
+  double ***bond_hist = atom->bond_hist;
+
+  m = 0;
+  last = first + n;
+  for (i = first; i < last; i++) {
+    if (i == atom->nmax) error->all(FLERR,"FixMCAMeanStress::unpack_comm i==atom->nmax");
+    theta[i][0] = buf[m++];
+    theta[i][1] = buf[m++];
+    theta[i][2] = buf[m++];
+    theta_prev[i][0] = buf[m++];
+    theta_prev[i][1] = buf[m++];
+    theta_prev[i][2] = buf[m++];
+    mean_stress[i] = buf[m++];
+    mean_stress_prev[i] = buf[m++];
+    equiv_stress[i] = buf[m++];
+    equiv_stress_prev[i] = buf[m++];
+    equiv_strain[i] = buf[m++];
+
+    if(atom->n_bondhist) {
+      for (k = 0; k < num_bond[i]; k++)
+        for (l = 0; l < MX; l++)
+          bond_hist[i][k][l] = buf[m++];
+    }
+  }
+//fprintf(logfile,"FixMCAMeanStress::unpack_comm m=%d n=%d [%d - %d]\n",m,n,first,last);
+}
+

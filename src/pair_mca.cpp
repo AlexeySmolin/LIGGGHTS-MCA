@@ -87,6 +87,7 @@ PairMCA::~PairMCA()
     memory->destroy(setflag);
     memory->destroy(cutsq);
 
+    memory->destroy(cof);
     memory->destroy(G);
     memory->destroy(K);
     memory->destroy(Sy);
@@ -114,21 +115,26 @@ inline void  PairMCA::compute_elastic_force()
   const int * const tag = atom->tag;
   const int * const type = atom->type;
 
-  int **bond_atom = atom->bond_atom;
+  int ** const bond_atom = atom->bond_atom;
   const int * const num_bond = atom->num_bond;
   const int newton_bond = force->newton_bond;
   double ***bond_hist = atom->bond_hist;
-  const double dtImpl = IMPLFACTOR*update->dt; /// TODO Allow to set in coeffs
+  const int nbondlist = neighbor->nbondlist;
+  int ** const bondlist = neighbor->bondlist;
+  int ** const bond_index = atom->bond_index;
+  double * const cont_distance = atom->cont_distance;
+  const double dtImpl = (atom->implicit_factor) * update->dt;
 
   const int nlocal = atom->nlocal;
+  const int nmax = atom->nmax;
   const PairMCA * const mca_pair = (PairMCA*) force->pair;
 
 //fprintf(logfile,"PairMCA::compute_elastic_force\n"); ///AS DEBUG TRACE
 
 #if defined (_OPENMP)
-#pragma omp parallel for private(i,j,k,jk,itype,jtype) shared(x,v,omega,theta,theta_prev,bond_atom,bond_hist) default(none) schedule(static)
+#pragma omp parallel for private(i,j,k,jk,itype,jtype) shared(x,v,omega,theta,theta_prev,bond_hist) default(shared) schedule(static)
 #endif
-  for (i = 0; i < nlocal; i++) {
+  for (i = 0; i < nmax; i++) {/// i < nlocal; i++) {
     if (num_bond[i] == 0) continue;
 
     double rKHi,rKHj;// 1-2*G/(3*K) for atom i (j)
@@ -154,13 +160,26 @@ inline void  PairMCA::compute_elastic_force()
       j = atom->map(bond_atom[i][k]);
       if (j == -1) {
         char str[512];
-        sprintf(str,
-                "Bond atoms %d %d missing at step " BIGINT_FORMAT,
+        sprintf(str,"Bond atoms %d %d missing at step " BIGINT_FORMAT,
                 tag[i],bond_atom[i][k],update->ntimestep);
         error->one(FLERR,str);
       }
       j = domain->closest_image(i,j);
 ///if(tag[i]==10) fprintf(logfile,"PairMCA::compute_elastic_force bond_atom[%d][%d]=%d map()=%d \n",i,k,bond_atom[i][k],j);
+
+      int bond_index_i = bond_index[i][k];
+      if(bond_index_i >= nbondlist) {
+        char str[512];
+        sprintf(str,"bond_index[%d][%d]=%d > nbondlist(%d) at step " BIGINT_FORMAT,
+                i,j,bond_index_i,nbondlist,update->ntimestep);
+        error->one(FLERR,str);
+      }
+      int bond_state = bondlist[bond_index_i][3];
+      if(bond_state == 2) { // pair does not interact
+//        fprintf(logfile,"PairMCA::compute_elastic_force bond %d (%d - %d) does not interact\n",bond_index_i,i,j);
+        continue;
+      }
+//fprintf(logfile,"PairMCA::compute_elastic_force bond %d (%d - %d(k=%d)) has state %d\n",bond_index_i,i,j,k,bond_state);
 
       double *bond_hist_ik = &(bond_hist[i][k][0]);
       int found = 0;
@@ -191,101 +210,167 @@ inline void  PairMCA::compute_elastic_force()
       d_p = rHi*d_e + rdSgmi;
       ei += d_e;
       pi += d_p;
+//fprintf(logfile,"PairMCA::compute_elastic_force: E=%g P=%g oNbrR_i.rE=%g IDi=%d IDj=%d Dij=%g D0ij=%g\n   dE=%g Pj=%g Pi=%g dSgmj=%g dSgmi=%g Hj=%g Hi=%g meanSi=%g meanSj=%g bond_state=%d\n",
+//ei,pi,bond_hist_ik[E],tag[i],bond_atom[i][k],r,r0,d_e,pj,(pi-d_p),rdSgmj,rdSgmi,rHj,rHi,mean_stress[i],mean_stress[j],bond_state);
+      if((mca_radius*(1.0 + ei)) > r) {
+        if((bond_state == 0) || (pi <= 0.0)) {
+          fprintf(logfile,"PairMCA::compute_elastic_force: 'Qij>Dij' E=%g oNbrR_i.rE=%g IDi=%d IDj=%d Dij=%g D0ij=%g\n   dE=%g Pj=%g Pi=%g dSgmj=%g dSgmi=%g Hj=%g Hi=%g bond_state=%d\n",
+          ei,bond_hist_ik[E],tag[i],bond_atom[i][k],r,r0,d_e,pj,(pi-d_p),rdSgmj,rdSgmi,rHj,rHi,bond_state);
+          continue;
+        }
+      }
       /// END central force
 
-      /// BEGIN shear force
+      double vShear[3], vSij[3], vYi[3], vMij[3];
+      if((bond_state == 1) && (pi > 0.0)) { // if happens that unbonded particles attract each other
+        fprintf(logfile,"PairMCA::compute_elastic_force bond %d (%d - %d) is broken\n",bond_index_i,i,j);
+        double rCDsum = cont_distance[i] + cont_distance[j];
+        if (rCDsum > r) {
+//fprintf(stderr,"CMCA3D_TEPModel::ElasticForce(): '(!oNbrR_i.bLinked) && (Pi>0.0)' IDi=%d IDj=%d CDsum=%g Dij=%g oAtR_i.iNCount=%d oAtR_j.iNCount=%d\n",oAtL_i.lID,oAtL_j.lID,rCDsum,rDij,oAtR_i.iNCount,oAtR_j.iNCount);
+//fprintf(stderr,"Qi=%g Qj=%g Pi=%g Pj=%g dP=%g dSgmj=%g dSgmi=%g D0ij=%g dE0=%g dE=%g\n",
+//rF_AutomataRadius*(1.+rE),rF_AutomataRadius*(1.+(oAtR_j.aNeighbors[kj].rE+rdE0-rdE)),
+//(rPi-rdP),rPj,rdP,rdSgmj,rdSgmi,rD0ij,rdE0,rdE);
+          ;// leave it as it is
+        } else {
+//fprintf(stderr,"CMCA3D_TEPModel::ElasticForce(): '(!oNbrR_i.bLinked) && (rPi>0.0)'' IDi=%d IDj=%d rCDsum=%g Dij=%g oAtR_i.iNCount=%d oAtR_j.iNCount=%d\n",oAtL_i.lID,oAtL_j.lID,rCDsum,rDij,oAtR_i.iNCount,oAtR_j.iNCount);
+//fprintf(stderr,"Qi=%g Qj=%g Pi=%g Pj=%g dP=%g dSgmj=%g dSgmi=%g D0ij=%g dE0=%g dE=%g CD=%g new E=%g\n",
+//rF_AutomataRadius*(1.+rE),rF_AutomataRadius*(1.+(oAtR_j.aNeighbors[kj].rE+rdE0-rdE)),
+//(rPi-rdP),rPj,rdP,rdSgmj,rdSgmi,rD0ij,rdE0,rdE,oAtR_i.rCD,((oAtR_i.rCD - rF_AutomataRadius) / rF_AutomataRadius));
+//fprintf(stderr,"OwnNode=%d iNode=%d jNode=%d \n", OwnNode, oAtL_i.iNode, oAtL_j.iNode);
+          ei  = (cont_distance[i] - mca_radius) / mca_radius;
+        }
+        pi = 0.0;
+        vSij[0]= vSij[1]= vSij[0]= 0.0;
+        vYi[0]= vYi[1]= vYi[0]= 0.0;
+        vMij[0]= vMij[1]= vMij[0]= 0.0;
+      } else {
+        /// BEGIN shear force
 
-      double *nv = &(bond_hist_ik[NX]);       // normal unit vector
-      double *nv0 = &(bond_hist_ik[NX_PREV]); // normal unit vector at prev time step
-      double dYij[3];
-      vectorCross3D(nv0, nv, dYij); // rotaion of the pair
+        double *nv = &(bond_hist_ik[NX]);       // normal unit vector
+        double *nv0 = &(bond_hist_ik[NX_PREV]); // normal unit vector at prev time step
+        double dYij[3];
+        vectorCross3D(nv0, nv, dYij); // rotaion of the pair
 ///if(i == 13) fprintf(logfile,"PairMCA::compute_elastic_force i=%d j=%d nv0= %20.12e %20.12e %20.12e nv= %20.12e %20.12e %20.12e \n",i,j,nv0[0],nv0[1],nv0[2],nv[0],nv[1],nv[2]); ///AS DEBUG
 ///if(i == 13) fprintf(logfile,"PairMCA::compute_elastic_force i=%d j=%d nv0xnv= %20.12e %20.12e %20.12e \n",i,j,dYij[0],dYij[1],dYij[2]); ///AS DEBUG
 
-      double vdLij[3];
-      vectorCopy3D(dYij, vdLij);
-      vectorScalarMult3D(vdLij, r); // tangent displacement of the pair
+        double vdLij[3];
+        vectorCopy3D(dYij, vdLij);
+        vectorScalarMult3D(vdLij, r); // tangent displacement of the pair
 
-      qi = mca_radius * (1. + bond_hist_ik[E]); // distance to the contact point from i
-      qj = mca_radius * (1. + bond_hist_jk[E]); // distance to the contact point from j
-      double vdTHi[3], vdTHj[3];
-      double vR1[3], vR2[3], vRsum[3];
+        qi = mca_radius * (1. + bond_hist_ik[E]); // distance to the contact point from i
+        qj = mca_radius * (1. + bond_hist_jk[E]); // distance to the contact point from j
+        double vdTHi[3], vdTHj[3];
+        double vR1[3], vR2[3], vRsum[3];
 #ifdef NO_ROTATIONS
-      vdTHi[0]=vdTHi[2]=vdTHi[2]=vdTHj[0]=vdTHj[1]=vdTHj[2]= 0.0;
+        vdTHi[0]=vdTHi[2]=vdTHi[2]=vdTHj[0]=vdTHj[1]=vdTHj[2]= 0.0;
 #else
-      vectorCopy3D(&(theta[i][0]), vR1);
-      vectorCopy3D(&(theta_prev[i][0]), vR2);
-      vectorFlip3D(vR2); //vectorScalarMult3D(vR2, -1.)
-      SmallRotationSum(vR1, vR2, vdTHi); // rotation increment for i
-      vectorCopy3D(&(theta[j][0]), vR1);
-      vectorCopy3D(&(theta_prev[j][0]), vR2);
-      vectorFlip3D(vR2); //vectorScalarMult3D(vR2, -1.)
-      SmallRotationSum(vR1, vR2, vdTHj); // rotation increment for j
+        vectorCopy3D(&(theta[i][0]), vR1);
+        vectorCopy3D(&(theta_prev[i][0]), vR2);
+        vectorFlip3D(vR2); //vectorScalarMult3D(vR2, -1.)
+        SmallRotationSum(vR1, vR2, vdTHi); // rotation increment for i
+        vectorCopy3D(&(theta[j][0]), vR1);
+        vectorCopy3D(&(theta_prev[j][0]), vR2);
+        vectorFlip3D(vR2); //vectorScalarMult3D(vR2, -1.)
+        SmallRotationSum(vR1, vR2, vdTHj); // rotation increment for j
 // implicit vvvv
-      vectorCopy3D(&(omega[i][0]), vR2);
-      vectorScalarMult3D(vR2, dtImpl);
-      vectorCopy3D(vdTHi, vR1);
-      SmallRotationSum(vR1, vR2, vdTHi);
-      vectorCopy3D(&(omega[j][0]), vR2);
-      vectorScalarMult3D(vR2, dtImpl);
-      vectorCopy3D(vdTHj, vR1);
-      SmallRotationSum(vR1, vR2, vdTHj);
+        vectorCopy3D(&(omega[i][0]), vR2);
+        vectorScalarMult3D(vR2, dtImpl);
+        vectorCopy3D(vdTHi, vR1);
+        SmallRotationSum(vR1, vR2, vdTHi);
+        vectorCopy3D(&(omega[j][0]), vR2);
+        vectorScalarMult3D(vR2, dtImpl);
+        vectorCopy3D(vdTHj, vR1);
+        SmallRotationSum(vR1, vR2, vdTHj);
 // inmplicit ^^^^
-      vectorCopy3D(vdTHi, vR1); vectorScalarMult3D(vR1, qi);
-      vectorCopy3D(vdTHj, vR2); vectorScalarMult3D(vR2, qj);
-      SmallRotationSum(vR1, vR2, vRsum);
+        vectorCopy3D(vdTHi, vR1); vectorScalarMult3D(vR1, qi);
+        vectorCopy3D(vdTHj, vR2); vectorScalarMult3D(vR2, qj);
+        SmallRotationSum(vR1, vR2, vRsum);
 
-      vectorCopy3D(nv, vR1);
-      double proj = vectorDot3D(vRsum, nv); // projection of rotational part to the normal
-      vectorScalarMult3D(vR1, proj);
-      vectorSubtract3D(vRsum, vR1, vR2);    // tangential component of rotation
-      vectorCopy3D(vdLij, vR1);
-      vectorFlip3D(vR2);
-      SmallRotationSum(vR1, vR2, vdLij);
+        vectorCopy3D(nv, vR1);
+        double proj = vectorDot3D(vRsum, nv); // projection of rotational part to the normal
+        vectorScalarMult3D(vR1, proj);
+        vectorSubtract3D(vRsum, vR1, vR2);    // tangential component of rotation
+        vectorCopy3D(vdLij, vR1);
+        vectorFlip3D(vR2);
+        SmallRotationSum(vR1, vR2, vdLij);
 #endif
 
-      double rKS = 1. / (qj*rGi + qi*rGj);
-      double rQR = qi * 0.5 * rKS;
-      double vShear[3], vYi[3], vYj[3], vYij[3];
-      vectorCopy3D(&(bond_hist_ik[SHX_PREV]), vShear);
-      vectorCopy3D(&(bond_hist_ik[YX_PREV]), vYi);
-      vectorCopy3D(&(bond_hist_jk[YX_PREV]), vYj);
-      vectorCopy3D(vYj, vR1); vectorScalarMult3D(vR1, rQR);
-      vectorCopy3D(vYi, vR2); vectorScalarMult3D(vR2, -rQR);
-      vectorAdd3D(vR1, vR2, vYij);
-      vectorScalarMult3D(vdLij, -rGj*rKS);
-      SmallRotationSum(vdLij, vYij, dYij);
-      vectorCopy3D(vShear, vR1);
-      RotationSum(vR1, dYij, vShear);
-      vectorScalarMult3D(vYi, 1./rHi);
-      vectorCopy3D(vYi, vR1);
-      RotationSum(vR1, dYij, vYi);
-      vectorScalarMult3D(vYi, rHi);
-      double vSij[3];
-/* TODO      if(!azNbr0[iNbIndx].bL) {
-        ///BEGIN correction due to sliding friction
-        ...
-        ///END correction due to sliding friction
-        } else */
-      {
-        vectorCross3D(vYi, nv, vSij);
-      }
-      /// END shear force
+        double rKS = 1. / (qj*rGi + qi*rGj);
+        double rQR = qi * 0.5 * rKS;
+        double vYj[3], vYij[3];
+        vectorCopy3D(&(bond_hist_ik[SHX_PREV]), vShear);
+        vectorCopy3D(&(bond_hist_ik[YX_PREV]), vYi);
+        vectorCopy3D(&(bond_hist_jk[YX_PREV]), vYj);
+        vectorCopy3D(vYj, vR1); vectorScalarMult3D(vR1, rQR);
+        vectorCopy3D(vYi, vR2); vectorScalarMult3D(vR2, -rQR);
+        vectorAdd3D(vR1, vR2, vYij);
+        vectorScalarMult3D(vdLij, -rGj*rKS);
+        SmallRotationSum(vdLij, vYij, dYij);
+        vectorCopy3D(vShear, vR1);
+        RotationSum(vR1, dYij, vShear);
+        vectorScalarMult3D(vYi, 1./rHi);
+        vectorCopy3D(vYi, vR1);
+        RotationSum(vR1, dYij, vYi);
+        vectorScalarMult3D(vYi, rHi);
 
-      /// BEGIN bending-torsion torque
-      double vdMij[3], vdMji[3], vMij[3];
+        double rFDij=1.0; // dry friction factor
+        if(bond_state == 1) { // unlinked
+          /// BEGIN correction due to sliding friction
+          //int m1=oAtR_i.iMaterialID;
+          //int m2=oAtR_j.iMaterialID;
+          //const T_PairMaterial &oPair = aF_Pairs[m1][m2];
+/* TODO   */
+          double rCOF = mca_pair->cof[itype][jtype];
+          if(rCOF <  REAL_NULL_CONST) {
+            rFDij = 0.0;
+            vShear[0]= vShear[1]= vShear[0]= 0.0;
+            vSij[0]= vSij[1]= vSij[0]= 0.0;
+            vYi[0]= vYi[1]= vYi[0]= 0.0;
+            vMij[0]= vMij[1]= vMij[0]= 0.0;
+          } else {
+            double rSij;
+            double rFDij; // dry friction
+            if(pi > 0.0) rFDij = 0.0;  // just in case
+            else rFDij = fabs(rCOF*pi);
+            rSij = vectorMag3D(vYi);
+            if(rSij > rFDij) {
+              rFDij /= rSij;
+              vectorScalarMult3D(vYi, rFDij);
+            } else rFDij = 1.0;
+            vectorCross3D(vYi, nv, vSij);
+          }
+          /// END correction due to sliding friction
+        } else {
+          vectorCross3D(vYi, nv, vSij);
+        }
+        /// END shear force
+
+///        if(bond_state == 0) { // linked
+        /// BEGIN bending-torsion torque
+        double vdMij[3], vdMji[3];
 #ifdef NO_ROTATIONS
-vMij[0]= vMij[1]= vMij[2]=0.;
+vMij[0]= vMij[1]= vMij[2]= 0.;
 #else
-      vectorCopy3D(vdTHi, vdMij);
-      vectorCopy3D(vdTHj, vdMji);
-      vectorScalarMult3D(vdMij, qi);
-      vectorScalarMult3D(vdMji, -qj);
-      RotationSum(vdMij, vdMji, vMij);
-      vectorScalarMult3D(vMij, rGi*rGj/(rGi+rGj));
-#endif
-      /// END bending-torsion torque
+        vectorCopy3D(vdTHi, vdMij);
+        vectorCopy3D(vdTHj, vdMji);
+        vectorScalarMult3D(vdMij, qi);
+        vectorScalarMult3D(vdMji, -qj);
+        RotationSum(vdMij, vdMji, vMij);
+        double rGmult = rGi*rGj/(rGi+rGj);
+        vectorScalarMult3D(vMij, rGmult);
 
+        vectorCopy3D(&(bond_hist_ik[MX]), vdMji);
+        vectorScalarMult3D(vdMji, rKS);
+        vectorCopy3D(vMij, vdMij);
+        vectorScalarMult3D(vdMij, rKS);
+        RotationSum(vdMij, vdMji, vMij);
+        rGmult = qi*rGi + qj*rGj;
+        if(rFDij != 1.0) rGmult *= rFDij;
+        vectorScalarMult3D(vMij, rGmult);
+///        }
+#endif
+        /// END bending-torsion torque
+      } // end of else if Unlinked and P>0
       bond_hist_ik[E] = ei;
       bond_hist_ik[P] = pi;
       bond_hist_ik[SHX] = vShear[0];
@@ -297,9 +382,11 @@ vMij[0]= vMij[1]= vMij[2]=0.;
       bond_hist_ik[SX] = vSij[0];
       bond_hist_ik[SY] = vSij[1];
       bond_hist_ik[SZ] = vSij[2];
-      bond_hist_ik[MX] = vMij[0];
-      bond_hist_ik[MY] = vMij[1];
-      bond_hist_ik[MZ] = vMij[2];
+///      if(bond_state == 0) {
+        bond_hist_ik[MX] = vMij[0];
+        bond_hist_ik[MY] = vMij[1];
+        bond_hist_ik[MZ] = vMij[2];
+///      }
     }
   }
 }
@@ -309,55 +396,94 @@ vMij[0]= vMij[1]= vMij[2]=0.;
 inline void  PairMCA::compute_equiv_stress()
 {
   int i,k;
-  double rdSgmi;
 
+  int ** const bond_atom = atom->bond_atom;
   const int * const num_bond = atom->num_bond;
-  double ***bond_hist = atom->bond_hist;
+  double *** const bond_hist = atom->bond_hist;
+  int ** const bondlist = neighbor->bondlist;
+  int ** const bond_index = atom->bond_index;
+  const int * const type = atom->type;
+  const PairMCA * const mca_pair = (PairMCA*) force->pair;
 
   const int Nc = atom->coord_num;
   const int nlocal = atom->nlocal;
+  const int nmax = atom->nmax;
+  const double mca_radius = atom->mca_radius;
 
 //fprintf(logfile,"PairMCA::compute_equiv_stress\n"); ///AS DEBUG TRACE
 #if defined (_OPENMP)
-#pragma omp parallel for private(i,k,rdSgmi) shared(bond_hist) default(none) schedule(static)
+#pragma omp parallel for private(i,k) default(shared) schedule(static)
 #endif
-  for (i = 0; i < nlocal; i++) {
-    double *theta;
-    double *theta_prev;
-    double *mean_stress = atom->mean_stress;
-    double **bond_hist_i = &(bond_hist[i][0]);
+  for (i = 0; i < nmax; i++) {/// i < nlocal; i++) {
+    int numb = num_bond[i];
+    if (numb == 0) continue;
 
-    theta = &(atom->theta[i][0]);
-    theta_prev = &(atom->theta_prev[i][0]);
-    theta_prev[0] = theta[0];
-    theta_prev[1] = theta[1];
+    const double * const theta = &(atom->theta[i][0]);
+    double * const theta_prev = &(atom->theta_prev[i][0]);
+    double ** const bond_hist_i = &(bond_hist[i][0]);
+    double *mean_stress = atom->mean_stress;
+    double *cont_distance = atom->cont_distance;
+
+    theta_prev[0] = theta[0]; // we need to swap 'theta' here, after using in 'compute_elastic_force()'
+    theta_prev[1] = theta[1]; // but not before as for other '_prev' values
     theta_prev[2] = theta[2];
 
 #ifndef NO_MEANSTRESS
-    if (num_bond[i] == 0) continue;
+    double rdSgmi = 0.0;
+    double rdStri = 0.0;
+    int iNC = 0;
+    for(k = 0; k < numb; k++) {
+      int bond_index_i = bond_index[i][k];
+      int bond_state = bondlist[bond_index_i][3];
+      if (bond_state==2) continue;
 
-    rdSgmi = 0.0;
-    for(k = 0; k < num_bond[i]; k++)
-      rdSgmi += bond_hist_i[k][P];
-
+      iNC++;
+      double * const bond_hist_ik = &(bond_hist_i[k][0]);
+      rdStri += bond_hist_ik[E];
+      double p = bond_hist_ik[P];
+      if ((bond_state==1) && (p > 0.0)) continue;
+      rdSgmi += p;
+    }
     mean_stress[i] = rdSgmi / Nc;
+
+    int iFreeSlots = Nc > iNC ? (Nc - iNC) : 0;
+    int itype = type[i];
+    double rKi = 3.0 * mca_pair->K[itype][itype];
+    double rE = (rdSgmi / rKi - rdStri); // predictor of the contact distance accounting of plastic strain
+    if (iFreeSlots > 0) rE /= iFreeSlots;
+    cont_distance[i] = mca_radius * (1.0 + rE);
+    if(rE < -1.0) {
+        char str[512];
+        sprintf(str,"Wrong contact distance for atom# %d at step " BIGINT_FORMAT,
+                i,update->ntimestep);
+        error->one(FLERR,str);
+    }
 #endif
   }
 
 #if defined (_OPENMP)
-#pragma omp parallel for private(i,k,rdSgmi) shared(bond_hist) default(none) schedule(static)
+#pragma omp parallel for private(i,k) default(shared) schedule(static)
 #endif
-  for (i = 0; i < nlocal; i++) {
-    if (num_bond[i] == 0) continue;
+  for (i = 0; i < nmax; i++) {/// i < nlocal; i++) {
+    int numb = num_bond[i];
+    if (numb == 0) continue;
 
     double *equiv_stress = atom->equiv_stress;
-    double *mean_stress = atom->mean_stress;
-    rdSgmi = 0.0;
-    for(k = 0; k < num_bond[i]; k++)
+    double * const mean_stress = atom->mean_stress;
+    double ** const bond_hist_i = &(bond_hist[i][0]);
+    double rdSgmi = 0.0;
+    for(k = 0; k < numb; k++)
     {
-      double *bond_hist_ik = &(bond_hist[i][k][0]);
+      int bond_index_i = bond_index[i][k];
+      int bond_state = bondlist[bond_index_i][3];
+      if (bond_state==2) continue;
+
+      double * const bond_hist_ik = &(bond_hist_i[k][0]);
+      double p = bond_hist_ik[P];
+      if ((bond_state==1) && (p > 0.0)) continue;
+
       double xtmp,ytmp,ztmp,rStressInt;
-      rStressInt = bond_hist_ik[P] - mean_stress[i];
+      rStressInt = p - mean_stress[i];
       rStressInt = rStressInt*rStressInt;
       xtmp = bond_hist_ik[SX];
       ytmp = bond_hist_ik[SY];
@@ -376,27 +502,30 @@ void PairMCA::correct_for_plasticity()
 {
 //fprintf(logfile, "PairMCA::correct_for_plasticity \n"); ///AS DEBUG TRACE
   int i,k;
-
-  const int * const type = atom->type;
-  const int * const tag = atom->tag;
-  const int * const num_bond = atom->num_bond;
-  int **bond_atom = atom->bond_atom;
-  double ***bond_hist = atom->bond_hist;
-  const PairMCA * const mca_pair = (PairMCA*) force->pair;
-
-  const double * const mean_stress = atom->mean_stress;
-  const double * const equiv_stress_prev = atom->equiv_stress_prev;
-
-  const int newton_bond = force->newton_bond;
-  const int Nc = atom->coord_num;
   const int nlocal = atom->nlocal;
+  const int nmax = atom->nmax;
+  const double mca_radius = atom->mca_radius;
+  double ***bond_hist = atom->bond_hist;
+  int ** const bondlist = neighbor->bondlist;
+  int ** const bond_index = atom->bond_index;
 
 #if defined (_OPENMP)
-#pragma omp parallel for private(i,k) shared(bond_atom,bond_hist) default(none) schedule(static)
+#pragma omp parallel for private(i,k) shared(bond_hist) default(shared) schedule(static)
 #endif
-  for (i = 0; i < nlocal; i++) {
+  for (i = 0; i < nmax; i++) {/// i < nlocal; i++) {
+    const int * const num_bond = atom->num_bond;
     if (num_bond[i] == 0) continue;
 
+    const int newton_bond = force->newton_bond;
+    const int * const type = atom->type;
+    const int * const tag = atom->tag;
+    int ** const bond_atom = atom->bond_atom;
+    const PairMCA * const mca_pair = (PairMCA*) force->pair;
+    const double * const mean_stress = atom->mean_stress;
+    const double * const equiv_stress_prev = atom->equiv_stress_prev;
+
+
+    double **bond_hist_i = &(bond_hist[i][0]);
     double *equiv_stress = atom->equiv_stress;
     double *equiv_strain = atom->equiv_strain;
     int itype = type[i];
@@ -406,9 +535,7 @@ void PairMCA::correct_for_plasticity()
     double rdSgm = rSgmInt - equiv_stress_prev[i];
     double rSR = equiv_strain[i] + rdSgm/r3Gi;
     double rSyi =  mca_pair->Sy[itype][itype];
-///!!!! Нужно ли нам заводить переменную для критической инт-ти деформаций ?
-///Что будет критерием пластических свойств? Ведь один материал может быть пластическим, а другой - нет ?
-    double rSR_Pla = rSyi>0. ? rSyi/r3Gi : 10.0*rSR; // equivalent yeild strain, if no plasticity make rSR_Pla > rSR
+    double rSR_Pla = rSyi > 0. ? rSyi/r3Gi : 10.0*rSR; // equivalent yeild strain, if no plasticity make rSR_Pla > rSR
     equiv_strain[i] = rSR;
 
     if((rSyi>0.)&&(rSgmInt>REAL_NULL_CONST)&&(rdSgm>0.0)&&(rSR>rSR_Pla)) {
@@ -423,7 +550,7 @@ void PairMCA::correct_for_plasticity()
         double rP = (rSyi*rSyi*0.5/r3Gi + (rSyi + rSgmPl)*0.5*(rSR - rSR_Pla)) - rSgmPl*rSgmPl*0.5/r3Gi; // plastic heat
         ///TODO store plastic heat: if (rP > 0.0) arPH[i] = rP;
         for(k = 0; k < num_bond[i]; k++) {
-          int j = atom->map(bond_atom[i][k]);
+/*          int j = atom->map(bond_atom[i][k]);
           if (j == -1) {
             char str[512];
             sprintf(str,
@@ -433,24 +560,27 @@ void PairMCA::correct_for_plasticity()
           }
           j = domain->closest_image(i,j);
 ///if(tag[i]==10) fprintf(logfile,"PairMCA::correct_for_plasticity bond_atom[%d][%d]=%d map()=%d \n",i,k,bond_atom[i][k],j);
-
-          ///TODO if(Interact)
+*/
+          int bond_index_i = bond_index[i][k];
+          int bond_state = bondlist[bond_index_i][3];
+          if (bond_state==2) continue;
+          else
           {
-            double *bond_hist_ik = &(bond_hist[i][k][0]);
-            int found = 0;
+            double *bond_hist_ik = &(bond_hist_i[k][0]);
+/*            int found = 0;
             int jk;
             for(jk = 0; jk < num_bond[j]; jk++)
               if(bond_atom[j][jk] == tag[i]) {found = 1; break; }
             if (!found) error->all(FLERR,"PairMCA::correct_for_plasticity 'jk' not found");
             double *bond_hist_jk = &(bond_hist[j][jk][0]);
-
+*/
             rP = bond_hist_ik[P];
             rP = rP * rM + mean_stress[i] * rMpli;
             double rMij = rM;
-            ///TODO if ((rP>0.0) && (!azNbr0[iNbIndx].bL)) {
-            ///  rP = 0.0;
-            ///  rMij = 0.0;
-            ///}
+            if ((rP > 0.0) && (bond_state == 1)) {
+              rP = 0.0;
+              rMij = 0.0;
+            }
             bond_hist_ik[P] = rP;
             bond_hist_ik[SX] *= rMij;
             bond_hist_ik[SY] *= rMij;
@@ -465,6 +595,58 @@ void PairMCA::correct_for_plasticity()
         }
       }
     }
+
+//TODO    oAtL_i.rFrictionH = oAtR_i.rFrictionH;
+    for(k = 0; k < num_bond[i]; k++) {
+      int j = atom->map(bond_atom[i][k]);
+      j = domain->closest_image(i,j);
+      int bond_index_i = bond_index[i][k];
+      int bond_state = bondlist[bond_index_i][3];
+      if (bond_state == 1) { // broken bond - contacting
+        //BEGIN dry friction force
+        int jtype = type[j];
+        double rCOF = mca_pair->cof[itype][jtype];
+        double *bond_hist_ik = &(bond_hist_i[k][0]);
+        double rP = bond_hist_ik[P];
+        double *vSij = &(bond_hist_ik[SX]);
+        double *vMij = &(bond_hist_ik[MX]);
+        if (rP > 0.0) {
+          rP = 0.0; bond_hist_ik[P] = 0.0;
+        }
+        if (rCOF < REAL_NULL_CONST) {
+          vSij[0] = vSij[1] = vSij[2] = 0.0;
+          vMij[0] = vMij[1] = vMij[2] = 0.0;
+        } else {
+          double rFDij = fabs(rCOF*rP); // dry friction force
+          double rSij = vectorMag3D(vSij);
+          if (rSij > rFDij) {
+            double rKij = rFDij / rSij;  // correction factor
+            vectorScalarMult3D(vSij, rKij);
+          }
+          rSij = vectorMag3D(vMij) / mca_radius;
+          if (rSij > rFDij) {
+            double rKij = rFDij / rSij;
+            vectorScalarMult3D(vMij, rKij);
+          }
+/* TODO          rSij = vectorMag3D(vSij);
+                    CVector3D vdS = oNbrL_i.vShear; vdS -= oNbrR_i.vShear;
+                    rSij *= vdS.length();
+                    double rFrictionHeat =  rSij;
+                    vdS = oNbrL_i.vShear; vdS -= oNbrR_i.vShear;
+                    CVector3D vR2, vdSi;
+                    const CMCA3D_Automaton &oAtR_j = aRightA[j];
+                    vR2 = oAtL_i.vTheta; vR2 *= -1.0; SmallRotationSum(oAtR_i.vTheta, vR2, vdSi);
+                    vR2 = oAtL_j.vTheta; vR2 *= -1.0; SmallRotationSum(oAtR_j.vTheta, vR2, vdS);
+                    vR2 = vdS; vR2 *= -1.0; SmallRotationSum(vdSi, vR2, vdS);
+                    rSij *= vdS.length();
+                    rFrictionHeat += rSij;
+                    rFrictionHeat *=  oNbrL_i.rCA * oNbrL_i.rQ * 0.5; //делим пополам между двумя автоматами
+                    oAtL_i.rFrictionH += rFrictionHeat; // Plastic heat
+                    rTotalFrictionHeat += oAtL_i.rFrictionH; */
+        }
+        //END dry friction force
+      }
+    }
   }
   return;
 }
@@ -473,39 +655,41 @@ void PairMCA::correct_for_plasticity()
 
 void PairMCA::compute_total_force(int eflag, int vflag)
 {
+  const int nbondlist = neighbor->nbondlist;
+  double **f = atom->f;
+  double **torque = atom->torque;
 
   if (eflag || vflag) ev_setup(eflag,vflag);
   else evflag = 0;
 
-  const double mca_radius  = atom->mca_radius;
-  const double contact_area  = atom->contact_area;
-  const int * const tag = atom->tag; // tag of atom is their ID number
-  double **x = atom->x;
-  double **f = atom->f;
-  double **torque = atom->torque;
-  const double * const mean_stress  = atom->mean_stress;
-  int **bondlist = neighbor->bondlist;
-///AS I do not whant to use it, because it requires to be copied every step///  double **bondhistlist = neighbor->bondhistlist;
-  double ***bond_hist = atom->bond_hist;
-  const int * const num_bond = atom->num_bond;
-  int **bond_atom = atom->bond_atom;
-
-  const int nbondlist = neighbor->nbondlist;
-  const int nlocal = atom->nlocal;
-  const int newton_bond = force->newton_bond;
-  const PairMCA * const mca_pair = (PairMCA*) force->pair;
-
 //fprintf(logfile, "PairMCA::compute_total_force \n");  ///AS DEBUG TRACE
 
 #if defined (_OPENMP)
-#pragma omp parallel for shared(x,f,torque,bondlist,bond_atom,bond_hist) default(none) schedule(static)
+//#pragma omp parallel for shared(x,f,torque,bondlist,bond_atom,bond_hist) default(none) schedule(static)
+///#pragma omp parallel for default(shared) schedule(static)
 #endif
   for (int n = 0; n < nbondlist; n++) {
+    const double mca_radius  = atom->mca_radius;
+    const double contact_area  = atom->contact_area;
+    const int * const tag = atom->tag; // tag of atom is their ID number
+    double ** const x = atom->x;
+    const double * const mean_stress  = atom->mean_stress;
+    int ** const bondlist = neighbor->bondlist;
+///AS I do not whant to use it, because it requires to be copied every step///  double **bondhistlist = neighbor->bondhistlist;
+    double *** const bond_hist = atom->bond_hist;
+    const int * const num_bond = atom->num_bond;
+    int ** const bond_atom = atom->bond_atom;
+
+    const int nlocal = atom->nlocal;
+    const int newton_bond = force->newton_bond;
+    const PairMCA * const mca_pair = (PairMCA*) force->pair;
+
+    int bond_state = bondlist[n][3];
     //1st check if bond is broken,
-    if(bondlist[n][3])
+    if(bond_state == 2)
     {
-        fprintf(logfile,"PairMCA::compute_total_force bond %d has been already broken\n",n);
-        continue;
+//       fprintf(logfile,"PairMCA::compute_total_force bond %d does not interact\n",n);
+       continue;
     }
 
     int i1,i2,n1,n2;
@@ -521,21 +705,23 @@ void PairMCA::compute_total_force(int eflag, int vflag)
     i2 = bondlist[n][1];
 
     for (n1 = 0; n1 < num_bond[i1]; n1++) {
-      if (bond_atom[i1][n1]==tag[i2]) break;
+      const int ib1 = bond_atom[i1][n1];
+      if (ib1==tag[i2]) break;
     }
     if (n1 == num_bond[i1]) error->all(FLERR,"Internal error in PairMCA: n1 not found");
 
     for (n2 = 0; n2 < num_bond[i2]; n2++) {
-      if (bond_atom[i2][n2]==tag[i1]) break;
+      const int ib2 = bond_atom[i2][n2];
+      if (ib2==tag[i1]) break;
     }
     if (n2 == num_bond[i2]) error->all(FLERR,"Internal error in PairMCA: n2 not found");
 
-    double *bond_hist1 = &(bond_hist[i1][n1][0]);
-    double *bond_hist2 = &(bond_hist[i2][n2][0]);
+    double * const bond_hist1 = &(bond_hist[i1][n1][0]);
+    double * const bond_hist2 = &(bond_hist[i2][n2][0]);
 
     double pi = bond_hist1[P];
     double pj = bond_hist2[P];
-    if ( bondlist[n][3] && ((pi>0.)||(pj>0.)) ) {
+    if ( (bond_state==1) && ((pi>0.) || (pj>0.)) ) {
       error->warning(FLERR,"PairMCA::compute_total_force (pi>0.)||(pj>0.) - be careful!");
       continue;
     }
@@ -596,6 +782,9 @@ void PairMCA::compute_total_force(int eflag, int vflag)
 
     // apply force to each of 2 atoms
 
+#if defined (_OPENMP)
+#pragma omp critical(tfI1)
+#endif
     if (newton_bond || i1 < nlocal) {
       f[i1][0] += (dnforce[0] + dtforce[0]) * A;
       f[i1][1] += (dnforce[1] + dtforce[1]) * A;
@@ -605,6 +794,9 @@ void PairMCA::compute_total_force(int eflag, int vflag)
       torque[i1][2] += q1 * A * dttorque[2] + tor3;
     }
 
+#if defined (_OPENMP)
+#pragma omp critical(tfI2)
+#endif
     if (newton_bond || i2 < nlocal) {
       f[i2][0] -= (dnforce[0] + dtforce[0]) * A;
       f[i2][1] -= (dnforce[1] + dtforce[1]) * A;
@@ -653,6 +845,7 @@ void PairMCA::allocate()
 
   memory->create(cutsq,n+1,n+1,"pair:cutsq");
 
+  memory->create(cof,n+1,n+1,"pair:cof");
   memory->create(G,n+1,n+1,"pair:G");
   memory->create(K,n+1,n+1,"pair:K");
   memory->create(Sy,n+1,n+1,"pair:Sy");
@@ -694,20 +887,22 @@ void PairMCA::coeff(int narg, char **arg)
   force->bounds(arg[0],atom->ntypes,ilo,ihi);
   force->bounds(arg[1],atom->ntypes,jlo,jhi);
 
-  double G_one = force->numeric(FLERR,arg[2]);
-  double K_one = force->numeric(FLERR,arg[3]);
+  double cof_one = force->numeric(FLERR,arg[2]);
+  double G_one = force->numeric(FLERR,arg[3]);
+  double K_one = force->numeric(FLERR,arg[4]);
 
   double Sy_one = -1.0; // no plasticity
   double Eh_one = 0.0; // no harderning
-  if (narg > 4) {
-    Sy_one = force->numeric(FLERR,arg[4]);
-    if (narg == 6) Eh_one = force->numeric(FLERR,arg[5]);
-    if (narg > 6) error->all(FLERR,"Incorrect args for mca pair coefficients for plasticity");
+  if (narg > 5) {
+    Sy_one = force->numeric(FLERR,arg[5]);
+    if (narg == 7) Eh_one = force->numeric(FLERR,arg[6]);
+    if (narg > 7) error->all(FLERR,"Incorrect args for mca pair coefficients for plasticity");
   }
 
   int count = 0;
   for (int i = ilo; i <= ihi; i++) {
     for (int j = MAX(jlo,i); j <= jhi; j++) {
+      cof[i][j] = cof_one;
       G[i][j] = G_one;
       K[i][j] = K_one;
       Sy[i][j] = Sy_one;
@@ -729,12 +924,14 @@ double PairMCA::init_one(int i, int j)
   // always mix Gs geometrically
 
   if (setflag[i][j] == 0) {
+    cof[i][j] = (cof[i][i] * cof[j][j]) / (cof[i][i] + cof[j][j]);
     G[i][j] = (G[i][i] * G[j][j]) / (G[i][i] + G[j][j]);
     K[i][j] = (K[i][i] * K[j][j]) / (K[i][i] + K[j][j]);
     Sy[i][j] = (Sy[i][i] * Sy[j][j]) / (Sy[i][i] + Sy[j][j]);
     Eh[i][j] = (Eh[i][i] * Eh[j][j]) / (Eh[i][i] + Eh[j][j]);
   }
 
+  cof[j][i] = cof[i][j];
   G[j][i] = G[i][j];
   K[j][i] = K[i][j];
   Sy[j][i] = Sy[i][j];
@@ -756,6 +953,7 @@ void PairMCA::write_restart(FILE *fp)
     for (j = i; j <= atom->ntypes; j++) {
       fwrite(&setflag[i][j],sizeof(int),1,fp);
       if (setflag[i][j]) {
+        fwrite(&cof[i][j],sizeof(double),1,fp);
         fwrite(&G[i][j],sizeof(double),1,fp);
         fwrite(&K[i][j],sizeof(double),1,fp);
         fwrite(&Sy[i][j],sizeof(double),1,fp);
@@ -782,11 +980,13 @@ void PairMCA::read_restart(FILE *fp)
       MPI_Bcast(&setflag[i][j],1,MPI_INT,0,world);
       if (setflag[i][j]) {
         if (me == 0) {
+          fread(&cof[i][j],sizeof(double),1,fp);
           fread(&G[i][j],sizeof(double),1,fp);
           fread(&K[i][j],sizeof(double),1,fp);
           fread(&Sy[i][j],sizeof(double),1,fp);
           fread(&Eh[i][j],sizeof(double),1,fp);
         }
+        MPI_Bcast(&cof[i][j],1,MPI_DOUBLE,0,world);
         MPI_Bcast(&G[i][j],1,MPI_DOUBLE,0,world);
         MPI_Bcast(&K[i][j],1,MPI_DOUBLE,0,world);
         MPI_Bcast(&Sy[i][j],1,MPI_DOUBLE,0,world);
@@ -826,7 +1026,7 @@ void PairMCA::read_restart_settings(FILE *fp)
 void PairMCA::write_data(FILE *fp)
 {
   for (int i = 1; i <= atom->ntypes; i++)
-    fprintf(fp,"%d %g %g %g %g\n",i,G[i][i],K[i][i],Sy[i][i],Eh[i][i]);
+    fprintf(fp,"%d %g %g %g %g %g\n",i,cof[i][i],G[i][i],K[i][i],Sy[i][i],Eh[i][i]);
 }
 
 /* ----------------------------------------------------------------------
@@ -837,5 +1037,5 @@ void PairMCA::write_data_all(FILE *fp)
 {
   for (int i = 1; i <= atom->ntypes; i++)
     for (int j = i; j <= atom->ntypes; j++)
-      fprintf(fp,"%d %d %g %g %g %g\n",i,j,G[i][j],K[i][j],Sy[i][j],Eh[i][j]);
+      fprintf(fp,"%d %d %g %g %g %g %g\n",i,j,cof[i][i],G[i][j],K[i][j],Sy[i][j],Eh[i][j]);
 }

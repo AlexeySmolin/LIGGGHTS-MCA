@@ -1,0 +1,22 @@
+#!/bin/sh
+
+THEPWD=`pwd`
+
+cd ../../../../src
+make serial
+
+cd $THEPWD
+
+rm -rf post
+
+../../../../src/lmp_serial -in line_tension.in
+
+../../../../src/lmp_serial -in line_tension_if0.in
+
+../../../../src/lmp_serial -in line_tension_if0.1.in
+
+../../../../src/lmp_serial -in line_tension_if0.25.in
+
+../../../../src/lmp_serial -in line_tension_if0.75.in
+
+../../../../src/lmp_serial -in line_tension_if1.in

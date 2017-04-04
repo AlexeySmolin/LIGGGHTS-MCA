@@ -166,7 +166,7 @@ fprintf(stderr,"FixBondExchangeMCA::pre_exchange\n");
 
     //I think this can not happen with the compressed list of PF ...
     int broken = bondlist[n][3];
-    if(!broken) continue;
+    if(broken < 2) continue;
 
     fprintf(logfile,"FixBondExchangeMCA::pre_exchange detected bond %d:%d<->%d as broken at step %ld\n",n,atom->tag[i1],atom->tag[i2],update->ntimestep);
     // if the bond is broken, we remove it from both atom data
@@ -215,14 +215,17 @@ fprintf(stderr,"FixBondExchangeMCA::pre_exchange\n");
   }
 }
 
-inline void FixBondExchangeMCA::remove_bond(int ilocal,int ibond, int bondnumber) //NP P.F. added bondnumber
+inline void FixBondExchangeMCA::remove_bond(int ilocal, int ibond, int bondnumber) //NP P.F. added bondnumber
 {
-    fprintf(logfile,"FixBondExchangeMCA::remove_bond %d\n",bondnumber);
+    int *bond_atom = atom->bond_atom[ilocal];
+    int *bond_type = atom->bond_type[ilocal];
+    double **bond_hist = atom->bond_hist[ilocal];
+    fprintf(logfile,"FixBondExchangeMCA::remove_bond #%d : ilocal=%d ibond=%d global=%d\n",bondnumber,ilocal,ibond,atom->map(bond_atom[ibond]));
     ///error->one(FLERR,"romoving bond");
-    int nbond = atom->num_bond[ilocal];
-    atom->bond_atom[ilocal][ibond] = atom->bond_atom[ilocal][nbond-1];
-    atom->bond_type[ilocal][ibond] = atom->bond_type[ilocal][nbond-1];
-    for(int k = 0; k < atom->n_bondhist; k++) atom->bond_hist[ilocal][ibond][k] = atom->bond_hist[ilocal][nbond-1][k];
+    int nbond = atom->num_bond[ilocal] - 1;
+    bond_atom[ibond] = bond_atom[nbond];
+    bond_type[ibond] = bond_type[nbond];
+    for(int k = 0; k < atom->n_bondhist; k++) bond_hist[ibond][k] = bond_hist[nbond][k];
     atom->num_bond[ilocal]--;
 }
 

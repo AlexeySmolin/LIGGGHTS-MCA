@@ -69,6 +69,7 @@ using namespace LAMMPS_NS;
 
 /* ---------------------------------------------------------------------- */
 
+#include "bond_mca.h"
 void Neighbor::bond_all()
 {
   int i,m,atom1;
@@ -117,6 +118,11 @@ void Neighbor::bond_all()
       }
     }
   if (cluster_check) bond_check();
+
+  if (atom->mca_flag && force->bond) {
+        ((BondMCA*)(force->bond))->build_bond_index();
+  }
+
 }
 
 /* ---------------------------------------------------------------------- */

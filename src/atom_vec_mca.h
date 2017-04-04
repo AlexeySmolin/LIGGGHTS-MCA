@@ -118,16 +118,18 @@ class AtomVecMCA : public AtomVec {
   int coord_num; //!! Coordination number is defined by packing (6 for cubic or 12 for fcc and hcp)
   double mca_radius; //!! Change from array to single variable: all automata have the same radius
   double contact_area; //!! Initial contact area defined by packing. Remember about heat transfer through contact_area in granular!!
+  double implicit_factor;   //!! Implicit factor used to make integration scheme stable for larger time steps
 
   double *mca_inertia; // moment of inertia is a scalar as for sphere
   double **theta;      // We need orientation vector to describe rotation as a first approximation
   double **theta_prev; // orientation vector at previous time step
-                       // Later we must use Rodrigues rotation vector or quaternions, as in AtomVecEllipsoid 'struct Bonus {double quat[4]...};'
+                       // Later we have to use Rodrigues rotation vector or quaternions, as in AtomVecEllipsoid 'struct Bonus {double quat[4]...};'
   double *mean_stress; // is used for many-body interaction
   double *mean_stress_prev; // at previous time step
   double *equiv_stress;// ~ equivalent (or von Mises, shear) stress - is used for plasticity
   double *equiv_stress_prev;// equivalent stress at previous time step
   double *equiv_strain;// ~ equivalent (shear) strain - is used for plasticity
+  double *cont_distance;// distance to free surface (to determine a new contact)
   /// Below is the list of vaiables existing  in 'atom.h' that can be used for mca instead of new ones
   //double *q;  //!! mca_inertia - moment of inertia is a scalar as for sphere
   //double **mu;//!! theta  - orientation vector to describe rotation as a first approximation
@@ -144,26 +146,26 @@ For the MCA style, the number of mca bonds per atom is stored, and the informati
 The bond history is similar to the contact history for granulars, it stores the internal state of the bond.
 What exactly is stored in this internal state is defined by the MCA style used.
 
-In atom_style command it need 4 args: 
+In atom_style command it need 4 args:
 the automaton radius, the packing of automata,
 the number of bond types, and the _maximum_ number of bonds that each atom can have.
 
 An example for the sytnax is given below:
-atom_style mca radius 0.0001 packing fcc n_bondtypes 1 bonds_per_atom 6  
+atom_style mca radius 0.0001 packing fcc n_bondtypes 1 bonds_per_atom 6
 
-Ususally atom_vec_mca has number bonds defined by packing (6 for cubic packing, 12 for fcc packing), 
-but during deformation other atoms can be in contact with it and the total number of interacting 
-neighbours may be greater than coordination number of the packing .
+Ususally atom_vec_mca has number bonds defined by packing (6 for cubic packing, 12 for fcc packing),
+but during deformation other atoms can be in contact with it and the total number of interacting
+neighbours may be greater than coordination number of the packing.
 
 For each bond type, the parameters have to be specified via the bond_coeff command.
 These parameters define bond formation and breaking rules
-bond_coeff 	1 0.0025 10000000000 10000000000 ${simplebreak} 0.002501
-
+bond_coeff  N ${COF} ${CrackVelo} ${FRACT_CRITERION} ${FRACT_PARAM} ${BIND_CRITERION} ${BIND_PARAM}
 */
-  int *molecule; //!! This allows to have bonds. Do we really need it?
+  int *molecule; //!! This allows to have bonds. Do we really need it? May be to specify the body which the atom belongs to.
   int *num_bond; // number of bonds for each atom
-  int **nspecial,**special; // MCA does not need this, but it required by 'molecular' we need 'molecular' for bonds!
+  int **nspecial,**special; // MCA does not need this, but it required by 'molecular' we need 'molecular' for bonds! 
   int **bond_type,**bond_atom;
+  int **bond_index; //  corresponding index of bondlist[index] in neighbor
   int num_bondhist;
   double ***bond_hist; //???
 
@@ -176,7 +178,7 @@ bond_coeff 	1 0.0025 10000000000 10000000000 ${simplebreak} 0.002501
 
 // Indices of values in 'bond_hist' array
 namespace MCAAtomConst {
-  static const int IMPLFACTOR = 1.0;
+  static const double IMPLFACTOR = 0.5;
 
   static const int R =        0; // distance to neighbor
   static const int R_PREV =   1; // distance to neighbor at previous time step

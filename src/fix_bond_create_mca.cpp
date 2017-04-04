@@ -205,7 +205,7 @@ FixBondCreateMCA::~FixBondCreateMCA()
 
 void FixBondCreateMCA::post_create()
 {
-   // register a fix to excange mca bonds across processors
+   // register a fix to call mca/meanstress
     char* fixarg[4];
 
     fixarg[0] = strdup("mca_meanstress");
@@ -215,7 +215,8 @@ void FixBondCreateMCA::post_create()
     free(fixarg[0]);
     free(fixarg[1]);
     free(fixarg[2]);
-/*
+
+/*   // register a fix to excange mca bonds across processors
     fixarg[0] = strdup("exchange_bonds_mca");
     fixarg[1] = strdup("all");
     fixarg[2] = strdup("bond/exchange/mca");
@@ -232,6 +233,7 @@ void FixBondCreateMCA::post_create()
 int FixBondCreateMCA::setmask()
 {
   int mask = 0;
+//  mask |= PRE_FORCE; - moved it to BondMCA::build_bond_index() caled from Neighbor::bond_all()
   mask |= POST_INTEGRATE;
   mask |= POST_INTEGRATE_RESPA;
   return mask;
@@ -342,12 +344,19 @@ void FixBondCreateMCA::setup(int vflag)
   if (newton_bond) comm->reverse_comm_fix(this);
 }
 
+/*
+void FixBondCreateMCA::pre_force(int vflag) - moved it to BondMCA::build_bond_index() caled from Neighbor::bond_all()
+{
+fprintf(logfile, "FixBondCreateMCA::pre_force \n");///AS DEBUG
+  build_bond_index();
+}*/
+
 /* ---------------------------------------------------------------------- */
 
 void FixBondCreateMCA::post_integrate()
 {
   int i,j,k,ii,jj,inum,jnum,itype,jtype,possible;
-  double xtmp,ytmp,ztmp,delx,dely,delz,rsq,min,max;
+  double xtmp,ytmp,ztmp,delx,dely,delz;
   int *ilist,*jlist,*numneigh,**firstneigh;
   int flag;
 
@@ -379,8 +388,11 @@ void FixBondCreateMCA::post_integrate()
   int nlocal = atom->nlocal;
   int nall = atom->nlocal + atom->nghost;
 
+#if defined (_OPENMP)
+#pragma omp parallel for private(i,j,nall) default(shared) schedule(static)
+#endif
   for (i = 0; i < nall; i++) {
-    for(int j = 0; j< newperts; j++) partner[i][j] = 0;
+    for(j = 0; j< newperts; j++) partner[i][j] = 0;
     npartner[i] = 0;
     probability[i] = 1.;
   }
@@ -401,6 +413,9 @@ void FixBondCreateMCA::post_integrate()
   flag = 0;
 
 //fprintf(logfile,"FixBondCreateMCA::post_integrate: nall (%d) = atom->nlocal (%d) + atom->nghost (%d) inum=%d\n",nall,atom->nlocal,atom->nghost,inum);
+///#if defined (_OPENMP)
+///#pragma omp parallel for private(ii,jj,i,j,xtmp,ytmp,ztmp,delx,dely,delz) default(shared) schedule(static)
+///#endif
   for (ii = 0; ii < inum; ii++) {
     i = ilist[ii];
     if (!(mask[i] & groupbit)) continue;
@@ -437,7 +452,7 @@ void FixBondCreateMCA::post_integrate()
       delx = xtmp - x[j][0];
       dely = ytmp - x[j][1];
       delz = ztmp - x[j][2];
-      rsq = delx*delx + dely*dely + delz*delz;
+      double rsq = delx*delx + dely*dely + delz*delz;
       if (rsq >= cutsq) {
 //if(tag[i]==10) fprintf(logfile,"\t\trsq (%g) >= cutsq (%g)\n",rsq,cutsq);
         continue;
@@ -455,9 +470,14 @@ void FixBondCreateMCA::post_integrate()
       }
 
 //if(tag[i]==10) fprintf(logfile,"\t\tPARTNER!!!\n");
+//#pragma omp critical
+      {
       partner[i][npartner[i]] = tag[j];
       partner[j][npartner[j]] = tag[i];
+      }
+//#pragma omp atomic
       npartner[i]++;
+//#pragma omp atomic
       npartner[j]++;
 
     }
@@ -476,6 +496,9 @@ void FixBondCreateMCA::post_integrate()
   // forward comm of partner and random value, so ghosts have it
 
   if (fraction < 1.0) {
+#if defined (_OPENMP)
+#pragma omp parallel for private(i,nlocal) default(shared) schedule(static)
+#endif
     for (i = 0; i < nlocal; i++)
       if (npartner[i]) probability[i] = random->uniform();
   }
@@ -499,9 +522,13 @@ void FixBondCreateMCA::post_integrate()
   double r,rinv;
 
   int ncreate = 0;
+#if defined (_OPENMP)
+#pragma omp parallel for private(i,j,k,xtmp,ytmp,ztmp,delx,dely,delz) default(shared) reduction(+:ncreate) schedule(static)
+#endif
   for (i = 0; i < nlocal; i++) {
     if (npartner[i] == 0) continue;
 
+    double min,max;
     xtmp = x[i][0];
     ytmp = x[i][1];
     ztmp = x[i][2];
@@ -545,7 +572,8 @@ void FixBondCreateMCA::post_integrate()
 
         if (!newton_bond /*|| tag[i] < tag[j]*/)
         {
-///if(tag[i]==10) fprintf(logfile,"FixBondCreateMCA::post_integrate: creating bond btw atoms i=%d and j=%d (tag=%d) (i has now %d bonds) at step %ld\n",i,j,tag[j],num_bond[i]+1,update->ntimestep);
+///if(tag[i]==10) 
+///fprintf(logfile,"FixBondCreateMCA::post_integrate: creating bond btw atoms i=%d and j=%d (tag=%d) (i has now %d bonds) at step %ld\n",i,j,tag[j],num_bond[i]+1,update->ntimestep);
 
           if (num_bond[i] == atom->bond_per_atom)
             error->one(FLERR,"New bond exceeded bonds per atom in fix bond/create");
@@ -636,16 +664,16 @@ int FixBondCreateMCA::pack_comm(int n, int *list, double *buf,
   if (commflag == 0) {
     for (i = 0; i < n; i++) {
       j = list[i];
-      buf[m++] = static_cast<int>(bondcount[j]);
+      buf[m++] = ubuf(bondcount[j]).d; ///static_cast<int>(bondcount[j]);
     }
 ///fprintf(logfile,"FixBondCreateMCA::pack_comm m=%d n=%d [%d - %d]\n",m,n,list[0],list[n-1]);
     return 1;
   } else {
     for (i = 0; i < n; i++) {
       j = list[i];
-      buf[m++] = static_cast<int>(npartner[j]);
+      buf[m++] = ubuf(npartner[j]).d; ///static_cast<int>(npartner[j]);
       for(int k=0; k<newperts; k++) //NP communicate all slots, also the empty ones
-        buf[m++] = static_cast<int>(partner[j][k]);
+        buf[m++] = ubuf(partner[j][k]).d; ///static_cast<int>(partner[j][k]);
       buf[m++] = probability[j];
     }
 ///fprintf(logfile,"FixBondCreateMCA::pack_comm m=%d n=%d [%d - %d]\n",m,n,list[0],list[n-1]);
@@ -664,13 +692,13 @@ void FixBondCreateMCA::unpack_comm(int n, int first, double *buf)
 
   if (commflag == 0) {
     for (i = first; i < last; i++)
-      bondcount[i] = static_cast<int> (buf[m++]);
+      bondcount[i] = (int) ubuf(buf[m++]).i;///static_cast<int> (buf[m++]);
 
   } else {
     for (i = first; i < last; i++) {
-      npartner[i] = static_cast<int> (buf[m++]);
+      npartner[i] = (int) ubuf(buf[m++]).i;///static_cast<int> (buf[m++]);
       for(int k=0; k<newperts; k++)
-        partner[i][k] = static_cast<int>(buf[m++]);
+        partner[i][k] = (int) ubuf(buf[m++]).i;///static_cast<int>(buf[m++]);
       probability[i] = buf[m++];
     }
   }
@@ -688,14 +716,14 @@ int FixBondCreateMCA::pack_reverse_comm(int n, int first, double *buf)
 
   if (commflag == 0) {
     for (i = first; i < last; i++)
-      buf[m++] = bondcount[i];
+      buf[m++] = ubuf(bondcount[i]).d; ///bondcount[i];
 ///fprintf(logfile,"FixBondCreateMCA::pack_reverse_comm m=%d n=%d [%d - %d]\n",m,n,first,last);
     return 1;
   } else {
     for (i = first; i < last; i++) {
-      buf[m++] = static_cast<int>(npartner[i]);
+      buf[m++] = ubuf(npartner[i]).d; ///static_cast<int>(npartner[i]);
       for(int k=0; k<newperts; k++)
-        buf[m++] = static_cast<int>(partner[i][k]);
+        buf[m++] = ubuf(partner[i][k]).d; ///static_cast<int>(partner[i][k]);
     }
 ///fprintf(logfile,"FixBondCreateMCA::pack_reverse_comm m=%d n=%d [%d - %d]\n",m,n,first,last);
     return newperts + 2;
@@ -715,13 +743,13 @@ void FixBondCreateMCA::unpack_reverse_comm(int n, int *list, double *buf)
   if (commflag == 0) {
     for (i = 0; i < n; i++) {
       j = list[i];
-      bondcount[j] += static_cast<int> (buf[m++]);
+      bondcount[j] += (int) ubuf(buf[m++]).i;///static_cast<int> (buf[m++]);
     }
   } else {
     //NP add new bonds coming from other proc
     for (i = 0; i < n; i++) {
       j = list[i];
-      nnew = static_cast<int> (buf[m++]);
+      nnew = (int) ubuf(buf[m++]).i;///static_cast<int> (buf[m++]);
       if(nnew+npartner[j] > newperts)
       {
           flag = 1;
@@ -730,7 +758,7 @@ void FixBondCreateMCA::unpack_reverse_comm(int n, int *list, double *buf)
       for(int k = npartner[j]; k < npartner[j]+newperts; k++)
       {
           if(k >= npartner[j]+nnew) m++; //NP do not do anything if
-          else partner[j][k] = static_cast<int> (buf[m++]);
+          else partner[j][k] = (int) ubuf(buf[m++]).i;///static_cast<int> (buf[m++]);
       }
       npartner[i] += nnew;
     }
@@ -774,7 +802,7 @@ int FixBondCreateMCA::pack_exchange(int i, double *buf)
 
 int FixBondCreateMCA::unpack_exchange(int nlocal, double *buf)
 {
-  bondcount[nlocal] = static_cast<int> (buf[0]);
+  bondcount[nlocal] = (int) ubuf(buf[0]).i;///static_cast<int> (buf[0]);
   return 1;
 }
 

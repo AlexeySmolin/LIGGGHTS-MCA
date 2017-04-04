@@ -62,22 +62,23 @@ class FixBondCreateMCA : public Fix {
   void init();
   void init_list(int, class NeighList *);
   void setup(int);
+//  void pre_force(int);- moved it to BondMCA::build_bond_index() caled from Neighbor::bond_all()
   void post_integrate();
   void post_integrate_respa(int, int);
   int modify_param(int,char**);
-  //virtual 
+  //virtual
   int pack_comm(int, int *, double *, int, int *);
-  //virtual 
+  //virtual
   void unpack_comm(int, int, double *);
-  //virtual 
+  //virtual
   int pack_reverse_comm(int, int, double *);
-  //virtual 
+  //virtual
   void unpack_reverse_comm(int, int *, double *);
   void grow_arrays(int);
   void copy_arrays(int, int);
-  //virtual 
+  //virtual
   int pack_exchange(int, double *);
-  //virtual 
+  //virtual
   int unpack_exchange(int, double *);
   double compute_vector(int);
   double memory_usage();

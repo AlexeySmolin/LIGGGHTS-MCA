@@ -144,12 +144,14 @@ class Atom : protected Pointers {
   int peri_flag,electron_flag;
   int ecp_flag;
   int wavepacket_flag,sph_flag;
-  // Used for MCA
+
+  // Used by MCA
   int mca_flag;
   int packing;         // Packing of movable callular automata: 'sc' or 'fcc' or 'hcp'
   int coord_num;       // Coordination number is defined by packing (6 for cubic or 12 for fcc and hcp)
   double mca_radius;   // Change from array to single variable: all automata have the same radius
   double contact_area; // Initial contact area defined by packing. Remember about heat transfer through contact_area in granular!!
+  double implicit_factor;   // Implicit factor used to make integration scheme stable for larger time steps
   double *mca_inertia; // moment of inertia is a scalar as for sphere
   double **theta;      // We need orientation vector to describe rotation as a first approximation
   double **theta_prev; // orientation vector at previous time step
@@ -158,6 +160,9 @@ class Atom : protected Pointers {
   double *equiv_stress;// ~ equivalent (or von Mises, shear) stress - is used for plasticity
   double *equiv_stress_prev;// equivalent stress at previous time step
   double *equiv_strain;// ~ equivalent (shear) strain - is used for plasticity
+  double *cont_distance;// distance to free surface (to determine a new contact)
+  int **bond_index;    // corresponding index of bondlist[index] in neighbor
+  // End of MCA
 
   int molecule_flag,q_flag,mu_flag;
   int rmass_flag,radius_flag,omega_flag,torque_flag,angmom_flag;

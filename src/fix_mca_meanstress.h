@@ -60,7 +60,10 @@ class FixMCAMeanStress : public Fix {
   ~FixMCAMeanStress();
   int setmask();
   void init();
-  void post_integrate();
+///  void post_integrate();
+  void pre_force(int); ///пробуем
+  int pack_comm(int, int *, double *, int, int *); ///пробуем
+  void unpack_comm(int, int, double *); ///пробуем
 
  private:
   void swap_prev();
