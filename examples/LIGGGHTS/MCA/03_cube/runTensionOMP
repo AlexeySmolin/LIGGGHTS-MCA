@@ -1,0 +1,17 @@
+#!/bin/sh
+
+# This example shows the possibility to use OpenMP parallel computing for tensile loading of a cubic sample.
+
+THEPWD=`pwd`
+
+cd ../../../../src
+make serial_omp
+
+cd $THEPWD
+
+rm -rf post
+
+OMP_NUM_THREADS=6
+export OMP_NUM_THREADS
+
+../../../../src/lmp_serial_omp -in cube_tension.in

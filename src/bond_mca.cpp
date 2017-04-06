@@ -361,6 +361,7 @@ fprintf(logfile, "BondMCA::build_bond_index \n");///AS DEBUG
     int ** const bond_atom = atom->bond_atom;
     int ** bond_index = atom->bond_index;
     const int nlocal = atom->nlocal;
+  const int nmax = atom->nmax;
 //    const int newton_bond = force->newton_bond;
 
     int i1,i2,n1,n2;
@@ -379,7 +380,7 @@ fprintf(logfile, "BondMCA::build_bond_index \n");///AS DEBUG
     }
     if (n2 == num_bond[i2]) error->all(FLERR,"Internal error in BondMCA::build_bond_index: n2 not found");
 
-    if (i1 < nlocal && i2 < nlocal) { ///??????
+    if (i1 < nmax && i2 < nmax) { /// (i1 < nlocal && i2 < nlocal) { ///??????
       bond_index[i1][n1] = n;
       bond_index[i2][n2] = n;
 //fprintf(logfile, "BondMCA::build_bond_index bond_index[%d][%d]=%d\n",i1,i2,n);///AS DEBUG

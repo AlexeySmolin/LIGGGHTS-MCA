@@ -65,7 +65,7 @@ enum {
 FixMCASetVel::FixMCASetVel(LAMMPS *lmp, int narg, char **arg) :
 		Fix(lmp, narg, arg) {
 	if (narg < 6)
-		error->all(FLERR, "Illegal fix setvelocity command");
+		error->all(FLERR, "Illegal fix mca/setvelocity command");
 
 ///LAMMPS	dynamic_group_allow = 1;
 	vector_flag = 1;
@@ -74,6 +74,7 @@ FixMCASetVel::FixMCASetVel(LAMMPS *lmp, int narg, char **arg) :
 	extvector = 1;
 
 	xstr = ystr = zstr = NULL;
+	xvalue = yvalue = zvalue = 0.;
 
 	if (strstr(arg[3], "v_") == arg[3]) {
 		int n = strlen(&arg[3][2]) + 1;
@@ -115,23 +116,23 @@ FixMCASetVel::FixMCASetVel(LAMMPS *lmp, int narg, char **arg) :
 	while (iarg < narg) {
 		if (strcmp(arg[iarg], "region") == 0) {
 			if (iarg + 2 > narg)
-				error->all(FLERR, "Illegal fix setvelocity command");
+				error->all(FLERR, "Illegal fix mca/setvelocity command");
 			iregion = domain->find_region(arg[iarg + 1]);
 			if (iregion == -1)
-				error->all(FLERR, "Region ID for fix setvelocity does not exist");
+				error->all(FLERR, "Region ID for fix mca/setvelocity does not exist");
 			int n = strlen(arg[iarg + 1]) + 1;
 			idregion = new char[n];
 			strcpy(idregion, arg[iarg + 1]);
 			iarg += 2;
 		} else
-			error->all(FLERR, "Illegal fix setvelocity command");
+			error->all(FLERR, "Illegal fix mca/setvelocity command");
 	}
 
 	force_flag = 0;
 	foriginal[0] = foriginal[1] = foriginal[2] = 0.0;
 
 	maxatom = atom->nmax;
-	memory->create(sforce, maxatom, 3, "setvelocity:sforce");
+	memory->create(sforce, maxatom, 3, "mca/setvelocity:sforce");
 }
 
 /* ---------------------------------------------------------------------- */
@@ -155,41 +156,123 @@ int FixMCASetVel::setmask() {
 
 /* ---------------------------------------------------------------------- */
 
+int FixMCASetVel::modify_param(int narg, char **arg)
+{
+	return 0;// Does no work!
+	if (narg < 5)
+		error->fix_error(FLERR,this, "Illegal fix_modify mca/setvelocity command");
+
+///LAMMPS	dynamic_group_allow = 1;
+	vector_flag = 1;
+	size_vector = 3;
+	global_freq = 1;
+	extvector = 1;
+
+///	xstr = ystr = zstr = NULL;
+
+	int iarg = 2;
+	if (strstr(arg[iarg], "v_") == arg[iarg]) {
+		int n = strlen(&arg[iarg][2]) + 1;
+		if (xstr) delete[] xstr;
+		xstr = new char[n];
+		strcpy(xstr, &arg[iarg][2]);
+	} else if (strcmp(arg[iarg], "NULL") == 0) {
+		xstyle = NONE;
+	} else {
+		xvalue = force->numeric(FLERR, arg[iarg]);
+		xstyle = CONSTANT;
+	}
+	iarg = 3;
+	if (strstr(arg[iarg], "v_") == arg[iarg]) {
+		int n = strlen(&arg[iarg][2]) + 1;
+		if (ystr) delete[] ystr;
+		ystr = new char[n];
+		strcpy(ystr, &arg[iarg][2]);
+	} else if (strcmp(arg[iarg], "NULL") == 0) {
+		ystyle = NONE;
+	} else {
+		yvalue = force->numeric(FLERR, arg[iarg]);
+		ystyle = CONSTANT;
+	}
+	iarg = 4;
+	if (strstr(arg[iarg], "v_") == arg[iarg]) {
+		int n = strlen(&arg[iarg][2]) + 1;
+		if (zstr) delete[] zstr;
+		zstr = new char[n];
+		strcpy(zstr, &arg[iarg][2]);
+	} else if (strcmp(arg[iarg], "NULL") == 0) {
+		zstyle = NONE;
+	} else {
+		zvalue = force->numeric(FLERR, arg[iarg]);
+		zstyle = CONSTANT;
+	}
+
+	// optional args
+
+	iregion = -1;
+	idregion = NULL;
+
+	iarg = 5;
+	while (iarg < narg) {
+		if (strcmp(arg[iarg], "region") == 0) {
+			if (iarg + 2 > narg)
+				error->fix_error(FLERR,this, "Illegal fix_modify mca/setvelocity command");
+			iregion = domain->find_region(arg[iarg + 1]);
+			if (iregion == -1)
+				error->fix_error(FLERR,this, "Region ID for fix_modify mca/setvelocity does not exist");
+			int n = strlen(arg[iarg + 1]) + 1;
+			if (idregion) delete[] idregion;
+			idregion = new char[n];
+			strcpy(idregion, arg[iarg + 1]);
+			iarg += 2;
+		} else
+			error->fix_error(FLERR,this, "Illegal fix_modify mca/setvelocity command");
+	}
+
+	force_flag = 0;
+	foriginal[0] = foriginal[1] = foriginal[2] = 0.0;
+
+///	maxatom = atom->nmax;
+///	memory->create(sforce, maxatom, 3, "mca/setvelocity:sforce");
+	init();
+	return iarg;
+}
+
 void FixMCASetVel::init() {
 	// check variables
 
 	if (xstr) {
 		xvar = input->variable->find(xstr);
 		if (xvar < 0)
-			error->all(FLERR, "Variable name for fix setvelocity does not exist");
+			error->all(FLERR, "Variable name for fix mca/setvelocity does not exist");
 		if (input->variable->equalstyle(xvar))
 			xstyle = EQUAL;
 		else if (input->variable->atomstyle(xvar))
 			xstyle = ATOM;
 		else
-			error->all(FLERR, "Variable for fix setvelocity is invalid style");
+			error->all(FLERR, "Variable for fix mca/setvelocity is of invalid style");
 	}
 	if (ystr) {
 		yvar = input->variable->find(ystr);
 		if (yvar < 0)
-			error->all(FLERR, "Variable name for fix setvelocity does not exist");
+			error->all(FLERR, "Variable name for fix mca/setvelocity does not exist");
 		if (input->variable->equalstyle(yvar))
 			ystyle = EQUAL;
 		else if (input->variable->atomstyle(yvar))
 			ystyle = ATOM;
 		else
-			error->all(FLERR, "Variable for fix setvelocity is invalid style");
+			error->all(FLERR, "Variable for fix mca/setvelocity is of invalid style");
 	}
 	if (zstr) {
 		zvar = input->variable->find(zstr);
 		if (zvar < 0)
-			error->all(FLERR, "Variable name for fix setvelocity does not exist");
+			error->all(FLERR, "Variable name for fix mca/setvelocity does not exist");
 		if (input->variable->equalstyle(zvar))
 			zstyle = EQUAL;
 		else if (input->variable->atomstyle(zvar))
 			zstyle = ATOM;
 		else
-			error->all(FLERR, "Variable for fix setvelocity is invalid style");
+			error->all(FLERR, "Variable for fix mca/setvelocity is of invalid style");
 	}
 
 	// set index and check validity of region
@@ -197,7 +280,7 @@ void FixMCASetVel::init() {
 	if (iregion >= 0) {
 		iregion = domain->find_region(idregion);
 		if (iregion == -1)
-			error->all(FLERR, "Region ID for fix setvelocity does not exist");
+			error->all(FLERR, "Region ID for fix mca/setvelocity does not exist");
 	}
 
 	if (xstyle == ATOM || ystyle == ATOM || zstyle == ATOM)
@@ -235,8 +318,10 @@ void FixMCASetVel::init() {
 /* ---------------------------------------------------------------------- */
 
 void FixMCASetVel::setup(int vflag) {
+fprintf(logfile, "FixMCASetVel::setup() \n"); ///AS DEBUG
+
 	if (strstr(update->integrate_style, "verlet"))
-		post_force(vflag);
+		post_force(vflag); /// why??
 	else
 		for (int ilevel = 0; ilevel < nlevels_respa; ilevel++) {
 			((Respa *) update->integrate)->copy_flevel_f(ilevel);
@@ -248,7 +333,7 @@ void FixMCASetVel::setup(int vflag) {
 /* ---------------------------------------------------------------------- */
 
 void FixMCASetVel::min_setup(int vflag) {
-	post_force(vflag);
+	post_force(vflag);/// why??
 }
 
 /* ---------------------------------------------------------------------- */
@@ -259,7 +344,6 @@ void FixMCASetVel::post_force(int vflag) {
 	double **f = atom->f;
 	double **v = atom->v;
         double **omega = atom->omega;
-///SPH	double **vest = atom->vest;
 	int *mask = atom->mask;
 	int nlocal = atom->nlocal;
 
@@ -276,7 +360,7 @@ void FixMCASetVel::post_force(int vflag) {
 	if (varflag == ATOM && nlocal > maxatom) {
 		maxatom = atom->nmax;
 		memory->destroy(sforce);
-		memory->create(sforce, maxatom, 3, "setvelocity:sforce");
+		memory->create(sforce, maxatom, 3, "mca/setvelocity:sforce");
 	}
 
 	foriginal[0] = foriginal[1] = foriginal[2] = 0.0;
@@ -292,19 +376,16 @@ void FixMCASetVel::post_force(int vflag) {
 				foriginal[2] += f[i][2];
 				if (xstyle) {
 					v[i][0] = xvalue;
-///SPH					vest[i][0] = xvalue;
 //                                        omega[i][0] = omega[i][1] = omega[i][2] = 0.0;
 					f[i][0] = 0.0;
 				}
 				if (ystyle) {
 					v[i][1] = yvalue;
-///SPH					vest[i][1] = yvalue;
 					f[i][1] = 0.0;
 //                                        omega[i][0] = omega[i][1] = omega[i][2] = 0.0;
 				}
 				if (zstyle) {
 					v[i][2] = zvalue;
-///SPH					vest[i][2] = zvalue;
 //                                        omega[i][0] = omega[i][1] = omega[i][2] = 0.0;
 					f[i][2] = 0.0;
 				}
@@ -331,7 +412,7 @@ void FixMCASetVel::post_force(int vflag) {
 
 		modify->addstep_compute(update->ntimestep + 1);
 
-		//printf("setting velocity at timestep %d\n", update->ntimestep);
+		//fprintf(logfile, "setting velocity at timestep %d\n", update->ntimestep);
 
 		for (int i = 0; i < nlocal; i++)
 			if (mask[i] & groupbit) {
@@ -341,36 +422,30 @@ void FixMCASetVel::post_force(int vflag) {
 				foriginal[1] += f[i][1];
 				foriginal[2] += f[i][2];
 				if (xstyle == ATOM) {
-///SPH					vest[i][0] = 
 					v[i][0] = sforce[i][0];
 //                                        omega[i][0] = omega[i][1] = omega[i][2] = 0.0;
 					f[i][0] = 0.0;
 				} else if (xstyle) {
-///SPH					vest[i][0] = 
 					v[i][0] = xvalue;
 //                                        omega[i][0] = omega[i][1] = omega[i][2] = 0.0;
 					f[i][0] = 0.0;
 				}
 
 				if (ystyle == ATOM) {
-///SPH					vest[i][1] = 
 					v[i][1] = sforce[i][1];
 //                                        omega[i][0] = omega[i][1] = omega[i][2] = 0.0;
 					f[i][1] = 0.0;
 				} else if (ystyle) {
-///SPH					vest[i][1] = 
 					v[i][1] = yvalue;
 //                                        omega[i][0] = omega[i][1] = omega[i][2] = 0.0;
 					f[i][1] = 0.0;
 				}
 
 				if (zstyle == ATOM) {
-///SPH					vest[i][2] = 
 					v[i][2] = sforce[i][2];
 //                                        omega[i][0] = omega[i][1] = omega[i][2] = 0.0;
 					f[i][2] = 0.0;
 				} else if (zstyle) {
-///SPH					vest[i][2] = 
 					v[i][2] = zvalue;
 //                                        omega[i][0] = omega[i][1] = omega[i][2] = 0.0;
 					f[i][2] = 0.0;

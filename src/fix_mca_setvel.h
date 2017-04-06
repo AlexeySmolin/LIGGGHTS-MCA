@@ -61,6 +61,7 @@ class FixMCASetVel : public Fix {
   void min_setup(int);
   //void initial_integrate(int);
   void post_force(int);
+  int modify_param(int, char**);
   double compute_vector(int);
   double memory_usage();
 

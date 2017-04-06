@@ -165,7 +165,7 @@ void FixNVEMCA::final_integrate()
   const double * const inertia = atom->mca_inertia;
   const int * const mask = atom->mask;
   int nlocal = atom->nlocal;
-  const int nmax = atom->nmax;
+///  const int nmax = atom->nmax;
   if (igroup == atom->firstgroup) nlocal = atom->nfirst;
 
   // update 1/2 step for v,omega for all particles

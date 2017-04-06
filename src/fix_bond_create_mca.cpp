@@ -323,6 +323,7 @@ void FixBondCreateMCA::setup(int vflag)
   int nall = nlocal + nghost;
   int newton_bond = force->newton_bond;
 
+fprintf(logfile, "FixBondCreateMCA::setup newton_bond=%d\n",newton_bond);///AS DEBUG
   for (i = 0; i < nall; i++) bondcount[i] = 0;
 
   for (i = 0; i < nlocal; i++)

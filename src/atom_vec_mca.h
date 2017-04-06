@@ -166,7 +166,7 @@ bond_coeff  N ${COF} ${CrackVelo} ${FRACT_CRITERION} ${FRACT_PARAM} ${BIND_CRITE
   int **nspecial,**special; // MCA does not need this, but it required by 'molecular' we need 'molecular' for bonds! 
   int **bond_type,**bond_atom;
   int **bond_index; //  corresponding index of bondlist[index] in neighbor
-  int num_bondhist;
+  int n_bondhist;
   double ***bond_hist; //???
 
   class FixBondExchangeMCA *fbe; //!! This is used for MPI eschange as I understand. But there is no '#include ...' Why?

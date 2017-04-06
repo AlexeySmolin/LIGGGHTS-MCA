@@ -94,14 +94,13 @@ AtomVecMCA::AtomVecMCA(LAMMPS *lmp) : AtomVec(lmp)
   atom->density_flag = 0; ///AS if 1 then in set density we get 'rmass=density'
   atom->rmass_flag = atom->omega_flag = atom->torque_flag = 1;
   atom->implicit_factor = IMPLFACTOR;
+  atom->n_bondhist = BOND_HIST_LEN;
 
   fbe = NULL; //!! delete in destructor
 }
 
 AtomVecMCA::~AtomVecMCA()
 {
-  memory->destroy(bond_index);
-  memory->destroy(cont_distance);
   //if(fbe != NULL) {
   //  delete fbe; //!! It is created in AtomVecMCA::init() by calling modify->add_fix()
   //}
@@ -342,7 +341,7 @@ void AtomVecMCA::grow_reset()
   num_bond = atom->num_bond; bond_type = atom->bond_type;
   bond_atom = atom->bond_atom;
   bond_index = atom->bond_index;
-  bond_hist = atom->bond_hist;
+  n_bondhist = atom->n_bondhist; bond_hist = atom->bond_hist;
 }
 
 /* ----------------------------------------------------------------------
@@ -1109,12 +1108,14 @@ int AtomVecMCA::pack_reverse(int n, int first, double *buf)
   m = 0;
   last = first + n;
   for (i = first; i < last; i++) {
-/*    buf[m++] = f[i][0];
+/*
+    buf[m++] = f[i][0];
     buf[m++] = f[i][1];
     buf[m++] = f[i][2];
     buf[m++] = torque[i][0];
     buf[m++] = torque[i][1];
-    buf[m++] = torque[i][2];*/
+    buf[m++] = torque[i][2];
+*/
     buf[m++] = cont_distance[i];
   }
 //fprintf(logfile,"AtomVecMCA::pack_reverse m=%d n=%d first=%d\n",m,n,first);
@@ -1147,12 +1148,14 @@ void AtomVecMCA::unpack_reverse(int n, int *list, double *buf)
   m = 0;
   for (i = 0; i < n; i++) {
     j = list[i];
-/*    f[j][0] += buf[m++];/// += buf[m++];
+/*
+    f[j][0] += buf[m++];/// += buf[m++];
     f[j][1] += buf[m++];/// += buf[m++];
     f[j][2] += buf[m++];/// += buf[m++];
     torque[j][0] += buf[m++];/// += buf[m++];
     torque[j][1] += buf[m++];/// += buf[m++];
-    torque[j][2] += buf[m++];/// += buf[m++];*/
+    torque[j][2] += buf[m++];/// += buf[m++];
+*/
     cont_distance[i] = buf[m++];
   }
 //fprintf(logfile,"AtomVecMCA::unpack_reverse m=%d n=%d first=%d\n",m,n,list[0]);
@@ -1359,6 +1362,7 @@ int AtomVecMCA::pack_border_vel(int n, int *list, double *buf,
         buf[m++] = x[j][0] + dx;
         buf[m++] = x[j][1] + dy;
         buf[m++] = x[j][2] + dz;
+//if(tag[j]==10) fprintf(logfile,"pack_border_vel %d(tag=%d) X= %g %g %g\n",j,tag[j],x[j][0],x[j][1],x[j][2]);
 
         buf[m++] = ubuf(tag[j]).d;
         buf[m++] = ubuf(type[j]).d;
@@ -1466,7 +1470,7 @@ int AtomVecMCA::pack_border_vel(int n, int *list, double *buf,
     for (int iextra = 0; iextra < atom->nextra_border; iextra++)
       m += modify->fix[atom->extra_border[iextra]]->pack_border(n,list,&buf[m]);
 
-fprintf(logfile,"AtomVecMCA::pack_border_vel m=%d n=%d [%d - %d]\n",m,n,list[0],list[n-1]);
+//fprintf(logfile,"AtomVecMCA::pack_border_vel m=%d n=%d [%d - %d] deform_vremap=%d\n",m,n,list[0],list[n-1],deform_vremap);
   return m;
 }
 
@@ -1584,6 +1588,7 @@ void AtomVecMCA::unpack_border_vel(int n, int first, double *buf)
     x[i][2] = buf[m++];
 
     tag[i] = (int) ubuf(buf[m++]).i;
+//if(tag[i]==10) fprintf(logfile,"unpack_border_vel %d(tag=%d) X= %g %g %g\n",i,tag[i],x[i][0],x[i][1],x[i][2]);
     type[i] = (int) ubuf(buf[m++]).i;
     mask[i] = (int) ubuf(buf[m++]).i;
     rmass[i] = buf[m++];
@@ -1629,7 +1634,7 @@ if (atom->nextra_border)
     for (int iextra = 0; iextra < atom->nextra_border; iextra++)
       m += modify->fix[atom->extra_border[iextra]]->
         unpack_border(n,first,&buf[m]);
-fprintf(logfile,"AtomVecMCA::unpack_border_vel m=%d n=%d [%d - %d]\n",m,n,first,last);
+//fprintf(logfile,"AtomVecMCA::unpack_border_vel m=%d n=%d [%d - %d]\n",m,n,first,last);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1669,7 +1674,7 @@ int AtomVecMCA::unpack_border_hybrid(int n, int first, double *buf)
         for (l = 0; l < atom->n_bondhist; l++)
           bond_hist[i][k][l] = buf[m++];
     }
- }
+  }
   return m;
 }
 
@@ -2044,6 +2049,12 @@ void AtomVecMCA::create_atom(int itype, double *coord)
   equiv_strain[nlocal] = 0.0;
   cont_distance[nlocal] = mca_radius;
 
+  for(int k = 0; k < atom->bond_per_atom; k++) { ///num_bond[nlocal]; k++) {
+      bond_index[nlocal][k] = -1;
+      for (int l = 0; l < atom->n_bondhist; l++)
+        atom->bond_hist[nlocal][k][l] = 0.0;
+  }
+
   atom->nlocal++;
 }
 
@@ -2378,7 +2389,7 @@ bigint AtomVecMCA::memory_usage()
   if (atom->memcheck("bond_type")) bytes += memory->usage(bond_type,nmax,atom->bond_per_atom);
   if (atom->memcheck("bond_atom")) bytes += memory->usage(bond_atom,nmax,atom->bond_per_atom);
   if (atom->memcheck("bond_index")) bytes += memory->usage(bond_index,nmax,atom->bond_per_atom);
-  if(atom->n_bondhist) bytes += nmax*(atom->bond_per_atom)*BOND_HIST_LEN*sizeof(int);  //!! not sure about atom->n_bondhist
+  if (atom->n_bondhist) bytes += nmax*(atom->bond_per_atom)*BOND_HIST_LEN*sizeof(double);  //!! not sure about atom->n_bondhist
 
   return bytes;
 }

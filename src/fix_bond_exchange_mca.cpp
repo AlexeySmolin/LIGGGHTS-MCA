@@ -104,8 +104,8 @@ void FixBondExchangeMCA::pre_exchange()
 
   int newton_bond = force->newton_bond;
 
-fprintf(logfile,"FixBondExchangeMCA::pre_exchange\n");
-fprintf(stderr,"FixBondExchangeMCA::pre_exchange\n");
+///fprintf(logfile,"FixBondExchangeMCA::pre_exchange\n");
+///fprintf(stderr,"FixBondExchangeMCA::pre_exchange\n");
 
   /* task 1: propagate bond contact history
   if (!n_bondhist) return;

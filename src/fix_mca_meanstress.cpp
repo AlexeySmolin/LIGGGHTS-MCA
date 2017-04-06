@@ -117,7 +117,7 @@ inline void  FixMCAMeanStress::swap_prev()
   const int * const num_bond = atom->num_bond;
   double ***bond_hist = atom->bond_hist;
   const int nlocal = atom->nlocal;
-  const int nmax = atom->nmax;
+///  const int nmax = atom->nmax;
 
   {
     double *tmp;
@@ -133,7 +133,7 @@ inline void  FixMCAMeanStress::swap_prev()
 #if defined (_OPENMP)
 #pragma omp parallel for private(i,k) shared (bond_hist) default(none) schedule(static)
 #endif
-  for (i = 0; i < nmax; i++) {/// i < nlocal; i++) {
+  for (i = 0; i < nlocal; i++) {/// i < nmax; i++) {///
     if (num_bond[i] == 0) continue;
 
     for(k = 0; k < num_bond[i]; k++)
@@ -179,14 +179,14 @@ inline void  FixMCAMeanStress::predict_mean_stress()
   const double dtImpl = (atom->implicit_factor)*update->dt; ///AS it is equivalent to damping force.
   const int Nc = atom->coord_num;
   const int nlocal = atom->nlocal;
-  const int nmax = atom->nmax;
+///  const int nmax = atom->nmax;
   const PairMCA * const mca_pair = (PairMCA*) force->pair;
 
 //fprintf(logfile,"FixMCAMeanStress::predict_mean_stress\n"); ///AS DEBUG TRACE
 #if defined (_OPENMP)
 #pragma omp parallel for private(i,j,k,jk,itype,jtype) shared(x,v,mean_stress,mean_stress_prev,bond_atom,bond_hist) default(shared) schedule(static)
 #endif
-  for (i = 0; i < nmax; i++) {/// i < nlocal; i++) {
+  for (i = 0; i < nlocal; i++) {/// i < nmax; i++) {///
     if (num_bond[i] == 0) continue;
 
     double xtmp,ytmp,ztmp,delx,dely,delz,vxtmp,vytmp,vztmp,r,r0,rsq,rinv;
@@ -299,9 +299,9 @@ if(tag[i]==10) fprintf(logfile,"FixMCAMeanStress::predict_mean_stress bond_atom[
 
       if (nbondlist != 0) {
         int bond_index_i = bond_index[i][k];
-        if(bond_index_i >= nbondlist) {
+        if((bond_index_i >= nbondlist) || (bond_index_i < 0)) {
           char str[512];
-          sprintf(str,"bond_index[%d][%d]=%d > nbondlist(%d) at step " BIGINT_FORMAT,
+          sprintf(str,"wrong bond_index[%d][%d()]=%d (nbondlist=%d) at step " BIGINT_FORMAT,
                   i,k,bond_index_i,nbondlist,update->ntimestep);
           error->one(FLERR,str);
         }

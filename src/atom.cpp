@@ -188,6 +188,8 @@ Atom::Atom(LAMMPS *lmp) : Pointers(lmp)
   mca_inertia = mean_stress = mean_stress_prev = NULL;
   equiv_stress = equiv_stress_prev = equiv_strain = NULL;
   theta = theta_prev = NULL;
+  cont_distance = NULL;
+  bond_index = NULL;
 
   // ntype-length arrays
 
@@ -314,6 +316,8 @@ Atom::~Atom()
   memory->destroy(equiv_stress);
   memory->destroy(equiv_stress_prev);
   memory->destroy(equiv_strain);
+  memory->destroy(cont_distance);
+  memory->destroy(bond_index);
 
 //Superquadric bonus-----------------------------------
   memory->destroy(shape); //half axes and roundness parameters

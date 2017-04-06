@@ -205,7 +205,7 @@ fix		topV_fix top mca/setvelocity 0 v_vel_revers 0
 variable	revstep equal  ${ts}/(2.0*${dt})
 run		${revstep}
 
-# Uloading
+# Unloading
 variable	vel_unload equal  -${vel0}
 unfix		topV_fix
 fix		topV_fix top mca/setvelocity 0 v_vel_unload 0

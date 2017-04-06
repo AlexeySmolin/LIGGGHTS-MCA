@@ -126,7 +126,7 @@ inline void  PairMCA::compute_elastic_force()
   const double dtImpl = (atom->implicit_factor) * update->dt;
 
   const int nlocal = atom->nlocal;
-  const int nmax = atom->nmax;
+///  const int nmax = atom->nmax;
   const PairMCA * const mca_pair = (PairMCA*) force->pair;
 
 //fprintf(logfile,"PairMCA::compute_elastic_force\n"); ///AS DEBUG TRACE
@@ -134,7 +134,7 @@ inline void  PairMCA::compute_elastic_force()
 #if defined (_OPENMP)
 #pragma omp parallel for private(i,j,k,jk,itype,jtype) shared(x,v,omega,theta,theta_prev,bond_hist) default(shared) schedule(static)
 #endif
-  for (i = 0; i < nmax; i++) {/// i < nlocal; i++) {
+  for (i = 0; i < nlocal; i++) {/// i < nmax; i++) {///
     if (num_bond[i] == 0) continue;
 
     double rKHi,rKHj;// 1-2*G/(3*K) for atom i (j)
@@ -407,14 +407,14 @@ inline void  PairMCA::compute_equiv_stress()
 
   const int Nc = atom->coord_num;
   const int nlocal = atom->nlocal;
-  const int nmax = atom->nmax;
+///  const int nmax = atom->nmax;
   const double mca_radius = atom->mca_radius;
 
 //fprintf(logfile,"PairMCA::compute_equiv_stress\n"); ///AS DEBUG TRACE
 #if defined (_OPENMP)
 #pragma omp parallel for private(i,k) default(shared) schedule(static)
 #endif
-  for (i = 0; i < nmax; i++) {/// i < nlocal; i++) {
+  for (i = 0; i < nlocal; i++) {/// i < nmax; i++) {///
     int numb = num_bond[i];
     if (numb == 0) continue;
 
@@ -464,7 +464,7 @@ inline void  PairMCA::compute_equiv_stress()
 #if defined (_OPENMP)
 #pragma omp parallel for private(i,k) default(shared) schedule(static)
 #endif
-  for (i = 0; i < nmax; i++) {/// i < nlocal; i++) {
+  for (i = 0; i < nlocal; i++) {/// i < nmax; i++) {///
     int numb = num_bond[i];
     if (numb == 0) continue;
 
@@ -503,7 +503,7 @@ void PairMCA::correct_for_plasticity()
 //fprintf(logfile, "PairMCA::correct_for_plasticity \n"); ///AS DEBUG TRACE
   int i,k;
   const int nlocal = atom->nlocal;
-  const int nmax = atom->nmax;
+///  const int nmax = atom->nmax;
   const double mca_radius = atom->mca_radius;
   double ***bond_hist = atom->bond_hist;
   int ** const bondlist = neighbor->bondlist;
@@ -512,7 +512,7 @@ void PairMCA::correct_for_plasticity()
 #if defined (_OPENMP)
 #pragma omp parallel for private(i,k) shared(bond_hist) default(shared) schedule(static)
 #endif
-  for (i = 0; i < nmax; i++) {/// i < nlocal; i++) {
+  for (i = 0; i < nlocal; i++) {/// i < nmax; i++) {///
     const int * const num_bond = atom->num_bond;
     if (num_bond[i] == 0) continue;
 
