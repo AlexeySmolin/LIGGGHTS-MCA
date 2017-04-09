@@ -1,8 +1,7 @@
 ####################################################################################################
 #
-# MCA example 05:  shear a cube of atoms of linear elastic material by shifting one its end.
-# Shear loading of a cubic sample of elasto-plastic material.
-# It shows the use of periodic boundary conditions and the possibility of modeling irreversible deformations.
+# MCA example 07:  rupture of a cube of elastic-plastic material by shifting one its surface.
+# This example shows the possibility of modeling fracture under shear loading of cubic packed particles.
 #
 # unit sytem: Pa / m / s
 #
@@ -41,7 +40,7 @@ boundary	p p f	# style of boundaries for the global simulation box in each dimen
 			# boundary x y z (x,y,z = one or two letters:
 			# p (periodic) or f (fixed) or s (shrink-wrapped) or m (shrink-wrapped with a minimum)
 
-atom_style	mca radius ${rp} packing sc n_bondtypes ${bt} bonds_per_atom ${bpa}
+atom_style	mca radius ${rp} packing sc n_bondtypes ${bt} bonds_per_atom ${bpa} #	implicit_factor 1.0
 
 atom_modify	map array # map keyword determines how atom ID lookup is done.
 # Lookups are performed by bond routines to find the local atom index associated with a global atom ID. 
@@ -91,7 +90,7 @@ bond_style 	mca
 # criterion is set, the automata interact in a different manner, in particular, they do not resist to tension and produce tangential
 # dry friction force. And vice versa, an unlinked pair can switch to linked/bonded state which can be interperted as crack healing or microwelding.
 
-bond_coeff	*
+bond_coeff	1 -1 1 0.0001
 
 mass 		1 1.0 #dummy
 
@@ -118,7 +117,7 @@ group           bot region bot
 
 # Loading parameters
 variable        vel0 equal 0.01 # shifting velocity
-variable        ts equal 10000.0*1.E-5 # speed-up time = 10000 steps
+variable        ts equal 10000.0*1.E-6 # speed-up time = 10000 steps
 variable        vel_up equal ${vel0}*(1.0-exp(-(2.4*time/${ts})*(2.4*time/${ts})))
 variable        vel_down equal 0.0	#-v_vel_up
 fix             topV_fix top mca/setvelocity 0 v_vel_up 0
@@ -197,22 +196,3 @@ run 1
 fix_modify	bondcr every 0  #do not create new bonds after this line
 
 run		${runstep}
-
-# Reverse loading smoothly
-variable	vel_revers equal  ${vel0}*cos((time-${fulltime})*2.0*PI/${ts})
-unfix		topV_fix
-fix		topV_fix top mca/setvelocity 0 v_vel_revers 0
-variable	revstep equal ${ts}/(2.0*${dt})
-run		${revstep}
-
-# Unloading
-variable	vel_unload equal  -${vel0}
-unfix		topV_fix
-fix		topV_fix top mca/setvelocity 0 v_vel_unload 0
-variable	unloadstep equal  ${runstep}/3.
-run		${unloadstep}
-
-# free
-unfix		topV_fix
-fix		topV_fix top mca/setvelocity NULL NULL NULL
-run ${runstep}

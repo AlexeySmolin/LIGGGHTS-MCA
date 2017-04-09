@@ -96,6 +96,7 @@ void Neighbor::bond_all()
         error->one(FLERR,str);
       }
       atom1 = domain->closest_image(i,atom1);
+///fprintf(logfile, "Neighbor::bond_all i=%d(tag=%d) j=%d(tag=%d) num_neighb=%d (bond_atom[i][m]=%d)\n", i, tag[i], atom1, tag[atom1], m, bond_atom[i][m]); ///AS DEBUG
       if (newton_bond || i < atom1) {
         if (nbondlist == maxbond) {
           maxbond += BONDDELTA;
@@ -108,7 +109,7 @@ void Neighbor::bond_all()
         bondlist[nbondlist][2] = bond_type[i][m];
         bondlist[nbondlist][3] = 0;
         if(n_bondhist) {
-//fprintf(logfile, "Neighbor::bond_all i=%d j=%d (tag=%d) m=%d (bond_atom[i][m]=%d)\n", i, atom1, tag[atom1], m, bond_atom[i][m]); ///AS DEBUG
+//fprintf(logfile, "Neighbor::bond_all i=%d(tag=%d) j=%d(tag=%d) num_neighb=%d (bond_atom[i][m]=%d)\n", i, tag[i], atom1, tag[atom1], m, bond_atom[i][m]); ///AS DEBUG
             for(int j = 0; j < n_bondhist; j++)
             {
                 bondhistlist[nbondlist][j] = bond_hist[i][m][j];

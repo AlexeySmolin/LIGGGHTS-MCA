@@ -162,6 +162,7 @@ class Atom : protected Pointers {
   double *equiv_strain;// ~ equivalent (shear) strain - is used for plasticity
   double *cont_distance;// distance to free surface (to determine a new contact)
   int **bond_index;    // corresponding index of bondlist[index] in neighbor
+  int **bond_mca;   //  local # of bonded automaton
   // End of MCA
 
   int molecule_flag,q_flag,mu_flag;

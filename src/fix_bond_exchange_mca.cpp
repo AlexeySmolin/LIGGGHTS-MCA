@@ -217,28 +217,20 @@ void FixBondExchangeMCA::pre_exchange()
 
 inline void FixBondExchangeMCA::remove_bond(int ilocal, int ibond, int bondnumber) //NP P.F. added bondnumber
 {
+    const int * const tag = atom->tag;
     int *bond_atom = atom->bond_atom[ilocal];
     int *bond_type = atom->bond_type[ilocal];
-    double **bond_hist = atom->bond_hist[ilocal];
+    int *bond_mca = atom->bond_mca[ilocal];
+    double **bond_hist = atom->bond_hist[tag[ilocal] - 1];
     fprintf(logfile,"FixBondExchangeMCA::remove_bond #%d : ilocal=%d ibond=%d global=%d\n",bondnumber,ilocal,ibond,atom->map(bond_atom[ibond]));
     ///error->one(FLERR,"romoving bond");
     int nbond = atom->num_bond[ilocal] - 1;
     bond_atom[ibond] = bond_atom[nbond];
+    bond_mca[ibond] = bond_mca[nbond];
     bond_type[ibond] = bond_type[nbond];
     for(int k = 0; k < atom->n_bondhist; k++) bond_hist[ibond][k] = bond_hist[nbond][k];
     atom->num_bond[ilocal]--;
 }
-
-
-/*inline void FixBondExchangeMCA::remove_bond(int ilocal,int ibond, int bondnumber) //NP P.F. added bondnumber
-{
-    fprintf(screen,"removing bond %d\n",bondnumber);
-    int nbond = atom->num_bond[ilocal];
-    atom->bond_atom[ilocal][ibond] = atom->bond_atom[ilocal][nbond-1];
-    atom->bond_type[ilocal][ibond] = atom->bond_type[ilocal][nbond-1];
-    for(int k = 0; k < atom->n_bondhist; k++) atom->bond_hist[ilocal][ibond][k] = atom->bond_hist[ilocal][nbond-1][k];
-    atom->num_bond[ilocal]--;
-}*/
 
 /* ----------------------------------------------------------------------
    pack entire state of Fix into one write

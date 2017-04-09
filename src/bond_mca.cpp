@@ -54,6 +54,7 @@
 #include "update.h"
 #include "vector_liggghts.h"
 #include "atom_vec_mca.h"
+#include <string.h>
 
 using namespace LAMMPS_NS;
 
@@ -203,13 +204,13 @@ void BondMCA::compute(int eflag, int vflag)
 //fprintf(logfile, "BondMCA::compute bond_atom[%d][%d]=%d \n", i1, n1, bond_atom[i1][n1]); ///AS DEBUG
     }
     if (n1 == num_bond[i1]) error->all(FLERR,"Internal error in BondMCA::compute(): n1 not found");
-    double *bond_hist1 = bond_hist[i1][n1];
+    double *bond_hist1 = bond_hist[tag[i1]-1][n1];
     for (n2 = 0; n2 < num_bond[i2]; n2++) {
       if (bond_atom[i2][n2]==tag[i1]) break;
 //fprintf(logfile, "BondMCA::compute bond_atom[%d][%d]=%d \n", i1, n1, bond_atom[i1][n1]); ///AS DEBUG
     }
     if (n2 == num_bond[i2]) error->all(FLERR,"Internal error in BondMCA::compute(): n2 not found");
-    double *bond_hist2 = bond_hist[i2][n2];
+    double *bond_hist2 = bond_hist[tag[i2]-1][n2];
     double rIJ = bond_hist1[R];
     double rJI = bond_hist2[R];
     if (fabs(rIJ-rJI) > 5.0E-12*(atom->mca_radius)) fprintf(logfile,"BondMCA::compute(): bond %d(%d-%d) rIJ(%-1.16e) != rJI(%-1.16e)\n",n,i1,i2,rIJ,rJI);
@@ -222,18 +223,22 @@ void BondMCA::compute(int eflag, int vflag)
       if(bond_state==2) {
         if(rIJ <= (cont_distance1 + cont_distance2)) {
           bond_state = bondlist[n][3] = 1;
-          fprintf(logfile,"BondMCA::compute(): bond %d is contacting\n",n);
+          bond_hist1[STATE] = double(bond_state);
+          bond_hist2[STATE] = double(bond_state);
+///          fprintf(logfile,"BondMCA::compute(): bond %d is contacting\n",n);
         }
         else continue;
       } else {
         if(rIJ > (cont_distance1 + cont_distance2)) {
           bond_state = bondlist[n][3] = 2;
-          fprintf(logfile,"BondMCA::compute(): bond %d is not interacting\n",n);
+          bond_hist1[STATE] = double(bond_state);
+          bond_hist2[STATE] = double(bond_state);
+///          fprintf(logfile,"BondMCA::compute(): bond %d is not interacting\n",n);
           continue;
         }
         if(bind_mode==BINDSTYLE_NONE) continue;
         else {
-          fprintf(logfile,"BondMCA::compute(): binding has not been implemented so far\n");
+///          fprintf(logfile,"BondMCA::compute(): binding has not been implemented so far\n");
           continue; // TODO
         }
       }
@@ -282,8 +287,10 @@ void BondMCA::compute(int eflag, int vflag)
 //fprintf(logfile,"bond# %d EQUIV_STRAIN: breakVal1[%d]=%g  rT1=%g rT2=%g\n", n,  b_type, breakVal1[b_type], rT1, rT2);
         if(broken) {
           bondlist[n][3] = 1;
-          fprintf(logfile,"broken bond %d at step %d\n",n,update->ntimestep);
-          fprintf(logfile,"   it was EQUIV_STRAIN: breakVal1[%d]=%g < criterion_mag=%g\n", b_type, breakVal1[b_type], criterion_mag);
+          bond_hist1[STATE] = double(bondlist[n][3]);
+          bond_hist2[STATE] = double(bondlist[n][3]);
+///          fprintf(logfile,"broken bond %d at step %d\n",n,update->ntimestep);
+///          fprintf(logfile,"   it was EQUIV_STRAIN: breakVal1[%d]=%g < criterion_mag=%g\n", b_type, breakVal1[b_type], criterion_mag);
         }
       }
       if(brk_mode == BREAKSTYLE_EQUIV_STRESS) {
@@ -308,8 +315,9 @@ void BondMCA::compute(int eflag, int vflag)
         broken = breakVal1[b_type] < criterion_mag;
         if(broken) {
           bondlist[n][3] = 1;
-          fprintf(logfile,"broken bond %d at step %d\n",n,update->ntimestep);
-          fprintf(logfile,"   it was EQUIV_STRESS: breakVal1[%d]=%g < criterion_mag=%g\n", b_type, breakVal1[b_type], criterion_mag);
+          bond_hist1[STATE] = bond_hist2[STATE] = double(bondlist[n][3]);
+///          fprintf(logfile,"broken bond %d at step %d\n",n,update->ntimestep);
+///          fprintf(logfile,"   it was EQUIV_STRESS: breakVal1[%d]=%g < criterion_mag=%g\n", b_type, breakVal1[b_type], criterion_mag);
         }
       }
       if(brk_mode == BREAKSTYLE_DRUCKER_PRAGER) {
@@ -330,13 +338,15 @@ void BondMCA::compute(int eflag, int vflag)
         broken = breakVal2[b_type] < criterion_mag;
         if(broken) {
           bondlist[n][3] = 1;
-          fprintf(logfile,"broken bond %d at step %d\n",n,update->ntimestep);
-          fprintf(logfile,"   it was DRUCKER_PRAGER: breakVal1[%d]=%g breakVal2[%d]=%g < criterion_mag=%g\n", b_type, breakVal1[b_type], breakVal2[b_type], criterion_mag);
+          bond_hist1[STATE] = bond_hist2[STATE] = double(bondlist[n][3]);
+///          fprintf(logfile,"broken bond %d at step %d\n",n,update->ntimestep);
+/////////          fprintf(logfile,"   it was DRUCKER_PRAGER: breakVal1[%d]=%g breakVal2[%d]=%g < criterion_mag=%g\n", b_type, breakVal1[b_type], breakVal2[b_type], criterion_mag);
         }
       }
       if((broken)  && (rIJ > (cont_distance1 + cont_distance2))) {
           bondlist[n][3] = 2;
-          fprintf(logfile,"BondMCA::compute(): bond %d is broken and not interacting\n",n);
+          bond_hist1[STATE] = bond_hist2[STATE] = double(bondlist[n][3]);
+///          fprintf(logfile,"BondMCA::compute(): bond %d is broken and not interacting\n",n);
       }
     }
   }
@@ -349,7 +359,8 @@ void BondMCA::compute(int eflag, int vflag)
 void BondMCA::build_bond_index()
 {
   const int nbondlist = neighbor->nbondlist;
-fprintf(logfile, "BondMCA::build_bond_index \n");///AS DEBUG
+  const int nlocal = atom->nlocal;
+///fprintf(logfile, "BondMCA::build_bond_index \n");///AS DEBUG
 
 #if defined (_OPENMP)
 #pragma omp parallel for default(shared) schedule(static)
@@ -360,8 +371,9 @@ fprintf(logfile, "BondMCA::build_bond_index \n");///AS DEBUG
     const int * const num_bond = atom->num_bond;
     int ** const bond_atom = atom->bond_atom;
     int ** bond_index = atom->bond_index;
+    double ***bond_hist = atom->bond_hist;
     const int nlocal = atom->nlocal;
-  const int nmax = atom->nmax;
+    const int nmax = atom->nmax;
 //    const int newton_bond = force->newton_bond;
 
     int i1,i2,n1,n2;
@@ -383,10 +395,79 @@ fprintf(logfile, "BondMCA::build_bond_index \n");///AS DEBUG
     if (i1 < nmax && i2 < nmax) { /// (i1 < nlocal && i2 < nlocal) { ///??????
       bond_index[i1][n1] = n;
       bond_index[i2][n2] = n;
+      int b_state1 = int(bond_hist[tag[i1]-1][n1][STATE]);
+      int b_state2 = int(bond_hist[tag[i2]-1][n2][STATE]);
+      if(b_state1 != b_state2) error->all(FLERR,"Internal error in BondMCA::build_bond_index: b_state1 != b_state2");
+      bondlist[n][3] = b_state1;
 //fprintf(logfile, "BondMCA::build_bond_index bond_index[%d][%d]=%d\n",i1,i2,n);///AS DEBUG
     } else {
 //fprintf(logfile, "BondMCA::build_bond_index bond_index[%d][%d] NOT FOUND nlocal=%d\n",i1,i2,nlocal);///AS DEBUG
     }
+  }
+
+#if defined (_OPENMP)
+#pragma omp parallel for default(shared) schedule(static)
+#endif
+  for (int i = 0; i < nlocal; i++) {/// i < nmax; i++) {///
+    const int * const num_bond = atom->num_bond;
+    const int * const tag = atom->tag; // tag of atom is their ID number
+    int ** const bond_atom = atom->bond_atom;
+    int **bond_mca = atom->bond_mca;
+
+    if (num_bond[i] == 0) continue;
+
+    for(int k = 0; k < num_bond[i]; k++) {
+      int j = atom->map(bond_atom[i][k]);
+      if (j == -1) {
+        char str[512];
+        sprintf(str,"Bond atoms %d %d missing at step " BIGINT_FORMAT,
+                tag[i],bond_atom[i][k],update->ntimestep);
+        error->one(FLERR,str);
+      }
+      j = domain->closest_image(i,j);
+      bond_mca[i][k] = j;
+    }
+  }
+
+//#if defined (_OPENMP)
+//#pragma omp parallel for default(shared) schedule(static)
+//#endif
+  for (int i = 0; i < nlocal; i++) {/// i < nmax; i++) {///
+    const int * const num_bond = atom->num_bond;
+    const int * const tag = atom->tag; // tag of atom is their ID number
+    int ** const bond_atom = atom->bond_atom;
+    int **bond_mca = atom->bond_mca;
+    double ***bond_hist = atom->bond_hist;
+    int bond_per_atom = atom->bond_per_atom;
+    int n_bondhist = atom->n_bondhist;
+
+    if (num_bond[i] == 0) continue;
+
+    int tag_i = tag[i] - 1;
+    int size_bondhist = n_bondhist*sizeof(double);
+    double **bond_hist_i = &(bond_hist[tag_i][0]);
+    double ** bufTmp = memory->create(bufTmp,bond_per_atom,n_bondhist,"bond_mca:bufTmp");
+    memcpy(&(bufTmp[0][0]),&(bond_hist_i[0][0]),bond_per_atom*size_bondhist);
+
+    for(int k = 0; k < num_bond[i]; k++) {
+      double *bond_hist_ik = &(bond_hist_i[k][0]);
+      int tag_j = bond_atom[i][k];
+      bool found = false;
+      for(int kT = 0; kT < num_bond[i]; kT++) {
+        if (bufTmp[kT][TAG] == tag_j) {
+          memcpy(bond_hist_ik,&(bufTmp[kT][0]),size_bondhist);
+          found = true;
+          continue;
+        }
+      }
+      if (!found) {
+        char str[512];
+        sprintf(str,"Bond atoms %d %d missing while copying history at step " BIGINT_FORMAT,
+                tag[i],bond_atom[i][k],update->ntimestep);
+        error->one(FLERR,str);
+      }
+    }
+    memory->destroy(bufTmp);
   }
 }
 
@@ -493,7 +574,7 @@ void BondMCA::coeff(int narg, char **arg)
 
   int ilo,ihi;
   force->bounds(arg[0],atom->nbondtypes,ilo,ihi);
-fprintf(logfile,"BondMCA::coeff(): ilo=%d ihi=%d \n",ilo,ihi);
+///fprintf(logfile,"BondMCA::coeff(): ilo=%d ihi=%d \n",ilo,ihi);
   int count = 0;
   for (int i = ilo; i <= ihi; i++) {
     breakmode[i] = breakmode_one;
@@ -505,8 +586,8 @@ fprintf(logfile,"BondMCA::coeff(): ilo=%d ihi=%d \n",ilo,ihi);
     volumeDrPr[i] = volumeDrPr_one;
     bindPressure[i] = bindPressure_one;
     bindPlastHeat[i] = bindPlastHeat_one;
-fprintf(logfile,"BondMCA::coeff():i=%d crackVelo=%g\n\tbreakmode=%d breakVal1=%g breakVal2=%g shapeDrPr=%g volumeDrPr=%g\n\tbindmode=%d bindPressure=%g bindPlastHeat=%g\n",
-i,crackVelo[i],breakmode[i],breakVal1[i],breakVal2[i],shapeDrPr[i],volumeDrPr[i],bindmode[i],bindPressure[i],bindPlastHeat[i]);
+///fprintf(logfile,"BondMCA::coeff():i=%d crackVelo=%g\n\tbreakmode=%d breakVal1=%g breakVal2=%g shapeDrPr=%g volumeDrPr=%g\n\tbindmode=%d bindPressure=%g bindPlastHeat=%g\n",
+///i,crackVelo[i],breakmode[i],breakVal1[i],breakVal2[i],shapeDrPr[i],volumeDrPr[i],bindmode[i],bindPressure[i],bindPlastHeat[i]);
     setflag[i] = 1;
     count++;
   }

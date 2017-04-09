@@ -318,7 +318,7 @@ void FixMCASetVel::init() {
 /* ---------------------------------------------------------------------- */
 
 void FixMCASetVel::setup(int vflag) {
-fprintf(logfile, "FixMCASetVel::setup() \n"); ///AS DEBUG
+///fprintf(logfile, "FixMCASetVel::setup() \n"); ///AS DEBUG
 
 	if (strstr(update->integrate_style, "verlet"))
 		post_force(vflag); /// why??

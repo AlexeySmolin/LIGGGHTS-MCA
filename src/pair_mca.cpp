@@ -137,6 +137,7 @@ inline void  PairMCA::compute_elastic_force()
   for (i = 0; i < nlocal; i++) {/// i < nmax; i++) {///
     if (num_bond[i] == 0) continue;
 
+    int ** const bond_mca = atom->bond_mca;
     double rKHi,rKHj;// 1-2*G/(3*K) for atom i (j)
     double rHi,rHj;  // 2*G for atom i (j)
     double pi,pj;
@@ -157,7 +158,8 @@ inline void  PairMCA::compute_elastic_force()
     rdSgmi = rKHi*(mean_stress[i] - mean_stress_prev[i]); // rKHi*(arMS0[i]-arMS1[i]);
     for(k = 0; k < num_bond[i]; k++)
     {
-      j = atom->map(bond_atom[i][k]);
+      j = bond_mca[i][k];
+/*      j = atom->map(bond_atom[i][k]);
       if (j == -1) {
         char str[512];
         sprintf(str,"Bond atoms %d %d missing at step " BIGINT_FORMAT,
@@ -166,7 +168,7 @@ inline void  PairMCA::compute_elastic_force()
       }
       j = domain->closest_image(i,j);
 ///if(tag[i]==10) fprintf(logfile,"PairMCA::compute_elastic_force bond_atom[%d][%d]=%d map()=%d \n",i,k,bond_atom[i][k],j);
-
+*/
       int bond_index_i = bond_index[i][k];
       if(bond_index_i >= nbondlist) {
         char str[512];
@@ -181,12 +183,12 @@ inline void  PairMCA::compute_elastic_force()
       }
 //fprintf(logfile,"PairMCA::compute_elastic_force bond %d (%d - %d(k=%d)) has state %d\n",bond_index_i,i,j,k,bond_state);
 
-      double *bond_hist_ik = &(bond_hist[i][k][0]);
+      double *bond_hist_ik = &(bond_hist[tag[i]-1][k][0]);
       int found = 0;
       for(jk = 0; jk < num_bond[j]; jk++)
         if(bond_atom[j][jk] == tag[i]) {found = 1; break; }
       if (!found) error->all(FLERR,"PairMCA::compute_elastic_force 'jk' not found");
-      double *bond_hist_jk = &(bond_hist[j][jk][0]);
+      double *bond_hist_jk = &(bond_hist[tag[j]-1][jk][0]);
 
       jtype = type[j];
       rGj = mca_pair->G[jtype][jtype];
@@ -219,11 +221,13 @@ inline void  PairMCA::compute_elastic_force()
           continue;
         }
       }
+///fprintf(logfile,"PairMCA::compute_elastic_force: E=%g P=%g oNbrR_i.rE=%g IDi=%d IDj=%d Dij=%g D0ij=%g\n   dE=%g Pj=%g Pi=%g dSgmj=%g dSgmi=%g Hj=%g Hi=%g meanSi=%g meanSj=%g bond_state=%d\n",
+///ei,pi,bond_hist_ik[E],tag[i],bond_atom[i][k],r,r0,d_e,pj,(pi-d_p),rdSgmj,rdSgmi,rHj,rHi,mean_stress[i],mean_stress[j],bond_state);
       /// END central force
 
       double vShear[3], vSij[3], vYi[3], vMij[3];
       if((bond_state == 1) && (pi > 0.0)) { // if happens that unbonded particles attract each other
-        fprintf(logfile,"PairMCA::compute_elastic_force bond %d (%d - %d) is broken\n",bond_index_i,i,j);
+///        fprintf(logfile,"PairMCA::compute_elastic_force bond %d (%d - %d) is broken but attracts\n",bond_index_i,i,j);
         double rCDsum = cont_distance[i] + cont_distance[j];
         if (rCDsum > r) {
 //fprintf(stderr,"CMCA3D_TEPModel::ElasticForce(): '(!oNbrR_i.bLinked) && (Pi>0.0)' IDi=%d IDj=%d CDsum=%g Dij=%g oAtR_i.iNCount=%d oAtR_j.iNCount=%d\n",oAtL_i.lID,oAtL_j.lID,rCDsum,rDij,oAtR_i.iNCount,oAtR_j.iNCount);
@@ -418,9 +422,10 @@ inline void  PairMCA::compute_equiv_stress()
     int numb = num_bond[i];
     if (numb == 0) continue;
 
+    const int * const tag = atom->tag;
     const double * const theta = &(atom->theta[i][0]);
     double * const theta_prev = &(atom->theta_prev[i][0]);
-    double ** const bond_hist_i = &(bond_hist[i][0]);
+    double ** const bond_hist_i = &(bond_hist[tag[i]-1][0]);
     double *mean_stress = atom->mean_stress;
     double *cont_distance = atom->cont_distance;
 
@@ -468,9 +473,10 @@ inline void  PairMCA::compute_equiv_stress()
     int numb = num_bond[i];
     if (numb == 0) continue;
 
+    const int * const tag = atom->tag;
     double *equiv_stress = atom->equiv_stress;
     double * const mean_stress = atom->mean_stress;
-    double ** const bond_hist_i = &(bond_hist[i][0]);
+    double ** const bond_hist_i = &(bond_hist[tag[i]-1][0]);
     double rdSgmi = 0.0;
     for(k = 0; k < numb; k++)
     {
@@ -525,7 +531,7 @@ void PairMCA::correct_for_plasticity()
     const double * const equiv_stress_prev = atom->equiv_stress_prev;
 
 
-    double **bond_hist_i = &(bond_hist[i][0]);
+    double **bond_hist_i = &(bond_hist[tag[i]-1][0]);
     double *equiv_stress = atom->equiv_stress;
     double *equiv_strain = atom->equiv_strain;
     int itype = type[i];
@@ -572,7 +578,7 @@ void PairMCA::correct_for_plasticity()
             for(jk = 0; jk < num_bond[j]; jk++)
               if(bond_atom[j][jk] == tag[i]) {found = 1; break; }
             if (!found) error->all(FLERR,"PairMCA::correct_for_plasticity 'jk' not found");
-            double *bond_hist_jk = &(bond_hist[j][jk][0]);
+            double *bond_hist_jk = &(bond_hist[tag[j]-1][jk][0]);
 */
             rP = bond_hist_ik[P];
             rP = rP * rM + mean_stress[i] * rMpli;
@@ -716,8 +722,8 @@ void PairMCA::compute_total_force(int eflag, int vflag)
     }
     if (n2 == num_bond[i2]) error->all(FLERR,"Internal error in PairMCA: n2 not found");
 
-    double * const bond_hist1 = &(bond_hist[i1][n1][0]);
-    double * const bond_hist2 = &(bond_hist[i2][n2][0]);
+    double * const bond_hist1 = &(bond_hist[tag[i1]-1][n1][0]);
+    double * const bond_hist2 = &(bond_hist[tag[i2]-1][n2][0]);
 
     double pi = bond_hist1[P];
     double pj = bond_hist2[P];
@@ -729,6 +735,8 @@ void PairMCA::compute_total_force(int eflag, int vflag)
     q1 = mca_radius*(1. + bond_hist1[E]);
     q2 = mca_radius*(1. + bond_hist2[E]);
 
+///fprintf(logfile,"PairMCA::compute_total_force:  bond# %d i1=%d(tag=%d) n1=%d i2=%d(tag=%d) n2=%d pi=%g pj=%g ei=%g ej=%g\n",
+///n,i1,tag[i1],n1,i2,tag[i2],n2,pi,pj,bond_hist1[E],bond_hist2[E]);
     //int type = bondlist[n][2];
 
     double rD0 = 2.0*mca_radius;

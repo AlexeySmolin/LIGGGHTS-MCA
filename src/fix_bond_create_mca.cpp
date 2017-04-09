@@ -323,7 +323,7 @@ void FixBondCreateMCA::setup(int vflag)
   int nall = nlocal + nghost;
   int newton_bond = force->newton_bond;
 
-fprintf(logfile, "FixBondCreateMCA::setup newton_bond=%d\n",newton_bond);///AS DEBUG
+//fprintf(logfile, "FixBondCreateMCA::setup newton_bond=%d\n",newton_bond);///AS DEBUG
   for (i = 0; i < nall; i++) bondcount[i] = 0;
 
   for (i = 0; i < nlocal; i++)
@@ -588,7 +588,7 @@ void FixBondCreateMCA::post_integrate()
           */
 
           //reset history
-          double *tmp = bond_hist[i][num_bond[i]];
+          double *tmp = bond_hist[tag[i]-1][num_bond[i]];
           for (int ih = 0; ih < n_bondhist; ih++) {
               tmp[ih] = 0.;
           }
@@ -604,6 +604,8 @@ void FixBondCreateMCA::post_integrate()
           tmp[NY_PREV] = tmp[NY] = dely * rinv;
           tmp[NZ_PREV] = tmp[NZ] = delz * rinv;
 
+          tmp[TAG] = double(tag[j]);
+          tmp[STATE] = double(0);
           num_bond[i]++;
         }
         // increment bondcount, convert atom to new type if limit reached

@@ -1,8 +1,7 @@
 ####################################################################################################
 #
-# MCA example 05:  shear a cube of atoms of linear elastic material by shifting one its end.
-# Shear loading of a cubic sample of elasto-plastic material.
-# It shows the use of periodic boundary conditions and the possibility of modeling irreversible deformations.
+# MCA example 06:  rupture of a cube of elastic-plastic material by pulling one its end.
+# This example shows the possibility of modeling fracture under tensile loading of FCC-packed particles.
 #
 # unit sytem: Pa / m / s
 #
@@ -29,19 +28,21 @@ variable	Eh equal 1e10			# Work hardening modulus
 variable	nat equal 1		# number of atom types in simulation
 variable	rp  equal 10*0.0254	# particle radius 10 inches
 variable	d   equal 2*${rp}
-variable	bt  equal 1		# n_bondtypes, in future may be 2: linked | unlinked
-variable	bpa equal 6		# bonds_per_atom, should be >= coordination number: 6 for cubic, 12 for fcc 
+variable	bt  equal 1		# n_bondtypes, defined by atom types and thier combination
+variable	bpa equal 12		# bonds_per_atom, should be >= coordination number: 6 for cubic, 12 for fcc
+
+variable	fcc equal ${d}/0.7071067812 # lattice parameter (for fcc)
 
 ####################################################################################################
 # INITIALIZE LAMMPS
 ####################################################################################################
 dimension	3
 units		si
-boundary	p p f	# style of boundaries for the global simulation box in each dimension
+boundary	f f f	# style of boundaries for the global simulation box in each dimension
 			# boundary x y z (x,y,z = one or two letters:
 			# p (periodic) or f (fixed) or s (shrink-wrapped) or m (shrink-wrapped with a minimum)
 
-atom_style	mca radius ${rp} packing sc n_bondtypes ${bt} bonds_per_atom ${bpa}
+atom_style	mca radius ${rp} packing fcc n_bondtypes ${bt} bonds_per_atom ${bpa}
 
 atom_modify	map array # map keyword determines how atom ID lookup is done.
 # Lookups are performed by bond routines to find the local atom index associated with a global atom ID. 
@@ -62,7 +63,7 @@ communicate	single vel yes
 ####################################################################################################
 # CREATE INITIAL GEOMETRY
 ####################################################################################################
-variable	L  equal 11*${d}	#10*${d}+${rp}
+variable	L  equal 11*${fcc}	#10*${d}+${rp}
 variable	2L equal 2*$L
 region		box block 0 ${L} 0 ${L} 0 ${L} units box	#-$L ${2L} -$L ${2L} -$L ${2L} units box
 		# Regions are used to group atoms, delete atoms to create a void, insert atoms in a specified region, etc.
@@ -83,7 +84,8 @@ timestep	1.0e-9		# Small step for initialization ???
 # INTERACTION PHYSICS / MATERIAL MODEL
 ####################################################################################################
 pair_style 	mca ${skin}
-pair_coeff	* * ${COF} ${G} ${K} ${Sy} ${Eh}
+pair_coeff	1 1 ${COF} ${G} ${K} ${Sy} ${Eh}
+
 bond_style 	mca
 # In movale cellular automaton (MCA) method, a bond differs from one used in MD and DEM, where bond adds forces acting on atoms.
 # MCA bonds are obligatory defined between all interacting pairs of atomata in order to specify if the automata belong to one body
@@ -91,15 +93,39 @@ bond_style 	mca
 # criterion is set, the automata interact in a different manner, in particular, they do not resist to tension and produce tangential
 # dry friction force. And vice versa, an unlinked pair can switch to linked/bonded state which can be interperted as crack healing or microwelding.
 
-bond_coeff	*
+bond_coeff	1 -1 1 0.0001
+# [Syntax:]
+# bond_coeff N args
+# - N = bond type (see asterisk form below)
+# - args = coefficients for one or more bond types
+# The following coefficients must be defined for each bond type via the bond_coeff command as in the example above, 
+# or in the data file or restart files read by the read_data or read_restart commands:
+#  - CrackVelo = velocity of crack propagation (m/s)
+#  - FRACT_CRITERION FRACT_PARAM - index of fracture criterion (style of breaking the bond) and corresponding parameters:
+#                 0 = no fracture, no parameters
+#                 1 = ultimate equivalent strain, needs one parameter: strain
+#                 2 = ultimate equivalent stress, needs one parameter: stress (Pa)
+#                 3 = Drucker-Prager criterion, needs two parameters: tension_strength (Pa) compression_strength (Pa)
+#  - BIND_CRITERION  BIND_PARAM - index of binding criterion (style of creating new bond) and corresponding parameters:
+#                 0 = no binding, no parameters
+#                 1 = ultimate pressure, needs one parameter: pressure (Pa)
+#                 2 = ultimate plastic heat, needs one parameter: plastic_heat (J/kg)
+#                 3 = combined criterion, needs two parameters: pressure plastic_heat
+# [Examples:]
+# bond_coeff	*
+# bond_coeff	1 -1 1 0.1
+# bond_coeff	1 -1 2 3e8
+# bond_coeff	1 1000 3 3e8 8e8
+# bond_coeff	1 3000 3 3e8 8e8 1 5e+9
+# bond_coeff	1 3000 3 3e8 8e8 2 30
+# bond_coeff	1 3000 3 3e8 8e8 3 4e+9 30
 
 mass 		1 1.0 #dummy
 
 ####################################################################################################
 # CREATE PARTICLES
 ####################################################################################################
-variable 	sc equal $d	# lattice spacing for creating particles
-lattice		sc ${sc}
+lattice		fcc ${fcc}
 create_atoms	1 region box	#bc	# create particles in the cube
 
 ####################################################################################################
@@ -108,21 +134,34 @@ create_atoms	1 region box	#bc	# create particles in the cube
 set		group all density ${rho} # diameter ${d} - for mca we set their size in 'atom_style mca radius'
 
 ####################################################################################################
+# DEFINE WALLS TO AVOID LOST OF ATOMS
+####################################################################################################
+# Everything that happens during a simulation besides force computation, neighbor list construction, and output, is a "fix".
+# This includes time integration (update of coordinates and velocities), force constraints or boundary conditions
+# (SHAKE or walls), and diagnostics (compute a diffusion coefficient).
+#fix boxwalls_x1 all wall/gran model hertz tangential history primitive type 1 xplane -$L
+#fix boxwalls_x2 all wall/gran model hertz tangential history primitive type 1 xplane +${2L}
+#fix boxwalls_y1 all wall/gran model hertz tangential history primitive type 1 yplane -1
+#fix boxwalls_y2 all wall/gran model hertz tangential history primitive type 1 yplane +1
+#fix boxwalls_z1 all wall/gran model hertz tangential history primitive type 1 zplane -$L
+#fix boxwalls_z2 all wall/gran model hertz tangential history primitive type 1 zplane +1
+
+####################################################################################################
 # DEFINE VELOCITY BOUNDARY CONDITIONS
 ####################################################################################################
-variable	Height equal 10*${sc}
+variable	Height equal 10*${fcc}-${rp}
 region          top block EDGE EDGE EDGE EDGE ${Height} EDGE units box
 region          bot block EDGE EDGE EDGE EDGE EDGE 0.0 units box
 group           top region top
 group           bot region bot
 
 # Loading parameters
-variable        vel0 equal 0.01 # shifting velocity
-variable        ts equal 10000.0*1.E-5 # speed-up time = 10000 steps
+variable        vel0 equal 0.01 # pull velocity
+variable        ts equal 10000.0*1.E-6 # speed-up time = 10000 steps
 variable        vel_up equal ${vel0}*(1.0-exp(-(2.4*time/${ts})*(2.4*time/${ts})))
-variable        vel_down equal 0.0	#-v_vel_up
-fix             topV_fix top mca/setvelocity 0 v_vel_up 0
-fix             botV_fix bot mca/setvelocity 0 v_vel_down 0
+variable        vel_down equal 0	#-${vel_up}
+fix             topV_fix top mca/setvelocity 0 0 v_vel_up
+fix             botV_fix bot mca/setvelocity 0 0 v_vel_down
 
 ####################################################################################################
 # CREATE BONDS BETWEEN PARTICLES
@@ -144,9 +183,9 @@ variable	dt equal 1.e-5	#4.0E-5
 if "${TimeStep} < ${dt}" then &
   "print 'Recommended time step ${TimeStep} is smaller than dt= ${dt}'" &
   quit
-variable	fulltime equal 0.1	#1.	##4.	# Simulation time
+variable	fulltime equal 0.1	# Simulation time
 variable	runstep equal  ${fulltime}/${dt}
-variable	savetime equal 0.001 #0.01	##0.04	# 0.0001
+variable	savetime equal 0.001	# time interval for saving dump
 variable	filestep equal ${savetime}/${dt}
 timestep	${dt}
 
@@ -196,23 +235,7 @@ fix outfile all print ${filestep} "${mytime} ${px} ${py} ${pz} ${pfx} ${pfy} ${p
 run 1
 fix_modify	bondcr every 0  #do not create new bonds after this line
 
-run		${runstep}
+#run 2
+#quit
 
-# Reverse loading smoothly
-variable	vel_revers equal  ${vel0}*cos((time-${fulltime})*2.0*PI/${ts})
-unfix		topV_fix
-fix		topV_fix top mca/setvelocity 0 v_vel_revers 0
-variable	revstep equal ${ts}/(2.0*${dt})
-run		${revstep}
-
-# Unloading
-variable	vel_unload equal  -${vel0}
-unfix		topV_fix
-fix		topV_fix top mca/setvelocity 0 v_vel_unload 0
-variable	unloadstep equal  ${runstep}/3.
-run		${unloadstep}
-
-# free
-unfix		topV_fix
-fix		topV_fix top mca/setvelocity NULL NULL NULL
 run ${runstep}
