@@ -57,7 +57,7 @@ class FixBondCreateMCA : public Fix {
  public:
   FixBondCreateMCA(class LAMMPS *, int, char **);
   ~FixBondCreateMCA();
-  void post_create();
+//  void post_create(); registernig of the fixes are moved to AtomVecMCA::init() because they should be registered once
   int setmask();
   void init();
   void init_list(int, class NeighList *);
@@ -87,6 +87,7 @@ class FixBondCreateMCA : public Fix {
   bool already_bonded(int,int);
 
   int me;
+  int init_state;        // initial state of the bond, 1 - unbonded; 0 - bonded (default)
   int iatomtype,jatomtype;
   int btype,seed;
   int imaxbond,jmaxbond;
@@ -96,10 +97,10 @@ class FixBondCreateMCA : public Fix {
   int createcount,createcounttotal;   // bond formation stats
 
   int nmax;
-  int newperts;
+  int maxbondsperatom;   // max bonds per atom
   int *bondcount;        // count of created bonds this atom is part of
-  int *npartner;           //# of preferred atoms for this atom to bond to //NP modified C.K.
-  int **partner;          // IDs of preferred atoms for this atom to bond to //NP modified C.K.
+  int *npartner;         // # of preferred atoms for this atom to bond to
+  int **partner;         // IDs of preferred atoms for this atom to bond to
   double *probability;   // random # to use in decision to form bond
 
   class RanMars *random;

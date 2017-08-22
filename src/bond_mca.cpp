@@ -220,9 +220,9 @@ void BondMCA::compute(int eflag, int vflag)
 
     //1st check if the bond has been already broken,
     if(bond_state) { //AS TODO may be corrected in case of slow fracture using crackVelo
-      if(bond_state==2) {
+      if(bond_state == NOT_INTERACT) {
         if(rIJ <= (cont_distance1 + cont_distance2)) {
-          bond_state = bondlist[n][3] = 1;
+          bond_state = bondlist[n][3] = UNBONDED;
           bond_hist1[STATE] = double(bond_state);
           bond_hist2[STATE] = double(bond_state);
 ///          fprintf(logfile,"BondMCA::compute(): bond %d is contacting\n",n);
@@ -230,10 +230,11 @@ void BondMCA::compute(int eflag, int vflag)
         else continue;
       } else {
         if(rIJ > (cont_distance1 + cont_distance2)) {
-          bond_state = bondlist[n][3] = 2;
+          bond_state = bondlist[n][3] = NOT_INTERACT;
           bond_hist1[STATE] = double(bond_state);
           bond_hist2[STATE] = double(bond_state);
-///          fprintf(logfile,"BondMCA::compute(): bond %d is not interacting\n",n);
+//fprintf(logfile,"BondMCA::compute(): bond %d(%d-%d) of %d : rIJ(%-1.16e) > cont_distance1(%-1.16e)\n",n,i1,i2,nbondlist,rIJ,(cont_distance1 + cont_distance2));
+          fprintf(logfile,"BondMCA::compute(): bond %d is not interacting\n",n);
           continue;
         }
         if(bind_mode==BINDSTYLE_NONE) continue;
@@ -286,9 +287,9 @@ void BondMCA::compute(int eflag, int vflag)
         broken = breakVal1[b_type] < criterion_mag;
 //fprintf(logfile,"bond# %d EQUIV_STRAIN: breakVal1[%d]=%g  rT1=%g rT2=%g\n", n,  b_type, breakVal1[b_type], rT1, rT2);
         if(broken) {
-          bondlist[n][3] = 1;
-          bond_hist1[STATE] = double(bondlist[n][3]);
-          bond_hist2[STATE] = double(bondlist[n][3]);
+          bond_state = bondlist[n][3] = UNBONDED;
+          bond_hist1[STATE] = double(bond_state);
+          bond_hist2[STATE] = double(bond_state);
 ///          fprintf(logfile,"broken bond %d at step %d\n",n,update->ntimestep);
 ///          fprintf(logfile,"   it was EQUIV_STRAIN: breakVal1[%d]=%g < criterion_mag=%g\n", b_type, breakVal1[b_type], criterion_mag);
         }
@@ -314,8 +315,8 @@ void BondMCA::compute(int eflag, int vflag)
         criterion_mag = rT1 > rT2 ? rT1 : rT2;
         broken = breakVal1[b_type] < criterion_mag;
         if(broken) {
-          bondlist[n][3] = 1;
-          bond_hist1[STATE] = bond_hist2[STATE] = double(bondlist[n][3]);
+          bond_state = bondlist[n][3] = UNBONDED;
+          bond_hist1[STATE] = bond_hist2[STATE] = double(bond_state);
 ///          fprintf(logfile,"broken bond %d at step %d\n",n,update->ntimestep);
 ///          fprintf(logfile,"   it was EQUIV_STRESS: breakVal1[%d]=%g < criterion_mag=%g\n", b_type, breakVal1[b_type], criterion_mag);
         }
@@ -337,16 +338,16 @@ void BondMCA::compute(int eflag, int vflag)
         criterion_mag = shapeDrPr[b_type] * rT1 + volumeDrPr[b_type] * rT2;
         broken = breakVal2[b_type] < criterion_mag;
         if(broken) {
-          bondlist[n][3] = 1;
-          bond_hist1[STATE] = bond_hist2[STATE] = double(bondlist[n][3]);
+          bond_state = bondlist[n][3] = UNBONDED;
+          bond_hist1[STATE] = bond_hist2[STATE] = double(bond_state);
 ///          fprintf(logfile,"broken bond %d at step %d\n",n,update->ntimestep);
 /////////          fprintf(logfile,"   it was DRUCKER_PRAGER: breakVal1[%d]=%g breakVal2[%d]=%g < criterion_mag=%g\n", b_type, breakVal1[b_type], breakVal2[b_type], criterion_mag);
         }
       }
       if((broken)  && (rIJ > (cont_distance1 + cont_distance2))) {
-          bondlist[n][3] = 2;
-          bond_hist1[STATE] = bond_hist2[STATE] = double(bondlist[n][3]);
-///          fprintf(logfile,"BondMCA::compute(): bond %d is broken and not interacting\n",n);
+          bond_state = bondlist[n][3] = NOT_INTERACT;
+          bond_hist1[STATE] = bond_hist2[STATE] = double(bond_state);
+          fprintf(logfile,"BondMCA::compute(): bond %d is broken and not interacting\n",n);
       }
     }
   }
@@ -654,6 +655,20 @@ void BondMCA::read_restart(FILE *fp)
   MPI_Bcast(&bindPlastHeat[1],atom->nbondtypes,MPI_DOUBLE,0,world);
 
   for (int i = 1; i <= atom->nbondtypes; i++) setflag[i] = 1;
+}
+
+/* ---------------------------------------------------------------------- */
+
+void BondMCA::write_data(FILE *fp)
+{
+   for (int i = 1; i <= atom->nbondtypes; i++) {
+     fprintf(fp,"%d %d %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e\n",
+            breakmode[i],bindmode[i],
+            crackVelo[i],
+            breakVal1[i],breakVal2[i],
+            shapeDrPr[i],volumeDrPr[i],
+            bindPressure[i],bindPlastHeat[i]);
+   }
 }
 
 /* ---------------------------------------------------------------------- */

@@ -83,7 +83,7 @@ AtomVecMCA::AtomVecMCA(LAMMPS *lmp) : AtomVec(lmp)
   size_reverse = 6;  // # in reverse comm
   size_border = 22+MAX_BONDS*(2+BOND_HIST_LEN);  // # in border comm (periodic boundary ?)
   size_velocity = 6; ///AS # of velocity based quantities
-  size_data_atom = 7;///AS TODO number of values in Atom line
+  size_data_atom = 19;///AS it seems that 22-3=19 TODO number of values in Atom line
   size_data_vel = 7; ///AS TODO number of values in Velocity line
   xcol_data = 5;     ///AS TODO column (1-N) where x is in Atom line
 
@@ -234,16 +234,30 @@ void AtomVecMCA::init()
 
   if(fbe == NULL)
   {
-      char **fixarg = new char*[3];
-      fixarg[0] = strdup("exchange_bonds_mca");
-      fixarg[1] = strdup("all");
-      fixarg[2] = strdup("bond/exchange/mca");
-      modify->add_fix(3,fixarg);
-      fbe = (FixBondExchangeMCA*) modify->find_fix_id(fixarg[0]);
-      free(fixarg[0]);
-      free(fixarg[1]);
-      free(fixarg[2]);
-      delete [] fixarg;
+  // registernig of these fixes are moved from FixBondCreateMCA::post_create() because they should be registered once
+///      char **fixarg = new char*[3];
+    // register a fix to call bond/exchange/mca register to excange mca bonds across processors
+    char* fixarg[4];
+    fixarg[0] = strdup("exchange_bonds_mca");
+    fixarg[1] = strdup("all");
+    fixarg[2] = strdup("bond/exchange/mca");
+    modify->add_fix(3,fixarg);
+    fbe = (FixBondExchangeMCA*) modify->find_fix_id(fixarg[0]);
+    free(fixarg[0]);
+    free(fixarg[1]);
+    free(fixarg[2]);
+///      delete [] fixarg;
+
+    ///char* fixarg[4];
+
+    // register a fix to call mca/meanstress to compute mean stress (pressure) as a predictor in FixMCAMeanStress::pre_force
+    fixarg[0] = strdup("mca_meanstress");
+    fixarg[1] = strdup("all");
+    fixarg[2] = strdup("mca/meanstress");
+    modify->add_fix(3,fixarg);
+    free(fixarg[0]);
+    free(fixarg[1]);
+    free(fixarg[2]);
   }
 }
 
@@ -2123,17 +2137,19 @@ fprintf(logfile,"AtomVecMCA::data_atom\n"); ///AS DEBUG
   if (tag[nlocal] <= 0)
     error->one(FLERR,"Invalid atom ID in Atoms section of data file");
 
-  type[nlocal] = atoi(values[1]);
+  molecule[nlocal] = atoi(values[1]); ///AS We moved molecule parameter after all granular parameters
+  if (molecule[nlocal] <= 0)
+    error->one(FLERR,"Invalid molecule in Atoms section of data file");
+
+  type[nlocal] = atoi(values[2]);
   if (type[nlocal] <= 0 || type[nlocal] > atom->ntypes)
     error->one(FLERR,"Invalid atom type in Atoms section of data file");
 
-  density[nlocal] = atof(values[2]);
+  density[nlocal] = atof(values[3]);
   if (density[nlocal] <= 0.0)
     error->one(FLERR,"Invalid density in Atoms section of data file");
 
   rmass[nlocal] = get_init_volume() * density[nlocal];
-
-  molecule[nlocal] = atoi(values[3]); ///AS We moved molecule parameter after all granular parameters
 
   x[nlocal][0] = coord[0];
   x[nlocal][1] = coord[1];
@@ -2226,8 +2242,8 @@ void AtomVecMCA::pack_data(double **buf)
   int nlocal = atom->nlocal;
   for (int i = 0; i < nlocal; i++) {
     buf[i][0] = ubuf(tag[i]).d;
-    buf[i][1] = ubuf(type[i]).d;
-    buf[i][2] = rmass[i] / get_init_volume();
+    buf[i][1] = ubuf(molecule[i]).d;
+    buf[i][2] = ubuf(type[i]).d;
 
     buf[i][3] = x[i][0];
     buf[i][4] = x[i][1];
@@ -2238,18 +2254,19 @@ void AtomVecMCA::pack_data(double **buf)
 
 ///AS inertia can be restored using mca_radius and density    buf[i][9] = mca_inertia[i][0];
 ///AS ????????????
-    buf[i][9] = theta[i][0]; // like coordinates
-    buf[i][10] = theta[i][1];
-    buf[i][11] = theta[i][2];
-    buf[i][12] = theta_prev[i][0]; // like coordinates
-    buf[i][13] = theta_prev[i][1];
-    buf[i][14] = theta_prev[i][2];
-    buf[i][15] = mean_stress[i];
-    buf[i][16] = mean_stress_prev[i];
-    buf[i][17] = equiv_stress[i];
-    buf[i][18] = equiv_stress_prev[i];
-    buf[i][19] = equiv_strain[i];
-    buf[i][20] = cont_distance[i];
+    buf[i][9] = rmass[i] / get_init_volume();
+    buf[i][10] = theta[i][0]; // like coordinates
+    buf[i][11] = theta[i][1];
+    buf[i][12] = theta[i][2];
+    buf[i][13] = theta_prev[i][0]; // like coordinates
+    buf[i][14] = theta_prev[i][1];
+    buf[i][15] = theta_prev[i][2];
+    buf[i][16] = mean_stress[i];
+    buf[i][17] = mean_stress_prev[i];
+    buf[i][18] = equiv_stress[i];
+    buf[i][19] = equiv_stress_prev[i];
+    buf[i][20] = equiv_strain[i];
+    buf[i][21] = cont_distance[i];
   }
 }
 
@@ -2260,10 +2277,11 @@ void AtomVecMCA::pack_data(double **buf)
 void AtomVecMCA::pack_data(double **buf,int tag_offset)
 {
   int nlocal = atom->nlocal;
+fprintf(stderr, "AtomVecMCA::pack_data:  tag_offset=%d \n", tag_offset);
   for (int i = 0; i < nlocal; i++) {
     buf[i][0] = ubuf(tag[i]+tag_offset).d;
-    buf[i][1] = ubuf(type[i]).d;
-    buf[i][2] = rmass[i] / get_init_volume();
+    buf[i][1] = ubuf(molecule[i]).d;
+    buf[i][2] = ubuf(type[i]).d;
 
     buf[i][3] = x[i][0];
     buf[i][4] = x[i][1];
@@ -2274,18 +2292,19 @@ void AtomVecMCA::pack_data(double **buf,int tag_offset)
 
 ///AS inertia can be restored using mca_radius and density        buf[i][9] = mca_inertia[i][0];
 ///AS ????????????
-    buf[i][9] = theta[i][0]; // like coordinates
-    buf[i][10] = theta[i][1];
-    buf[i][11] = theta[i][2];
-    buf[i][12] = theta_prev[i][0]; // like coordinates
-    buf[i][13] = theta_prev[i][1];
-    buf[i][14] = theta_prev[i][2];
-    buf[i][15] = mean_stress[i];
-    buf[i][16] = mean_stress_prev[i];
-    buf[i][17] = equiv_stress[i];
-    buf[i][18] = equiv_stress_prev[i];
-    buf[i][19] = equiv_strain[i];
-    buf[i][20] = cont_distance[i];
+    buf[i][9] = rmass[i] / get_init_volume();
+    buf[i][10] = theta[i][0]; // like coordinates
+    buf[i][11] = theta[i][1];
+    buf[i][12] = theta[i][2];
+    buf[i][13] = theta_prev[i][0]; // like coordinates
+    buf[i][14] = theta_prev[i][1];
+    buf[i][15] = theta_prev[i][2];
+    buf[i][16] = mean_stress[i];
+    buf[i][17] = mean_stress_prev[i];
+    buf[i][18] = equiv_stress[i];
+    buf[i][19] = equiv_stress_prev[i];
+    buf[i][20] = equiv_strain[i];
+    buf[i][21] = cont_distance[i];
   }
 }
 
@@ -2308,15 +2327,24 @@ void AtomVecMCA::write_data(FILE *fp, int n, double **buf)
 {
 ///AS TODO ??? what we need to save?
   for (int i = 0; i < n; i++)
-    fprintf(fp,"%d %d %-1.16e %-1.16e %-1.16e %-1.16e %d %d %d %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e\n",
-            (int) ubuf(buf[i][0]).i,(int) ubuf(buf[i][1]).i, // tag[i]+tag_offset  type[i]
-            buf[i][2],				// rmass[i] / get_init_volume();
+    fprintf(fp,TAGINT_FORMAT " " TAGINT_FORMAT " %d %-1.16e %-1.16e %-1.16e %d %d %d\n",
+            (tagint) ubuf(buf[i][0]).i,(tagint) ubuf(buf[i][1]).i, // tag[i]+tag_offset,  ubuf(molecule[i]).d
+            (int) ubuf(buf[i][2]).i,                               // type[i]
+            buf[i][3],buf[i][4],buf[i][5],	// x[i][0] x[i][1] x[i][2]
+            (int) ubuf(buf[i][6]).i,(int) ubuf(buf[i][7]).i, // ((image[i] & IMGMASK) - IMGMAX) ((image[i] >> IMGBITS & IMGMASK) - IMGMAX)
+            (int) ubuf(buf[i][8]).i);		// ((image[i] >> IMG2BITS) - IMGMAX)
+/*
+    fprintf(fp,TAGINT_FORMAT " " TAGINT_FORMAT " %d %-1.16e %-1.16e %-1.16e %d %d %d %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e %-1.16e\n",
+            (tagint) ubuf(buf[i][0]).i,(tagint) ubuf(buf[i][1]).i, // tag[i]+tag_offset,  ubuf(molecule[i]).d
+            (int) ubuf(buf[i][2]).i,                               // type[i]
             buf[i][3],buf[i][4],buf[i][5],	// x[i][0] x[i][1] x[i][2]
             (int) ubuf(buf[i][6]).i,(int) ubuf(buf[i][7]).i, // ((image[i] & IMGMASK) - IMGMAX) ((image[i] >> IMGBITS & IMGMASK) - IMGMAX)
             (int) ubuf(buf[i][8]).i,		// ((image[i] >> IMG2BITS) - IMGMAX)
-            buf[i][9],buf[i][10],buf[i][11],	// theta[i][1] theta[i][2] theta[i][2]
-            buf[i][12],buf[i][13],buf[i][14],	// theta_prev[i][1] theta_prev[i][2] theta_prev[i][2]
-            buf[i][15],buf[i][16],buf[i][17],buf[i][18],buf[i][19],buf[i][20]);	// mean_stress[i] mean_stress_prev[i] equiv_stress[i] equiv_stress_prev[i] equiv_strain[i] cont_distance[i]
+            buf[i][9],				// rmass[i] / get_init_volume();
+            buf[i][10],buf[i][11],buf[i][12],	// theta[i][1] theta[i][2] theta[i][2]
+            buf[i][13],buf[i][14],buf[i][15],	// theta_prev[i][1] theta_prev[i][2] theta_prev[i][2]
+            buf[i][16],buf[i][17],buf[i][18],buf[i][19],buf[i][20],buf[i][21]);	// mean_stress[i] mean_stress_prev[i] equiv_stress[i] equiv_stress_prev[i] equiv_strain[i] cont_distance[i]
+*/
 }
 
 /* ----------------------------------------------------------------------

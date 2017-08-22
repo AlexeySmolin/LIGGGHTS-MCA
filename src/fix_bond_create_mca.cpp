@@ -62,10 +62,9 @@
 
 using namespace LAMMPS_NS;
 using namespace FixConst;
+using namespace MCAAtomConst;
 
 #define BIG 1.0e20
-
-using namespace MCAAtomConst;
 
 /* ---------------------------------------------------------------------- */
 
@@ -90,7 +89,7 @@ FixBondCreateMCA::FixBondCreateMCA(LAMMPS *lmp, int narg, char **arg) :
   jatomtype = atoi(arg[5]);
   double cutoff = atof(arg[6]);
   btype = atoi(arg[7]);
-  newperts = atoi(arg[8]);
+  maxbondsperatom = atoi(arg[8]);
 
   if (iatomtype < 1 || iatomtype > atom->ntypes ||
       jatomtype < 1 || jatomtype > atom->ntypes)
@@ -107,6 +106,7 @@ FixBondCreateMCA::FixBondCreateMCA(LAMMPS *lmp, int narg, char **arg) :
   inewtype = iatomtype;
   jmaxbond = 0;
   jnewtype = jatomtype;
+  init_state = BONDED;
   fraction = 1.0;
   int seed = 12345;
 
@@ -128,6 +128,12 @@ FixBondCreateMCA::FixBondCreateMCA(LAMMPS *lmp, int narg, char **arg) :
       if (jnewtype < 1 || jnewtype > atom->ntypes)
         error->all(FLERR,"Invalid atom type in fix bond/create/mca command");
       iarg += 3;
+    } else if (strcmp(arg[iarg],"state") == 0) {
+      if (iarg+2 > narg) error->all(FLERR,"Illegal fix bond/create/mca command");
+      init_state = atoi(arg[iarg+1]);
+      if (init_state < BONDED || init_state > NOT_INTERACT)
+        error->all(FLERR,"Illegal state in fix bond/create/mca command");
+      iarg += 2;
     } else if (strcmp(arg[iarg],"prob") == 0) {
       if (iarg+3 > narg) error->all(FLERR,"Illegal fix bond/create/mca command");
       fraction = atof(arg[iarg+1]);
@@ -162,8 +168,8 @@ FixBondCreateMCA::FixBondCreateMCA(LAMMPS *lmp, int narg, char **arg) :
 
   // set comm sizes needed by this fix
 
-  comm_forward = newperts + 2; //NP modified C.K. 2;
-  comm_reverse = newperts + 1; //NP modified C.K. 2;
+  comm_forward = maxbondsperatom + 2;
+  comm_reverse = maxbondsperatom + 1;
 
   // allocate arrays local to this fix
 
@@ -171,7 +177,7 @@ FixBondCreateMCA::FixBondCreateMCA(LAMMPS *lmp, int narg, char **arg) :
   npartner = NULL;
   partner = NULL;
   probability = NULL;
-  //NP modified C.K. distsq = NULL;
+  // distsq = NULL;
 
   // zero out stats
 
@@ -195,17 +201,17 @@ FixBondCreateMCA::~FixBondCreateMCA()
   memory->sfree(npartner);
   memory->destroy(partner);
   memory->sfree(probability);
-  //NP modified C.K. memory->sfree(distsq);
 
   //NP do _not_  delete this fix here - should stay active
   //NP modify->delete_fix("exchange_bonds_mca");
 }
 
-/* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- *
+  // registernig of these fixes are moved to AtomVecMCA::init() because they should be registered once
 
 void FixBondCreateMCA::post_create()
 {
-   // register a fix to call mca/meanstress
+   / register a fix to call mca/meanstress
     char* fixarg[4];
 
     fixarg[0] = strdup("mca_meanstress");
@@ -216,7 +222,7 @@ void FixBondCreateMCA::post_create()
     free(fixarg[1]);
     free(fixarg[2]);
 
-/*   // register a fix to excange mca bonds across processors
+/   // register a fix to excange mca bonds across processors
     fixarg[0] = strdup("exchange_bonds_mca");
     fixarg[1] = strdup("all");
     fixarg[2] = strdup("bond/exchange/mca");
@@ -224,8 +230,8 @@ void FixBondCreateMCA::post_create()
     free(fixarg[0]);
     free(fixarg[1]);
     free(fixarg[2]);
-*/
-}
+/
+}*/
 
 
 /* ---------------------------------------------------------------------- */
@@ -360,11 +366,12 @@ void FixBondCreateMCA::post_integrate()
   double xtmp,ytmp,ztmp,delx,dely,delz;
   int *ilist,*jlist,*numneigh,**firstneigh;
   int flag;
+  double *cont_distance = atom->cont_distance;
 
-//fprintf(logfile, "FixBondCreateMCA::post_integrate \n");///AS DEBUG
   if (nevery == 0 || update->ntimestep % nevery ) {
     return;
   }
+//  fprintf(logfile, "FixBondCreateMCA::post_integrate iatomtype=%d jatomtype=%d btype=%d cutsq=%g\n",iatomtype, jatomtype, btype, cutsq);///AS DEBUG
 
   // need updated ghost atom positions
 
@@ -381,19 +388,19 @@ void FixBondCreateMCA::post_integrate()
 
   if (atom->nmax > nmax) {
     nmax = atom->nmax;
-    memory->grow(partner,nmax,newperts,"fix_bond_create:partner");
-    npartner = (int*) memory->srealloc(npartner,nmax*sizeof(int),"fix_bond_create:npartner");
-    probability = (double *)memory->srealloc(probability,nmax*sizeof(double),"fix_bond_create:probability");
+    memory->grow(partner,nmax,maxbondsperatom,"bond/create/mca:partner");
+    npartner = (int*) memory->srealloc(npartner,nmax*sizeof(int),"bond/create/mca:npartner");
+    probability = (double *)memory->srealloc(probability,nmax*sizeof(double),"bond/create/mca:probability");
   }
 
   int nlocal = atom->nlocal;
   int nall = atom->nlocal + atom->nghost;
 
 #if defined (_OPENMP)
-#pragma omp parallel for private(i,j,nall) default(shared) schedule(static)
+#pragma omp parallel for private(i,j) default(shared) schedule(static)
 #endif
   for (i = 0; i < nall; i++) {
-    for(j = 0; j< newperts; j++) partner[i][j] = 0;
+    for(j = 0; j< maxbondsperatom; j++) partner[i][j] = 0;
     npartner[i] = 0;
     probability[i] = 1.;
   }
@@ -455,27 +462,36 @@ void FixBondCreateMCA::post_integrate()
       delz = ztmp - x[j][2];
       double rsq = delx*delx + dely*dely + delz*delz;
       if (rsq >= cutsq) {
-//if(tag[i]==10) fprintf(logfile,"\t\trsq (%g) >= cutsq (%g)\n",rsq,cutsq);
+//if(tag[i]==10) fprintf(logfile,"FixBondCreateMCA::post_integrate\trsq (%g) >= cutsq (%g) btw atoms %d and %d \n",rsq,cutsq,i,j);
         continue;
+      }
+
+      if (init_state == UNBONDED) {
+        double contsq = cont_distance[i] + cont_distance[j];
+        contsq *= contsq;
+        if (rsq > contsq) {
+//          fprintf(logfile,"FixBondCreateMCA::post_integrate\trsq (%g) >= contsq (%g) btw atoms %d and %d \n",rsq,contsq,i,j);
+          continue;
+        }
       }
 
       if(already_bonded(i,j)) {
-        fprintf(logfile,"existing bond btw atoms %d and %d \n",i,j);
+//        fprintf(logfile,"FixBondCreateMCA::post_integrate\tExisting bond btw atoms %d and %d \n",i,j);
         continue;
       }
 
-      if(npartner[i]==newperts || npartner[j]==newperts)
-      {
+      if(npartner[i]==maxbondsperatom || npartner[j]==maxbondsperatom) {
+        fprintf(logfile,"FixBondCreateMCA::post_integrate\tnpartner[%d]=%d and npartner[%d]=%d Rij=%g\n",i,npartner[i],j,npartner[j],sqrt(rsq));
           flag = 1;
           continue;
       }
 
 //if(tag[i]==10) fprintf(logfile,"\t\tPARTNER!!!\n");
 //#pragma omp critical
-      {
+//      {
       partner[i][npartner[i]] = tag[j];
       partner[j][npartner[j]] = tag[i];
-      }
+//      }
 //#pragma omp atomic
       npartner[i]++;
 //#pragma omp atomic
@@ -484,7 +500,7 @@ void FixBondCreateMCA::post_integrate()
     }
   }
 
-  if(flag) error->warning(FLERR,"Could not generate all possible bonds");
+  if(flag) error->warning(FLERR,"FixBondCreateMCA::post_integrate\tCould not generate all possible bonds");
 
   // reverse comm of distsq and partner
   // not needed if newton_pair off since I,J pair was seen by both procs
@@ -498,7 +514,7 @@ void FixBondCreateMCA::post_integrate()
 
   if (fraction < 1.0) {
 #if defined (_OPENMP)
-#pragma omp parallel for private(i,nlocal) default(shared) schedule(static)
+#pragma omp parallel for private(i) default(shared) schedule(static)
 #endif
     for (i = 0; i < nlocal; i++)
       if (npartner[i]) probability[i] = random->uniform();
@@ -527,7 +543,10 @@ void FixBondCreateMCA::post_integrate()
 #pragma omp parallel for private(i,j,k,xtmp,ytmp,ztmp,delx,dely,delz) default(shared) reduction(+:ncreate) schedule(static)
 #endif
   for (i = 0; i < nlocal; i++) {
-    if (npartner[i] == 0) continue;
+    if (npartner[i] == 0) {
+      //fprintf(logfile,"FixBondCreateMCA::post_integrate: npartner[%d] == 0\n",i,npartner[i]);
+      continue;
+    }
 
     double min,max;
     xtmp = x[i][0];
@@ -546,16 +565,20 @@ void FixBondCreateMCA::post_integrate()
         j = domain->closest_image(i,j);
         if(tag[j] != partner[i][k]) {
             fprintf(logfile,"FixBondCreateMCA::post_integrate: for i=%d partner k=%d j=%d (tag=%d) != partner[i][k]=%d at step %ld\n",i,k,j,tag[j],partner[i][k],update->ntimestep);
-            error->one(FLERR,"tag != partner in fix bond/create");
+            error->one(FLERR,"Error: tag[j] != partner in fix bond/create/mca");
         }
 
         int found = 0;
         for(int jp = 0; jp < npartner[j]; jp++)
             if(partner[j][jp] == tag[i]) found = 1;
-        if (!found) error->all(FLERR,"Internal fix bond/create error");
+        if (!found) {
+           fprintf(logfile,"FixBondCreateMCA::post_integrate: i=%d(tag=%d) not found as a partner from %d for partner k=%d j=%d (tag=%d) at step %ld\n",i,tag[i],npartner[j],k,j,tag[j],update->ntimestep);
+           for(int jp = 0; jp < npartner[j]; jp++) fprintf(logfile,"\t\tpartner[j][%d]= %d\n",jp,partner[j][jp]);
+           error->all(FLERR,"Error: tag[i] not found in partners of j in fix bond/create/mca");
+        }
 
         if(already_bonded(i,j)) {
-          fprintf(logfile,"Existing bond btw atoms %d and %d \n",i,j);
+          fprintf(logfile,"FixBondCreateMCA::post_integrate\tExisting bond btw atoms %d and %d \n",i,j);
           continue;
         }
 
@@ -565,7 +588,7 @@ void FixBondCreateMCA::post_integrate()
         if (fraction < 1.0) {
           min = MIN(probability[i],probability[j]);
           max = MAX(probability[i],probability[j]);
-          if (0.5*(min+max) >= fraction) continue;
+          if (0.5*(min+max) >= fraction) {fprintf(logfile,"FixBondCreateMCA::post_integrate: for i=%d partner k=%d j=%d (>= fraction)\n",i,npartner[i],j); continue;}
         }
 
         // if newton_bond is set, only store with I or J
@@ -574,10 +597,10 @@ void FixBondCreateMCA::post_integrate()
         if (!newton_bond /*|| tag[i] < tag[j]*/)
         {
 ///if(tag[i]==10) 
-///fprintf(logfile,"FixBondCreateMCA::post_integrate: creating bond btw atoms i=%d and j=%d (tag=%d) (i has now %d bonds) at step %ld\n",i,j,tag[j],num_bond[i]+1,update->ntimestep);
+fprintf(logfile,"FixBondCreateMCA::post_integrate: creating bond btw atoms i=%d and j=%d (tag=%d) (i has now %d bonds) at step %ld\n",i,j,tag[j],num_bond[i]+1,update->ntimestep);
 
           if (num_bond[i] == atom->bond_per_atom)
-            error->one(FLERR,"New bond exceeded bonds per atom in fix bond/create");
+            error->one(FLERR,"New bond exceeded bonds per atom in fix bond/create/mca");
           bond_type[i][num_bond[i]] = btype;
           bond_atom[i][num_bond[i]] = tag[j];
           /*  print these lines
@@ -605,7 +628,7 @@ void FixBondCreateMCA::post_integrate()
           tmp[NZ_PREV] = tmp[NZ] = delz * rinv;
 
           tmp[TAG] = double(tag[j]);
-          tmp[STATE] = double(0);
+          tmp[STATE] = double(init_state);
           num_bond[i]++;
         }
         // increment bondcount, convert atom to new type if limit reached
@@ -675,12 +698,12 @@ int FixBondCreateMCA::pack_comm(int n, int *list, double *buf,
     for (i = 0; i < n; i++) {
       j = list[i];
       buf[m++] = ubuf(npartner[j]).d; ///static_cast<int>(npartner[j]);
-      for(int k=0; k<newperts; k++) //NP communicate all slots, also the empty ones
+      for(int k=0; k<maxbondsperatom; k++) //NP communicate all slots, also the empty ones
         buf[m++] = ubuf(partner[j][k]).d; ///static_cast<int>(partner[j][k]);
       buf[m++] = probability[j];
     }
 ///fprintf(logfile,"FixBondCreateMCA::pack_comm m=%d n=%d [%d - %d]\n",m,n,list[0],list[n-1]);
-    return newperts + 2;
+    return maxbondsperatom + 2;
   }
 }
 
@@ -700,7 +723,7 @@ void FixBondCreateMCA::unpack_comm(int n, int first, double *buf)
   } else {
     for (i = first; i < last; i++) {
       npartner[i] = (int) ubuf(buf[m++]).i;///static_cast<int> (buf[m++]);
-      for(int k=0; k<newperts; k++)
+      for(int k=0; k<maxbondsperatom; k++)
         partner[i][k] = (int) ubuf(buf[m++]).i;///static_cast<int>(buf[m++]);
       probability[i] = buf[m++];
     }
@@ -725,11 +748,11 @@ int FixBondCreateMCA::pack_reverse_comm(int n, int first, double *buf)
   } else {
     for (i = first; i < last; i++) {
       buf[m++] = ubuf(npartner[i]).d; ///static_cast<int>(npartner[i]);
-      for(int k=0; k<newperts; k++)
+      for(int k=0; k<maxbondsperatom; k++)
         buf[m++] = ubuf(partner[i][k]).d; ///static_cast<int>(partner[i][k]);
     }
 ///fprintf(logfile,"FixBondCreateMCA::pack_reverse_comm m=%d n=%d [%d - %d]\n",m,n,first,last);
-    return newperts + 2;
+    return maxbondsperatom + 2;
   }
 }
 
@@ -753,12 +776,12 @@ void FixBondCreateMCA::unpack_reverse_comm(int n, int *list, double *buf)
     for (i = 0; i < n; i++) {
       j = list[i];
       nnew = (int) ubuf(buf[m++]).i;///static_cast<int> (buf[m++]);
-      if(nnew+npartner[j] > newperts)
+      if(nnew+npartner[j] > maxbondsperatom)
       {
           flag = 1;
-          nnew = newperts - npartner[j];
+          nnew = maxbondsperatom - npartner[j];
       }
-      for(int k = npartner[j]; k < npartner[j]+newperts; k++)
+      for(int k = npartner[j]; k < npartner[j]+maxbondsperatom; k++)
       {
           if(k >= npartner[j]+nnew) m++; //NP do not do anything if
           else partner[j][k] = (int) ubuf(buf[m++]).i;///static_cast<int> (buf[m++]);
@@ -777,7 +800,7 @@ void FixBondCreateMCA::unpack_reverse_comm(int n, int *list, double *buf)
 void FixBondCreateMCA::grow_arrays(int nmax)
 {
   bondcount = (int *)
-    memory->srealloc(bondcount,nmax*sizeof(int),"bond/create:bondcount");
+    memory->srealloc(bondcount,nmax*sizeof(int),"bond/create/mca:bondcount");
 }
 
 /* ----------------------------------------------------------------------
@@ -825,7 +848,7 @@ double FixBondCreateMCA::memory_usage()
 {
   int nmax = atom->nmax;
   double bytes = nmax*2 * sizeof(int);
-  bytes += newperts*nmax * sizeof(int);
+  bytes += maxbondsperatom*nmax * sizeof(int);
   bytes += nmax * sizeof(double);
   return bytes;
 }

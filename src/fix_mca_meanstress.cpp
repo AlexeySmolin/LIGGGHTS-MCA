@@ -298,14 +298,6 @@ inline void  FixMCAMeanStress::predict_mean_stress()
   }
 }
 
-/*
-void FixMCAMeanStress::post_integrate()
-{
-fprintf(logfile,"FixMCAMeanStress::post_integrate\n"); ///AS DEBUG TRACE
-  swap_prev();
-  predict_mean_stress();
-} */
-
 void FixMCAMeanStress::pre_force(int vflag)
 {
 //fprintf(logfile, "FixMCAMeanStress::pre_force \n");///AS DEBUG

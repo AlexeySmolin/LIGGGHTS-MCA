@@ -56,9 +56,11 @@
 #include "memory.h"
 #include "error.h"
 #include <list>
+#include "atom_vec_mca.h"
 
 using namespace LAMMPS_NS;
 using namespace FixConst;
+using namespace MCAAtomConst;
 
 #define BIG 1.0e20
 
@@ -107,13 +109,11 @@ void FixBondExchangeMCA::pre_exchange()
 ///fprintf(logfile,"FixBondExchangeMCA::pre_exchange\n");
 ///fprintf(stderr,"FixBondExchangeMCA::pre_exchange\n");
 
-  /* task 1: propagate bond contact history
+  /* task 1: propagate bond contact history  AS - we do not need this!!!
   if (!n_bondhist) return;
 
   for (n = 0; n < nbondlist; n++) {
-    int broken = bondlist[n][3];
-
-    if(broken) continue; //do not copy broken bonds
+    if(bondlist[n][3] == NOT_INTERACT) continue; //do not copy broken bonds
 
     i1 = bondlist[n][0];
     i2 = bondlist[n][1];
@@ -146,14 +146,14 @@ void FixBondExchangeMCA::pre_exchange()
   }
 */
   // task 2: remove broken bonds
-  //NP should be done equally on all processors
+  // should be done equally on all processors
 
-  //NP P.F. create list for all BOND-IDs, erase all the broken bonds compress bondlist with new value list
+  // create list for all BOND-IDs, erase all the broken bonds compress bondlist with new value list
   std::vector<unsigned int> list_bond_id;
   std::vector<unsigned int>::iterator it1;
 
-  for (n=0; n<nbondlist; n++) if(bondlist[n][3])
-                                list_bond_id.push_back(n);// load all broken bond ids into the list
+  for (n=0; n<nbondlist; n++) 
+      if(bondlist[n][3] == NOT_INTERACT) list_bond_id.push_back(n);// load all broken bond ids into the list
 
   //DEBUG
   if (list_bond_id.size()>0) fprintf(logfile,"FixBondExchangeMCA::pre_exchange will delete %d broken bonds at step %d\n",list_bond_id.size(),update->ntimestep);
@@ -164,50 +164,40 @@ void FixBondExchangeMCA::pre_exchange()
     i1 = bondlist[n][0];
     i2 = bondlist[n][1];
 
-    //I think this can not happen with the compressed list of PF ...
-    int broken = bondlist[n][3];
-    if(broken < 2) continue;
+    if(bondlist[n][3] < NOT_INTERACT) continue;
 
-    fprintf(logfile,"FixBondExchangeMCA::pre_exchange detected bond %d:%d<->%d as broken at step %ld\n",n,atom->tag[i1],atom->tag[i2],update->ntimestep);
+    fprintf(logfile,"FixBondExchangeMCA::pre_exchange detected bond %d:%d(tag=%d)<->%d(tag=%d) as broken at step %ld\n",n,i1,atom->tag[i1],i2,atom->tag[i2],update->ntimestep);
     // if the bond is broken, we remove it from both atom data
 
     // delete bond from atom I if I stores it
     // atom J will also do this
 
-    if (newton_bond || i1 < nlocal)
-    {
+    if (newton_bond || i1 < nlocal) {
         found = false;
         for(int k = 0; k < num_bond[i1]; k++)
-           if(bond_atom[i1][k] == tag[i2])
-           {
-         found = true;
-         remove_bond(i1,k,n);
-         break;
+           if(bond_atom[i1][k] == tag[i2]) {
+             found = true;
+             remove_bond(i1,k,n);
+             break;
            }
         if(!found) error->one(FLERR,"Failed to operate on MCA bond history during deletion1");
     }
-    if (newton_bond || i2 < nlocal)
-    {
+    if (newton_bond || i2 < nlocal) {
         found = false;
         for(int k = 0; k < num_bond[i2]; k++)
-           if(bond_atom[i2][k] == tag[i1])
-           {
-              found = true;
-              remove_bond(i2,k,n);
-              int nbondlist = neighbor->nbondlist;
-
-                if(n<nbondlist)
-                {
-                 neighbor->nbondlist = (nbondlist-1);                               // delete one bond -> reduce nbondlist by one
-                 for(int i = 0; i <= 3; i++)
-                    neighbor->bondlist[n][i] = neighbor->bondlist[nbondlist-1][i];  // NP P.F. added also change in neighbor bondlist
-                 break;
-                }
-                else if(n == nbondlist)
-                {
-                 neighbor->nbondlist = (nbondlist-1);
-                 break;
-                }
+           if(bond_atom[i2][k] == tag[i1]) {
+             found = true;
+             remove_bond(i2,k,n);
+             int nbondlist = neighbor->nbondlist;
+             if(n<nbondlist) {
+               neighbor->nbondlist = (nbondlist-1);                               // delete one bond -> reduce nbondlist by one
+               for(int i = 0; i <= 3; i++)
+                  neighbor->bondlist[n][i] = neighbor->bondlist[nbondlist-1][i];  // also change in neighbor bondlist
+               break;
+             } else if(n == nbondlist) {
+               neighbor->nbondlist = (nbondlist-1);
+               break;
+             }
              break;
            }
         if(!found) error->one(FLERR,"Failed to operate on MCA bond history during deletion2");
@@ -215,7 +205,7 @@ void FixBondExchangeMCA::pre_exchange()
   }
 }
 
-inline void FixBondExchangeMCA::remove_bond(int ilocal, int ibond, int bondnumber) //NP P.F. added bondnumber
+inline void FixBondExchangeMCA::remove_bond(int ilocal, int ibond, int bondnumber)
 {
     const int * const tag = atom->tag;
     int *bond_atom = atom->bond_atom[ilocal];

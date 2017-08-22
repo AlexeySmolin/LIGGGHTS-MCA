@@ -63,6 +63,7 @@ class BondMCA : public Bond {
   double equilibrium_distance(int);
   void write_restart(FILE *);
   void read_restart(FILE *);
+  void write_data(FILE *);
   //double single(int, double, int, int);
   double single(int, double, int, int, double &);
 

@@ -177,7 +177,7 @@ inline void  PairMCA::compute_elastic_force()
         error->one(FLERR,str);
       }
       int bond_state = bondlist[bond_index_i][3];
-      if(bond_state == 2) { // pair does not interact
+      if(bond_state == NOT_INTERACT) { // pair does not interact
 //        fprintf(logfile,"PairMCA::compute_elastic_force bond %d (%d - %d) does not interact\n",bond_index_i,i,j);
         continue;
       }
@@ -215,7 +215,7 @@ inline void  PairMCA::compute_elastic_force()
 //fprintf(logfile,"PairMCA::compute_elastic_force: E=%g P=%g oNbrR_i.rE=%g IDi=%d IDj=%d Dij=%g D0ij=%g\n   dE=%g Pj=%g Pi=%g dSgmj=%g dSgmi=%g Hj=%g Hi=%g meanSi=%g meanSj=%g bond_state=%d\n",
 //ei,pi,bond_hist_ik[E],tag[i],bond_atom[i][k],r,r0,d_e,pj,(pi-d_p),rdSgmj,rdSgmi,rHj,rHi,mean_stress[i],mean_stress[j],bond_state);
       if((mca_radius*(1.0 + ei)) > r) {
-        if((bond_state == 0) || (pi <= 0.0)) {
+        if((bond_state == BONDED) || (pi <= 0.0)) {
           fprintf(logfile,"PairMCA::compute_elastic_force: 'Qij>Dij' E=%g oNbrR_i.rE=%g IDi=%d IDj=%d Dij=%g D0ij=%g\n   dE=%g Pj=%g Pi=%g dSgmj=%g dSgmi=%g Hj=%g Hi=%g bond_state=%d\n",
           ei,bond_hist_ik[E],tag[i],bond_atom[i][k],r,r0,d_e,pj,(pi-d_p),rdSgmj,rdSgmi,rHj,rHi,bond_state);
           continue;
@@ -226,7 +226,7 @@ inline void  PairMCA::compute_elastic_force()
       /// END central force
 
       double vShear[3], vSij[3], vYi[3], vMij[3];
-      if((bond_state == 1) && (pi > 0.0)) { // if happens that unbonded particles attract each other
+      if((bond_state == UNBONDED) && (pi > 0.0)) { // if happens that unbonded particles attract each other
 ///        fprintf(logfile,"PairMCA::compute_elastic_force bond %d (%d - %d) is broken but attracts\n",bond_index_i,i,j);
         double rCDsum = cont_distance[i] + cont_distance[j];
         if (rCDsum > r) {
@@ -318,7 +318,7 @@ inline void  PairMCA::compute_elastic_force()
         vectorScalarMult3D(vYi, rHi);
 
         double rFDij=1.0; // dry friction factor
-        if(bond_state == 1) { // unlinked
+        if(bond_state == UNBONDED) { // unlinked
           /// BEGIN correction due to sliding friction
           //int m1=oAtR_i.iMaterialID;
           //int m2=oAtR_j.iMaterialID;
@@ -349,7 +349,7 @@ inline void  PairMCA::compute_elastic_force()
         }
         /// END shear force
 
-///        if(bond_state == 0) { // linked
+///        if(bond_state == BONDED) { // linked
         /// BEGIN bending-torsion torque
         double vdMij[3], vdMji[3];
 #ifdef NO_ROTATIONS
@@ -386,7 +386,7 @@ vMij[0]= vMij[1]= vMij[2]= 0.;
       bond_hist_ik[SX] = vSij[0];
       bond_hist_ik[SY] = vSij[1];
       bond_hist_ik[SZ] = vSij[2];
-///      if(bond_state == 0) {
+///      if(bond_state == BONDED) {
         bond_hist_ik[MX] = vMij[0];
         bond_hist_ik[MY] = vMij[1];
         bond_hist_ik[MZ] = vMij[2];
@@ -440,13 +440,13 @@ inline void  PairMCA::compute_equiv_stress()
     for(k = 0; k < numb; k++) {
       int bond_index_i = bond_index[i][k];
       int bond_state = bondlist[bond_index_i][3];
-      if (bond_state==2) continue;
+      if (bond_state == NOT_INTERACT) continue;
 
       iNC++;
       double * const bond_hist_ik = &(bond_hist_i[k][0]);
       rdStri += bond_hist_ik[E];
       double p = bond_hist_ik[P];
-      if ((bond_state==1) && (p > 0.0)) continue;
+      if ((bond_state == UNBONDED) && (p > 0.0)) continue;
       rdSgmi += p;
     }
     mean_stress[i] = rdSgmi / Nc;
@@ -482,11 +482,11 @@ inline void  PairMCA::compute_equiv_stress()
     {
       int bond_index_i = bond_index[i][k];
       int bond_state = bondlist[bond_index_i][3];
-      if (bond_state==2) continue;
+      if (bond_state == NOT_INTERACT) continue;
 
       double * const bond_hist_ik = &(bond_hist_i[k][0]);
       double p = bond_hist_ik[P];
-      if ((bond_state==1) && (p > 0.0)) continue;
+      if ((bond_state == UNBONDED) && (p > 0.0)) continue;
 
       double xtmp,ytmp,ztmp,rStressInt;
       rStressInt = p - mean_stress[i];
@@ -569,7 +569,7 @@ void PairMCA::correct_for_plasticity()
 */
           int bond_index_i = bond_index[i][k];
           int bond_state = bondlist[bond_index_i][3];
-          if (bond_state==2) continue;
+          if (bond_state == NOT_INTERACT) continue;
           else
           {
             double *bond_hist_ik = &(bond_hist_i[k][0]);
@@ -583,7 +583,7 @@ void PairMCA::correct_for_plasticity()
             rP = bond_hist_ik[P];
             rP = rP * rM + mean_stress[i] * rMpli;
             double rMij = rM;
-            if ((rP > 0.0) && (bond_state == 1)) {
+            if ((rP > 0.0) && (bond_state == UNBONDED)) {
               rP = 0.0;
               rMij = 0.0;
             }
@@ -608,7 +608,7 @@ void PairMCA::correct_for_plasticity()
       j = domain->closest_image(i,j);
       int bond_index_i = bond_index[i][k];
       int bond_state = bondlist[bond_index_i][3];
-      if (bond_state == 1) { // broken bond - contacting
+      if (bond_state == UNBONDED) { // broken bond - contacting
         //BEGIN dry friction force
         int jtype = type[j];
         double rCOF = mca_pair->cof[itype][jtype];
@@ -692,9 +692,9 @@ void PairMCA::compute_total_force(int eflag, int vflag)
 
     int bond_state = bondlist[n][3];
     //1st check if bond is broken,
-    if(bond_state == 2)
+    if(bond_state == NOT_INTERACT)
     {
-//       fprintf(logfile,"PairMCA::compute_total_force bond %d does not interact\n",n);
+       fprintf(logfile,"PairMCA::compute_total_force bond %d does not interact\n",n);
        continue;
     }
 
@@ -727,7 +727,7 @@ void PairMCA::compute_total_force(int eflag, int vflag)
 
     double pi = bond_hist1[P];
     double pj = bond_hist2[P];
-    if ( (bond_state==1) && ((pi>0.) || (pj>0.)) ) {
+    if ( (bond_state == UNBONDED) && ((pi>0.) || (pj>0.)) ) {
       error->warning(FLERR,"PairMCA::compute_total_force (pi>0.)||(pj>0.) - be careful!");
       continue;
     }
