@@ -54,7 +54,7 @@ boundary	f f f	# style of boundaries for the global simulation box in each dimen
 			# boundary x y z (x,y,z = one or two letters:
 			# p (periodic) or f (fixed) or s (shrink-wrapped) or m (shrink-wrapped with a minimum)
 
-atom_style	mca radius ${rp} packing fcc n_bondtypes ${bt} bonds_per_atom ${bpa} #	implicit_factor 1.0
+atom_style	mca radius ${rp} packing fcc n_bondtypes ${bt} bonds_per_atom ${bpa} implicit_factor 0.0
 
 atom_modify	map array # map keyword determines how atom ID lookup is done.
 # Lookups are performed by bond routines to find the local atom index associated with a global atom ID. 
@@ -77,7 +77,7 @@ communicate	single vel yes
 ####################################################################################################
 variable	Lbase  equal 4*${latparam}+0.000001*${rp}		#10*${d}+${rp}
 variable	Lind   equal 2*${latparam}+0.000002*${rp}		#10*${d}+${rp}
-variable	Hind  equal ${Lbase}-0.000001*${rp}+${latparam}	# Indenter touches the base cube
+variable	Hind  equal ${Lbase}-0.000001*${rp}+${latparam}/2.	# Indenter touches the base cube
 variable	Hmax  equal ${Hind}+${Lind}
 variable	HmaxMax  equal ${Hind}+${Lind}+${Lind}
 variable	Lmax  equal ${d}+${Lbase}
@@ -188,7 +188,7 @@ print 'Recommended time step for aluminium = ${TimeStep}'
 if "${TimeStep} < ${dt}" then &
   "print 'Recommended time step ${TimeStep} is smaller than dt= ${dt}'" &
   quit
-variable	TimeStep2 equal ${rp}/(sqrt((${K2}+4.*${G2}/3.)/${rho2}))
+variable	TimeStep2 equal ${d}/(sqrt((${K2}+4.*${G2}/3.)/${rho2}))
 print 'Recommended time step for diamond = ${TimeStep2}'
 if "${TimeStep2} < ${dt}" then &
   "print 'Recommended time step for diamond ${TimeStep} is smaller than dt= ${dt}'" &
@@ -248,11 +248,11 @@ fix_modify	bondcr1_1 every 0  # do not create new bonds afterwards
 # allow creating bonds between indeter and sample#fix_modify	bondcr1_2 every 0
 fix_modify	bondcr2_2 every 0  # do not create new bonds afterwards
 
-#write_data	data.*	# store full initial configuration (with bonds)
+write_data	data.*	# store full initial configuration (with bonds)
 
 run		${runstep}
 
-#write_data	data.*
+write_data	data.*
 
 # Reverse loading smoothly
 variable	vel_revers equal  ${vel0}*cos((time-${fulltime})*2.0*PI/${ts})
@@ -268,5 +268,5 @@ fix		topV_fix top mca/setvelocity 0 0 v_vel_unload
 variable	unloadstep equal  ${runstep}/3.
 run		${unloadstep}
 
-#write_data	data.*
+write_data	data.*
 quit

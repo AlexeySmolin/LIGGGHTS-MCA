@@ -148,7 +148,7 @@ fix		tipF tipball addforce $F 0 0	#1kip=4.4482216kN
 # CREATE BONDS BETWEEN PARTICLES
 ####################################################################################################
 variable	cutoff equal ${d}*(1.0+0.02)
-fix 		bondcr all bond/create/mca 1 1 1 ${cutoff} 1 ${bpa} #every itype jtype  btype newperts
+fix 		bondcr all bond/create/mca 1 1 1 ${cutoff} 1 ${bpa} #every itype jtype  btype maxbondsperatom
 
 ####################################################################################################
 # TIME INTEGRATION
@@ -160,15 +160,16 @@ fix		integr nve_group nve/mca
 # SIMULATION TIME PARAMETERS
 ####################################################################################################
 variable	TimeStep equal ${rp}/(sqrt((${K}+4.*${G}/3.)/${rho})) # Time step = ${rp}/(sqrt((${K}+4.*${G}/3.)/${rho}))
-variable	dt equal 1.e-5	# Time step = ${rp}/(sqrt($Y/${rho}))
+variable	dt equal 4.e-5	# Time step = ${rp}/(sqrt($Y/${rho}))
 print 'Recommended time step ${TimeStep}'
 if "${TimeStep} < ${dt}" then &
   "print 'Recommended time step ${TimeStep} is smaller than dt= ${dt}'" &
   quit
 variable	fulltime equal 1.0	# Simulation time
-variable	runstep equal  ${fulltime}/${dt}
-variable	savetime equal 0.01	# 0.0001
-variable	filestep equal ${savetime}/${dt}
+variable	runstep equal  round(${fulltime}/${dt})
+variable	savetime equal 0.001	# 0.0001
+variable	filestep equal round(${savetime}/${dt})
+variable	datastep equal round(0.0001/${dt})
 timestep	${dt}
 
 ####################################################################################################
@@ -202,7 +203,7 @@ variable pz equal z[${lastone}]
 variable pfx equal fx[${lastone}]
 variable pfy equal fy[${lastone}]
 variable pfz equal fz[${lastone}]
-fix outfile all print ${filestep} "${time} ${px} ${py} ${pz} ${pfx} ${pfy} ${pfz}" file line_if0.1.dat screen no title "# t x y z fx fy fz"
+fix outfile all print ${datastep} "${time} ${px} ${py} ${pz} ${pfx} ${pfy} ${pfz}" file line_if0.1.dat screen no title "# t x y z fx fy fz"
 
 ####################################################################################################
 # RUN SIMULATION

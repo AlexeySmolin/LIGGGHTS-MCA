@@ -73,6 +73,9 @@ class PairMCA : public Pair {
   double **cof; // Coefficient of friction
   double **G; // shear modulus
   double **K; // bulk modulus
+  double **ModulusPredictOne; // effective modulus for predicting pressure for 1 neighbor
+  double **ModulusPredictAll; // effective modulus for predicting pressure for 12 neighbors
+
   double **Sy; // yield stress
   double **Eh; // plastic work hardening "modulus"
  protected:

@@ -14,7 +14,7 @@ set autoscale
 X0=7.1842
 Y=6.895e10
 #A=0.0912394*121
-A=(X0+0.254)*(X0+0.254)
+A=(X0+0.254*1.4142)*(X0+0.254*1.4142)
 
 set xlabel "dZ/L, %"
 set ylabel "F/A, MPa"

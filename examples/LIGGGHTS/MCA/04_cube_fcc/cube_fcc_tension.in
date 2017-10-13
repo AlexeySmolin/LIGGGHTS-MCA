@@ -39,7 +39,7 @@ boundary	f f f	# style of boundaries for the global simulation box in each dimen
 			# boundary x y z (x,y,z = one or two letters:
 			# p (periodic) or f (fixed) or s (shrink-wrapped) or m (shrink-wrapped with a minimum)
 
-atom_style	mca radius ${rp} packing fcc n_bondtypes ${bt} bonds_per_atom ${bpa}
+atom_style	mca radius ${rp} packing fcc n_bondtypes ${bt} bonds_per_atom ${bpa} implicit_factor 0.0
 
 atom_modify	map array # map keyword determines how atom ID lookup is done.
 # Lookups are performed by bond routines to find the local atom index associated with a global atom ID. 
@@ -152,14 +152,15 @@ fix		integr nve_group nve/mca
 # SIMULATION TIME PARAMETERS
 ####################################################################################################
 variable	TimeStep equal ${rp}/(sqrt((${K}+4.*${G}/3.)/${rho})) # Time step = ${rp}/(sqrt((${K}+4.*${G}/3.)/${rho}))
-variable	dt equal 2.0E-5
+print 'Recommended time step ${TimeStep}'
+variable	dt equal 4.0E-5
 if "${TimeStep} < ${dt}" then &
   "print 'Recommended time step ${TimeStep} is smaller than dt= ${dt}'" &
   quit
 variable	fulltime equal 2.	# Simulation time
-variable	runstep equal  ${fulltime}/${dt}
+variable	runstep equal  round(${fulltime}/${dt})
 variable	savetime equal 0.02	# 0.0001
-variable	filestep equal ${savetime}/${dt}
+variable	filestep equal round(${savetime}/${dt})
 timestep	${dt}
 
 ####################################################################################################

@@ -12,7 +12,8 @@ set autoscale
 
 X0=5.08
 Y=6.895e10
-A=0.258064*121
+A=(X0+0.254*2)*(X0+0.254*2)
+#A=0.258064*121
 
 set xlabel "dZ/L, %"
 set ylabel "F/A, MPa"
@@ -21,7 +22,7 @@ set title "Loading diagram"
 plot \
      Y*x*1.0E-8 title "Young" with lines, \
      './cube-orig.dat' using (100.*($4-X0)/X0):(-$7*1.E-6/A) t "original" with lines ,\
-     './cube.dat' using (100.*($4-X0)/X0):(-$7*1.E-6/A) not with points
+     './cube.dat' using (100.*($4-X0)/X0):(-$7*1.E-6/A) not with points pt 6
 
 pause -1 "Hit return "
 

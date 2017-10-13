@@ -167,7 +167,7 @@ fix             botV_fix bot mca/setvelocity 0 0 v_vel_down
 # CREATE BONDS BETWEEN PARTICLES
 ####################################################################################################
 variable	cutoff equal ${d}*(1.0+0.02)
-fix 		bondcr all bond/create/mca 1 1 1 ${cutoff} 1 ${bpa} #every itype jtype  btype newperts
+fix 		bondcr all bond/create/mca 1 1 1 ${cutoff} 1 ${bpa} #every itype jtype  btype maxbondsperatom
 
 ####################################################################################################
 # TIME INTEGRATION
@@ -179,14 +179,15 @@ fix		integr nve_group nve/mca
 # SIMULATION TIME PARAMETERS
 ####################################################################################################
 variable	TimeStep equal ${rp}/(sqrt((${K}+4.*${G}/3.)/${rho})) # Time step = ${rp}/(sqrt((${K}+4.*${G}/3.)/${rho}))
-variable	dt equal 1.e-5	#4.0E-5
+print 'Recommended time step ${TimeStep}'
+variable	dt equal 4.e-5	#4.0E-5
 if "${TimeStep} < ${dt}" then &
   "print 'Recommended time step ${TimeStep} is smaller than dt= ${dt}'" &
   quit
 variable	fulltime equal 0.1	# Simulation time
-variable	runstep equal  ${fulltime}/${dt}
+variable	runstep equal  round(${fulltime}/${dt})
 variable	savetime equal 0.001	# time interval for saving dump
-variable	filestep equal ${savetime}/${dt}
+variable	filestep equal round(${savetime}/${dt})
 timestep	${dt}
 
 ####################################################################################################

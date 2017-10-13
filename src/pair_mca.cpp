@@ -65,7 +65,7 @@ using namespace MathConst;
 using namespace MCAAtomConst;
 
 /// see also in 'fix_mca_meanstress.cpp'
-///#define NO_MEANSTRESS
+///#define NO_MEANSTRESS // see also in fix_mca_meanstress.cpp
 ///#define NO_ROTATIONS
 #define REAL_NULL_CONST 5.0E-22 // 5.0E-14
 
@@ -90,6 +90,8 @@ PairMCA::~PairMCA()
     memory->destroy(cof);
     memory->destroy(G);
     memory->destroy(K);
+    memory->destroy(ModulusPredictOne);
+    memory->destroy(ModulusPredictAll);
     memory->destroy(Sy);
     memory->destroy(Eh);
   }
@@ -155,7 +157,7 @@ inline void  PairMCA::compute_elastic_force()
     rHi = 2. * rGi;
     rKHi = mca_pair->K[itype][itype]; rKHi = 1. - rHi / (3. * rKHi);
 
-    rdSgmi = rKHi*(mean_stress[i] - mean_stress_prev[i]); // rKHi*(arMS0[i]-arMS1[i]);
+    rdSgmi = rKHi*(mean_stress[i] - mean_stress_prev[i]);
     for(k = 0; k < num_bond[i]; k++)
     {
       j = bond_mca[i][k];
@@ -212,8 +214,8 @@ inline void  PairMCA::compute_elastic_force()
       d_p = rHi*d_e + rdSgmi;
       ei += d_e;
       pi += d_p;
-//fprintf(logfile,"PairMCA::compute_elastic_force: E=%g P=%g oNbrR_i.rE=%g IDi=%d IDj=%d Dij=%g D0ij=%g\n   dE=%g Pj=%g Pi=%g dSgmj=%g dSgmi=%g Hj=%g Hi=%g meanSi=%g meanSj=%g bond_state=%d\n",
-//ei,pi,bond_hist_ik[E],tag[i],bond_atom[i][k],r,r0,d_e,pj,(pi-d_p),rdSgmj,rdSgmi,rHj,rHi,mean_stress[i],mean_stress[j],bond_state);
+//fprintf(logfile,"PairMCA::compute_elastic_force: i=%d j=%d E=%g P=%g oNbrR_i.rE=%g IDi=%d IDj=%d Dij=%g D0ij=%g\n   dE=%g Pj=%g Pi=%g dSgmj=%g dSgmi=%g Hj=%g Hi=%g meanSi=%g meanSj=%g bond_state=%d\n",
+//i,j,ei,pi,bond_hist_ik[E],tag[i],bond_atom[i][k],r,r0,d_e,pj,(pi-d_p),rdSgmj,rdSgmi,rHj,rHi,mean_stress[i],mean_stress[j],bond_state);
       if((mca_radius*(1.0 + ei)) > r) {
         if((bond_state == BONDED) || (pi <= 0.0)) {
           fprintf(logfile,"PairMCA::compute_elastic_force: 'Qij>Dij' E=%g oNbrR_i.rE=%g IDi=%d IDj=%d Dij=%g D0ij=%g\n   dE=%g Pj=%g Pi=%g dSgmj=%g dSgmi=%g Hj=%g Hi=%g bond_state=%d\n",
@@ -428,56 +430,31 @@ inline void  PairMCA::compute_equiv_stress()
     double ** const bond_hist_i = &(bond_hist[tag[i]-1][0]);
     double *mean_stress = atom->mean_stress;
     double *cont_distance = atom->cont_distance;
+    double meanstr = 0.0;
 
     theta_prev[0] = theta[0]; // we need to swap 'theta' here, after using in 'compute_elastic_force()'
     theta_prev[1] = theta[1]; // but not before as for other '_prev' values
     theta_prev[2] = theta[2];
 
+    double rdSumP = 0.0;
+    double rdSumE = 0.0;
 #ifndef NO_MEANSTRESS
-    double rdSgmi = 0.0;
-    double rdStri = 0.0;
-    int iNC = 0;
     for(k = 0; k < numb; k++) {
       int bond_index_i = bond_index[i][k];
       int bond_state = bondlist[bond_index_i][3];
       if (bond_state == NOT_INTERACT) continue;
 
-      iNC++;
       double * const bond_hist_ik = &(bond_hist_i[k][0]);
-      rdStri += bond_hist_ik[E];
+      rdSumE += bond_hist_ik[E];
       double p = bond_hist_ik[P];
       if ((bond_state == UNBONDED) && (p > 0.0)) continue;
-      rdSgmi += p;
+      rdSumP += p;
     }
-    mean_stress[i] = rdSgmi / Nc;
-
-    int iFreeSlots = Nc > iNC ? (Nc - iNC) : 0;
-    int itype = type[i];
-    double rKi = 3.0 * mca_pair->K[itype][itype];
-    double rE = (rdSgmi / rKi - rdStri); // predictor of the contact distance accounting of plastic strain
-    if (iFreeSlots > 0) rE /= iFreeSlots;
-    cont_distance[i] = mca_radius * (1.0 + rE);
-    if(rE < -1.0) {
-        char str[512];
-        sprintf(str,"Wrong contact distance for atom# %d at step " BIGINT_FORMAT,
-                i,update->ntimestep);
-        error->one(FLERR,str);
-    }
+    meanstr = rdSumP / Nc;
 #endif
-  }
-
-#if defined (_OPENMP)
-#pragma omp parallel for private(i,k) default(shared) schedule(static)
-#endif
-  for (i = 0; i < nlocal; i++) {/// i < nmax; i++) {///
-    int numb = num_bond[i];
-    if (numb == 0) continue;
-
-    const int * const tag = atom->tag;
     double *equiv_stress = atom->equiv_stress;
-    double * const mean_stress = atom->mean_stress;
-    double ** const bond_hist_i = &(bond_hist[tag[i]-1][0]);
-    double rdSgmi = 0.0;
+    double rSumEqStr = 0.0;
+    int iNC = 0;
     for(k = 0; k < numb; k++)
     {
       int bond_index_i = bond_index[i][k];
@@ -488,17 +465,33 @@ inline void  PairMCA::compute_equiv_stress()
       double p = bond_hist_ik[P];
       if ((bond_state == UNBONDED) && (p > 0.0)) continue;
 
-      double xtmp,ytmp,ztmp,rStressInt;
-      rStressInt = p - mean_stress[i];
-      rStressInt = rStressInt*rStressInt;
+      double xtmp,ytmp,ztmp,rEqStress;
+      rEqStress = p - meanstr;
+      rEqStress = rEqStress*rEqStress;
       xtmp = bond_hist_ik[SX];
       ytmp = bond_hist_ik[SY];
       ztmp = bond_hist_ik[SZ];
-      rStressInt += xtmp*xtmp + ytmp*ytmp + ztmp*ztmp;
-      rdSgmi += rStressInt;
+      rEqStress += xtmp*xtmp + ytmp*ytmp + ztmp*ztmp;
+      rSumEqStr += rEqStress;
+      iNC++;
     }
-    rdSgmi = sqrt(4.5*(rdSgmi) / Nc);
-    equiv_stress[i] = rdSgmi;
+    int iFreeSlots = Nc > iNC ? (Nc - iNC) : 0;
+    if (iNC < Nc) {
+      rSumEqStr += iFreeSlots * meanstr*meanstr;
+    }
+    equiv_stress[i] = sqrt(4.5*(rSumEqStr) / Nc);;
+    int itype = type[i];
+    double rKi = 3.0 * mca_pair->K[itype][itype];
+    double rE = (rdSumP / rKi - rdSumE); // predictor of the contact distance accounting of plastic strain
+    if (iFreeSlots > 0) rE /= iFreeSlots;
+    cont_distance[i] = mca_radius * (1.0 + rE);
+    if(rE < -1.0) {
+fprintf(stderr,"iFreeSlots=%d (iNC=%d) rdSumP=%g rdSumE=%g rE=%g\n", iFreeSlots,iNC,rdSumP,rdSumE,rE);
+        char str[512];
+        sprintf(str,"Wrong contact distance for atom# %d at step " BIGINT_FORMAT,
+                i,update->ntimestep);
+        error->one(FLERR,str);
+    }
   }
 }
 
@@ -534,6 +527,7 @@ void PairMCA::correct_for_plasticity()
     double **bond_hist_i = &(bond_hist[tag[i]-1][0]);
     double *equiv_stress = atom->equiv_stress;
     double *equiv_strain = atom->equiv_strain;
+    double *plastic_heat = atom->plastic_heat;
     int itype = type[i];
     double rGi = mca_pair->G[itype][itype];
     double r3Gi = 3.0*rGi;
@@ -553,8 +547,8 @@ void PairMCA::correct_for_plasticity()
       double rMpli = 1.0 - rM;
       if(rMpli > REAL_NULL_CONST) {
         equiv_stress[i] = rSgmPl; // set according to the yeild surface
-        double rP = (rSyi*rSyi*0.5/r3Gi + (rSyi + rSgmPl)*0.5*(rSR - rSR_Pla)) - rSgmPl*rSgmPl*0.5/r3Gi; // plastic heat
-        ///TODO store plastic heat: if (rP > 0.0) arPH[i] = rP;
+        double rP = (rSyi*rSyi*0.5/r3Gi + (rSyi + rSgmPl)*0.5*(rSR - rSR_Pla)) - rSgmPl*rSgmPl*0.5/r3Gi; ///TODO plastic heat: now for bilinear harderning only
+        if (rP > 0.0) plastic_heat[i] = rP; // store plastic heat
         for(k = 0; k < num_bond[i]; k++) {
 /*          int j = atom->map(bond_atom[i][k]);
           if (j == -1) {
@@ -670,10 +664,10 @@ void PairMCA::compute_total_force(int eflag, int vflag)
 
 //fprintf(logfile, "PairMCA::compute_total_force \n");  ///AS DEBUG TRACE
 
-#if defined (_OPENMP)
+///#if defined (_OPENMP)
 //#pragma omp parallel for shared(x,f,torque,bondlist,bond_atom,bond_hist) default(none) schedule(static)
 ///#pragma omp parallel for default(shared) schedule(static)
-#endif
+///#endif
   for (int n = 0; n < nbondlist; n++) {
     const double mca_radius  = atom->mca_radius;
     const double contact_area  = atom->contact_area;
@@ -729,6 +723,7 @@ void PairMCA::compute_total_force(int eflag, int vflag)
     double pj = bond_hist2[P];
     if ( (bond_state == UNBONDED) && ((pi>0.) || (pj>0.)) ) {
       error->warning(FLERR,"PairMCA::compute_total_force (pi>0.)||(pj>0.) - be careful!");
+      pi=0.0; pj=0.0;
       continue;
     }
 
@@ -790,9 +785,9 @@ void PairMCA::compute_total_force(int eflag, int vflag)
 
     // apply force to each of 2 atoms
 
-#if defined (_OPENMP)
-#pragma omp critical(tfI1)
-#endif
+///#if defined (_OPENMP)
+///#pragma omp critical(tfI1)
+///#endif
     if (newton_bond || i1 < nlocal) {
       f[i1][0] += (dnforce[0] + dtforce[0]) * A;
       f[i1][1] += (dnforce[1] + dtforce[1]) * A;
@@ -802,9 +797,9 @@ void PairMCA::compute_total_force(int eflag, int vflag)
       torque[i1][2] += q1 * A * dttorque[2] + tor3;
     }
 
-#if defined (_OPENMP)
-#pragma omp critical(tfI2)
-#endif
+///#if defined (_OPENMP)
+///#pragma omp critical(tfI2)
+///#endif
     if (newton_bond || i2 < nlocal) {
       f[i2][0] -= (dnforce[0] + dtforce[0]) * A;
       f[i2][1] -= (dnforce[1] + dtforce[1]) * A;
@@ -856,6 +851,8 @@ void PairMCA::allocate()
   memory->create(cof,n+1,n+1,"pair:cof");
   memory->create(G,n+1,n+1,"pair:G");
   memory->create(K,n+1,n+1,"pair:K");
+  memory->create(ModulusPredictOne,n+1,n+1,"pair:ModulusPredictOne");
+  memory->create(ModulusPredictAll,n+1,n+1,"pair:ModulusPredictAll");
   memory->create(Sy,n+1,n+1,"pair:Sy");
   memory->create(Eh,n+1,n+1,"pair:Eh");
 }
@@ -898,6 +895,13 @@ void PairMCA::coeff(int narg, char **arg)
   double cof_one = force->numeric(FLERR,arg[2]);
   double G_one = force->numeric(FLERR,arg[3]);
   double K_one = force->numeric(FLERR,arg[4]);
+  double rCoordNumber = (double) atom->coord_num;
+  double ModulusPredictOne_one = 3.0*K_one*2.0*G_one*rCoordNumber /
+                                 (3.0*K_one*(rCoordNumber-1.0) + 2.0*G_one);
+  double ModulusPredictAll_one = (3.0*K_one + 2.0*G_one*(rCoordNumber-1.0)) / rCoordNumber;
+fprintf(logfile,"Computing Predictor modulii using coordination number=%g :\n",rCoordNumber);
+fprintf(logfile,"ModulusPredictOne= %g\tModulusPredictAll= %g\n",ModulusPredictOne_one, ModulusPredictAll_one);
+
 
   double Sy_one = -1.0; // no plasticity
   double Eh_one = 0.0; // no harderning
@@ -913,6 +917,8 @@ void PairMCA::coeff(int narg, char **arg)
       cof[i][j] = cof_one;
       G[i][j] = G_one;
       K[i][j] = K_one;
+      ModulusPredictOne[i][j] = ModulusPredictOne_one;
+      ModulusPredictAll[i][j] = ModulusPredictAll_one;
       Sy[i][j] = Sy_one;
       Eh[i][j] = Eh_one;
       setflag[i][j] = 1; // 0/1 = whether each i,j has been set
@@ -942,6 +948,9 @@ double PairMCA::init_one(int i, int j)
   cof[j][i] = cof[i][j];
   G[j][i] = G[i][j];
   K[j][i] = K[i][j];
+  ModulusPredictOne[j][i] = ModulusPredictOne[i][j];
+  ModulusPredictAll[j][i] = ModulusPredictAll[i][j];
+
   Sy[j][i] = Sy[i][j];
   Eh[j][i] = Eh[i][j];
 
@@ -964,6 +973,8 @@ void PairMCA::write_restart(FILE *fp)
         fwrite(&cof[i][j],sizeof(double),1,fp);
         fwrite(&G[i][j],sizeof(double),1,fp);
         fwrite(&K[i][j],sizeof(double),1,fp);
+        fwrite(&ModulusPredictOne[i][j],sizeof(double),1,fp);
+        fwrite(&ModulusPredictAll[i][j],sizeof(double),1,fp);
         fwrite(&Sy[i][j],sizeof(double),1,fp);
         fwrite(&Eh[i][j],sizeof(double),1,fp);
       }
@@ -991,12 +1002,16 @@ void PairMCA::read_restart(FILE *fp)
           fread(&cof[i][j],sizeof(double),1,fp);
           fread(&G[i][j],sizeof(double),1,fp);
           fread(&K[i][j],sizeof(double),1,fp);
+          fread(&ModulusPredictOne[i][j],sizeof(double),1,fp);
+          fread(&ModulusPredictAll[i][j],sizeof(double),1,fp);
           fread(&Sy[i][j],sizeof(double),1,fp);
           fread(&Eh[i][j],sizeof(double),1,fp);
         }
         MPI_Bcast(&cof[i][j],1,MPI_DOUBLE,0,world);
         MPI_Bcast(&G[i][j],1,MPI_DOUBLE,0,world);
         MPI_Bcast(&K[i][j],1,MPI_DOUBLE,0,world);
+        MPI_Bcast(&ModulusPredictOne[i][j],1,MPI_DOUBLE,0,world);
+        MPI_Bcast(&ModulusPredictAll[i][j],1,MPI_DOUBLE,0,world);
         MPI_Bcast(&Sy[i][j],1,MPI_DOUBLE,0,world);
         MPI_Bcast(&Eh[i][j],1,MPI_DOUBLE,0,world);
       }
@@ -1034,7 +1049,7 @@ void PairMCA::read_restart_settings(FILE *fp)
 void PairMCA::write_data(FILE *fp)
 {
   for (int i = 1; i <= atom->ntypes; i++)
-    fprintf(fp,"%d %g %g %g %g %g\n",i,cof[i][i],G[i][i],K[i][i],Sy[i][i],Eh[i][i]);
+    fprintf(fp,"%d %g %g %g %g %g %g %g\n",i,cof[i][i],G[i][i],K[i][i],ModulusPredictOne[i][i],ModulusPredictAll[i][i],Sy[i][i],Eh[i][i]);
 }
 
 /* ----------------------------------------------------------------------
@@ -1045,5 +1060,5 @@ void PairMCA::write_data_all(FILE *fp)
 {
   for (int i = 1; i <= atom->ntypes; i++)
     for (int j = i; j <= atom->ntypes; j++)
-      fprintf(fp,"%d %d %g %g %g %g %g\n",i,j,cof[i][i],G[i][j],K[i][j],Sy[i][j],Eh[i][j]);
+      fprintf(fp,"%d %d %g %g %g %g %g %g %g\n",i,j,cof[i][i],G[i][j],K[i][j],ModulusPredictOne[i][j],ModulusPredictAll[i][j],Sy[i][j],Eh[i][j]);
 }

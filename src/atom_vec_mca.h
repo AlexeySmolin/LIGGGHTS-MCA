@@ -130,6 +130,7 @@ class AtomVecMCA : public AtomVec {
   double *equiv_stress_prev;// equivalent stress at previous time step
   double *equiv_strain;// ~ equivalent (shear) strain - is used for plasticity
   double *cont_distance;// distance to free surface (to determine a new contact)
+  double *plastic_heat; // heat due to work of plastic deformation
   /// Below is the list of vaiables existing  in 'atom.h' that can be used for mca instead of new ones
   //double *q;  //!! mca_inertia - moment of inertia is a scalar as for sphere
   //double **mu;//!! theta  - orientation vector to describe rotation as a first approximation

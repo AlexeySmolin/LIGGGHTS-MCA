@@ -38,7 +38,7 @@ boundary	f f f	# style of boundaries for the global simulation box in each dimen
 			# boundary x y z (x,y,z = one or two letters:
 			# p (periodic) or f (fixed) or s (shrink-wrapped) or m (shrink-wrapped with a minimum)
 
-atom_style	mca radius ${rp} packing sc n_bondtypes ${bt} bonds_per_atom ${bpa}
+atom_style	mca radius ${rp} packing sc n_bondtypes ${bt} bonds_per_atom ${bpa} implicit_factor 0.5
 
 atom_modify	map array # map keyword determines how atom ID lookup is done.
 # Lookups are performed by bond routines to find the local atom index associated with a global atom ID. 
@@ -143,7 +143,7 @@ fix             botV_fix bot mca/setvelocity 0 0 0
 # CREATE BONDS BETWEEN PARTICLES
 ####################################################################################################
 variable	cutoff equal ${d}*(1.0+0.02)
-fix 		bondcr all bond/create/mca 1 1 1 ${cutoff} 1 ${bpa} #every itype jtype  btype newperts
+fix 		bondcr all bond/create/mca 1 1 1 ${cutoff} 1 ${bpa} #every itype jtype  btype maxbondsperatom
 
 ####################################################################################################
 # TIME INTEGRATION
@@ -155,15 +155,15 @@ fix		integr nve_group nve/mca
 # SIMULATION TIME PARAMETERS
 ####################################################################################################
 variable	TimeStep equal ${rp}/(sqrt((${K}+4.*${G}/3.)/${rho})) # Time step = ${rp}/(sqrt((${K}+4.*${G}/3.)/${rho}))
-variable	dt equal 1.e-5	# Time step = ${rp}/(sqrt($Y/${rho}))
+variable	dt equal 4.e-5	# Time step = ${rp}/(sqrt($Y/${rho}))
 print 'Recommended time step ${TimeStep}'
 if "${TimeStep} < ${dt}" then &
   "print 'Recommended time step ${TimeStep} is smaller than dt= ${dt}'" &
   quit
 variable	fulltime equal 1.0	# Simulation time
-variable	runstep equal  ${fulltime}/${dt}
+variable	runstep equal  round(${fulltime}/${dt})
 variable	savetime equal 0.01	# 0.0001
-variable	filestep equal ${savetime}/${dt}
+variable	filestep equal round(${savetime}/${dt})
 timestep	${dt}
 
 ####################################################################################################

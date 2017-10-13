@@ -66,7 +66,7 @@ using namespace LAMMPS_NS;
 using namespace FixConst;
 using namespace MCAAtomConst;
 
-///#define NO_MEANSTRESS
+///#define NO_MEANSTRESS // see also in pair_mca.cpp
 
 /* ---------------------------------------------------------------------- */
 
@@ -160,12 +160,12 @@ inline void  FixMCAMeanStress::swap_prev()
 
 inline void  FixMCAMeanStress::predict_mean_stress()
 {
-  int i,j,k,jk,itype,jtype;
+  int i,j,k,jk,itype;
 
   double **x = atom->x;
   double **v = atom->v;
   double *mean_stress = atom->mean_stress;
-  double *mean_stress_prev = atom->mean_stress_prev;
+  double *plastic_heat = atom->plastic_heat;
   const double mca_radius = atom->mca_radius;
   const int * const tag = atom->tag;
   const int * const type = atom->type;
@@ -184,34 +184,25 @@ inline void  FixMCAMeanStress::predict_mean_stress()
   const PairMCA * const mca_pair = (PairMCA*) force->pair;
 
 //fprintf(logfile,"FixMCAMeanStress::predict_mean_stress\n"); ///AS DEBUG TRACE
+  // first loop for computing distance (R) normal vector (NX,NY,NZ) and mean strain increment
 #if defined (_OPENMP)
-#pragma omp parallel for private(i,j,k,jk,itype,jtype) shared(x,v,mean_stress,mean_stress_prev,bond_atom,bond_hist) default(shared) schedule(static)
+#pragma omp parallel for private(i,j,k,jk,itype) shared(x,v,mean_stress,bond_atom,bond_hist) default(shared) schedule(static)
 #endif
   for (i = 0; i < nlocal; i++) {/// i < nmax; i++) {///
     if (num_bond[i] == 0) continue;
 
     int ** const bond_mca = atom->bond_mca;
-    double xtmp,ytmp,ztmp,delx,dely,delz,vxtmp,vytmp,vztmp,r,r0,rsq,rinv;
-    double rKHi,rKHj;// (1-2*G)/(3*K) for atom i (j)
-    double rHi,rHj;  // 2*G for atom i (j)
-    double pi,pj;
-    double d_p;
-    double d_e,d_e0;
-    double rdSgmi;
+    double xtmp,ytmp,ztmp,vxtmp,vytmp,vztmp;
+    double rHi;  // 2*G for atom i (j)
     double rK1, rKn;
-    int Ni, Nj; // number of interacting neighbors (bonds) for i (j)
-
-    Ni = num_bond[i];
-    if (Ni > Nc) Ni = Nc; // not increse "rigidity"
+    int Ni = num_bond[i]; // number of interacting neighbors (bonds) for i (j)
+    if (Ni > Nc) Ni = Nc; // not increase "rigidity"
+    double rM_I = (double)(Ni-1) / (double)(Nc-1);
     itype = type[i];
-    rHi = 2.0*mca_pair->G[itype][itype];
-    ///AS TODO make this property global as in 'fix_check_timestep_gran.cpp' :
-    /// Y = static_cast<FixPropertyGlobal*>(modify->find_fix_property("youngsModulus","property/global","peratomtype",max_type,0,style));
-
-    rKHi = mca_pair->K[itype][itype]; rKHi = 1. - rHi / (3. * rKHi);
-    rK1 = (double)Nc / (Nc - rKHi);
-    rKn = (Nc + rKHi/(1.0 - rKHi)) / ((double)Nc);
-    rHi *= rK1 + ((rKn-rK1)*(Ni-1))/((double)(Nc-1)); // fix "rigidity" with accounting of # of bonds
+    double r3Ki = 3.0 * mca_pair->K[itype][itype];
+    rK1 = mca_pair->ModulusPredictOne[itype][itype];
+    rKn = mca_pair->ModulusPredictAll[itype][itype];
+    rHi = rK1*(1.0-rM_I) + rKn*rM_I; // "rigidity" with accounting for # of bonds
 
     xtmp = x[i][0];
     ytmp = x[i][1];
@@ -220,7 +211,7 @@ inline void  FixMCAMeanStress::predict_mean_stress()
     vytmp = v[i][1];
     vztmp = v[i][2];
 
-    rdSgmi = 0.0;
+    double rDeltaEpsMean_I = 0.0;
     for(k = 0; k < num_bond[i]; k++)
     {
       j = bond_mca[i][k];
@@ -236,7 +227,7 @@ inline void  FixMCAMeanStress::predict_mean_stress()
 */
       int found = 0;
       int i_tag = tag[i];
-      Nj = num_bond[j];
+      int Nj = num_bond[j];
 ///fprintf(logfile,"FixMCAMeanStress::mean_stress_predict: i=%d j=%d num_bond[j]=%d\n",i,j,Nj);
       for(jk = 0; jk < Nj; jk++) {
 ///fprintf(logfile,"FixMCAMeanStress::mean_stress_predict: i=%d j=%d jk=%d num_bond[j]=%d\n",i,j,jk,Nj);
@@ -245,13 +236,12 @@ inline void  FixMCAMeanStress::predict_mean_stress()
       if (!found) error->all(FLERR,"FixMCAMeanStress::mean_stress_predict 'jk' not found");
 
       if (Nj > Nc) Nj = Nc; // not increse "rigidity" if atom has more bonds
-      jtype = type[j];
-      rHj = 2.0*mca_pair->G[jtype][jtype];
-      rKHj = mca_pair->K[jtype][jtype]; rKHj = 1. - rHj / (3. * rKHj);
-      rK1 = (double)Nc / (Nc - rKHj);
-      rKn = (Nc + rKHj/(1.0 - rKHj)) / ((double)Nc);
-      rHj *= rK1 + ((rKn-rK1)*(Nj-1))/((double)(Nc-1)); // fix "rigidity" with accounting of on # of bonds
-
+      double rM_J = (double)(Nj-1) / (double)(Nc-1);
+      int jtype = type[j];
+      double rK1j = mca_pair->ModulusPredictOne[jtype][jtype];
+      double rKnj = mca_pair->ModulusPredictAll[jtype][jtype];
+      double rHj = rK1j*(1.0-rM_J) + rKnj*rM_J; // "rigidity" with accounting for # of bonds
+      double delx,dely,delz,r,rsq,rinv;
       delx = xtmp - x[j][0] + dtImpl*(vxtmp - v[j][0]); // Implicit update of the distance. It is equivalent to use of damping force.
       dely = ytmp - x[j][1] + dtImpl*(vytmp - v[j][1]);
       delz = ztmp - x[j][2] + dtImpl*(vztmp - v[j][2]);
@@ -260,42 +250,130 @@ inline void  FixMCAMeanStress::predict_mean_stress()
       rinv = -1. / r; // "-" means that unit vector is from i1 to i2
 
       double *bond_hist_ik = bond_hist[i_tag-1][k];
-      r0 = bond_hist_ik[R_PREV];
-      pi = bond_hist_ik[P_PREV];
+      double r0 = bond_hist_ik[R_PREV];
+      double pi = bond_hist_ik[P_PREV];
+      double pj;
       if (newton_bond) {
         //pj = bond_hist_ik[PJ_PREV]; it means we store bonds only for i < j, but allocate memory for both. why?
         error->all(FLERR,"FixMCAMeanStress::mean_stress_predict does not support 'newton_bond on'");
       } else
         pj = bond_hist[tag[j]-1][jk][P_PREV];
 
-      d_e0 = (r - r0) / mca_radius;
-      d_e  = (pj - pi + rHj*d_e0) / (rHi + rHj);
-      d_p = rHi*d_e;
+      double d_e0 = (r - r0) / mca_radius;
+      double d_e  = (pj - pi + rHj*d_e0) / (rHi + rHj);
+      rDeltaEpsMean_I += d_e;
 
-      if (nbondlist != 0) {
-        int bond_index_i = bond_index[i][k];
-        if((bond_index_i >= nbondlist) || (bond_index_i < 0)) {
-          char str[512];
-          sprintf(str,"wrong bond_index[%d][%d()]=%d (nbondlist=%d) at step " BIGINT_FORMAT,
-                  i,k,bond_index_i,nbondlist,update->ntimestep);
-          error->one(FLERR,str);
-        }
-        int bond_state = bondlist[bond_index_i][3];
-        if((!bond_state) && ((pi + d_p)>0.0)) { // if happens?!
-          d_p = 0.0;
-        }
-      }
-      rdSgmi += d_p;
       bond_hist_ik[R] = r;
 //      bond_hist[j][jk][R] = r; //TODO do we need it for j?
       bond_hist_ik[NX] = delx*rinv; ///TODO will do it later in PairMCA::compute_total_force because here we use implicit distance
       bond_hist_ik[NY] = dely*rinv;
       bond_hist_ik[NZ] = delz*rinv;
     }
-#ifndef NO_MEANSTRESS
-    mean_stress[i] = mean_stress_prev[i] + rdSgmi / Nc;
+#ifdef NO_MEANSTRESS
+    mean_stress[i] = 0.0;
+#else
+    double rNc = (double)Nc;
+    if( Ni < Nc ) { // correcting mean strain accounting for free surface (surrounding)
+       double rKHi = 1.0 - 2.0*mca_pair->G[itype][itype] / r3Ki;
+       double rKk = -rKHi / (1.0 - rKHi);
+       double rTMult = (double)(Nc - Ni);
+       rNc -= rTMult * rKk;
+       rDeltaEpsMean_I /= rNc; // contribution to mean strain
+//       rTMult *= (1.0 - rKk);
+//       rTMult = rThermoElasticPart_I * rTMult / (Ni + rTMult);
+//       rDeltaEpsMean_I += rTMult; // contribution to thermoelastic part
+    } else
+      rDeltaEpsMean_I /= rNc;
+
+    mean_stress[i] = r3Ki * (rDeltaEpsMean_I);// - rThermoElasticPart_I);
 #endif
   }
+
+#ifndef NO_MEANSTRESS
+   // Second loop for computing mean stress
+#if defined (_OPENMP)
+#pragma omp parallel for private(i,j,k,jk,itype) shared(x,v,mean_stress,plastic_heat,bond_atom,bond_hist) default(shared) schedule(static)
+#endif
+  for (i = 0; i < nlocal; i++) {/// i < nmax; i++) {///
+    if (num_bond[i] == 0) continue;
+
+    int ** const bond_mca = atom->bond_mca;
+    double rKHi,rKHj;// 1-2*G/(3*K) for atom i (j)
+    double rHi,rHj;  // 2*G for atom i (j)
+    double pi,pj;
+    double d_p;
+    double d_e,d_e0;
+    double rdSgmi,rdSgmj;
+    double qi,qj;
+    double r,r0;
+
+    itype = type[i];
+    ///AS TODO make this property global as in 'fix_check_timestep_gran.cpp' :
+    /// Y = static_cast<FixPropertyGlobal*>(modify->find_fix_property("youngsModulus","property/global","peratomtype",max_type,0,style));
+    rHi = 2. * mca_pair->G[itype][itype];
+    rKHi = mca_pair->K[itype][itype]; rKHi = 1. - rHi / (3. * rKHi);
+
+    rdSgmi = rKHi*mean_stress[i];
+    double rSum = 0.0;
+    for(k = 0; k < num_bond[i]; k++)
+    {
+      j = bond_mca[i][k];
+      int bond_index_i = bond_index[i][k];
+      if(bond_index_i >= nbondlist) {
+        char str[512];
+        sprintf(str,"bond_index[%d][%d]=%d > nbondlist(%d) at step " BIGINT_FORMAT,
+                i,j,bond_index_i,nbondlist,update->ntimestep);
+        error->one(FLERR,str);
+      }
+      int bond_state = bondlist[bond_index_i][3];
+      if(bond_state == NOT_INTERACT) { // pair does not interact
+        continue;
+      }
+
+      double *bond_hist_ik = &(bond_hist[tag[i]-1][k][0]);
+      int found = 0;
+      for(jk = 0; jk < num_bond[j]; jk++)
+        if(bond_atom[j][jk] == tag[i]) {found = 1; break; }
+      if (!found) error->all(FLERR,"FixMCAMeanStress::mean_stress_predict 'jk' not found");
+      double *bond_hist_jk = &(bond_hist[tag[j]-1][jk][0]);
+
+      int jtype = type[j];
+      rHj = 2. * mca_pair->G[jtype][jtype];
+      rKHj = mca_pair->K[jtype][jtype]; rKHj = 1. - rHj / (3. * rKHj);
+
+      r = bond_hist_ik[R];
+      r0 = bond_hist_ik[R_PREV];
+      pi = bond_hist_ik[P_PREV];
+      if (newton_bond) {
+        //pj = bond_hist_ik[PJ_PREV];
+        error->all(FLERR,"FixMCAMeanStress::mean_stress_predict does not support 'newton on'");
+      } else
+        pj = bond_hist_jk[P_PREV];
+
+      d_e0 = (r - r0) / mca_radius;
+      rdSgmj = rKHj*mean_stress[j]; // here we use mean_stress[j] so we can not write to it
+      d_e  = (pj - pi + rHj*d_e0 + rdSgmj - rdSgmi) / (rHi + rHj);
+      d_p = rHi*d_e + rdSgmi;
+      pi += d_p;
+//fprintf(logfile,"FixMCAMeanStress::mean_stress_predict: i=%d j=%d P=%g oNbrR_i.rE=%g IDi=%d IDj=%d Dij=%g D0ij=%g\n   dE=%g Pj=%g Pi=%g dSgmj=%g dSgmi=%g Hj=%g Hi=%g meanSi=%g meanSj=%g bond_state=%d\n",
+//i,j,pi,bond_hist_ik[E],tag[i],bond_atom[i][k],r,r0,d_e,pj,(pi-d_p),rdSgmj,rdSgmi,rHj,rHi,mean_stress[i],mean_stress[j],bond_state);
+      if((bond_state == UNBONDED) && (pi > 0.0)) { // if happens that unbonded particles attract each other
+          pi = 0.0;
+      }
+      rSum += pi;
+    }
+    double rNc = (double)Nc;
+    plastic_heat[i] = rSum / rNc; // save mean stress to plastic_heat temporarily
+  }
+
+#ifdef _OPENMP
+#pragma omp parallel for private(i) shared(mean_stress,plastic_heat) default(shared) schedule(static)
+#endif
+  for (i = 0; i < nlocal; i++) {/// i < nmax; i++) {///
+    mean_stress[i] = plastic_heat[i];
+//fprintf(logfile,"FixMCAMeanStress::mean_stress_predict: i=%d meanSi=%g PREV  meanSi=%g \n",i,mean_stress[i],atom->mean_stress_prev[i]);
+  }
+#endif // NO_MEANSTRESS
 }
 
 void FixMCAMeanStress::pre_force(int vflag)

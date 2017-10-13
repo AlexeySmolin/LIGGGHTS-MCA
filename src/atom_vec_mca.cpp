@@ -298,6 +298,7 @@ void AtomVecMCA::grow(int n)
   equiv_stress_prev = memory->grow(atom->equiv_stress_prev,nmax*comm->nthreads,"atom:equiv_stress_prev");
   equiv_strain = memory->grow(atom->equiv_strain,nmax*comm->nthreads,"atom:equiv_strain");
   cont_distance = memory->grow(atom->cont_distance,nmax*comm->nthreads,"atom:cont_distance");
+  plastic_heat = memory->grow(atom->plastic_heat,nmax*comm->nthreads,"atom:plastic_heat");
 
   molecule = memory->grow(atom->molecule,nmax,"atom:molecule");
   nspecial = memory->grow(atom->nspecial,nmax,3,"atom:nspecial");
@@ -350,6 +351,7 @@ void AtomVecMCA::grow_reset()
   equiv_stress_prev = atom->equiv_stress_prev;
   equiv_strain = atom->equiv_strain;
   cont_distance = atom->cont_distance;
+  plastic_heat = atom->plastic_heat;
 
   molecule = atom->molecule;
   nspecial = atom->nspecial; special = atom->special;
@@ -398,6 +400,7 @@ void AtomVecMCA::copy(int i, int j, int delflag)
   equiv_stress_prev[j] = equiv_stress_prev[i];
   equiv_strain[j] = equiv_strain[i];
   cont_distance[j] = cont_distance[i];
+  plastic_heat[j] = plastic_heat[i];
 
   molecule[j] = molecule[i];
 
@@ -457,6 +460,7 @@ int AtomVecMCA::pack_comm(int n, int *list, double *buf,
       buf[m++] = equiv_stress_prev[j];
       buf[m++] = equiv_strain[j];
       buf[m++] = cont_distance[j];
+      buf[m++] = plastic_heat[j];
       buf[m++] = ubuf(num_bond[j]).d;
       for (k = 0; k < num_bond[j]; k++) {
         buf[m++] = ubuf(bond_type[j][k]).d;
@@ -499,6 +503,7 @@ int AtomVecMCA::pack_comm(int n, int *list, double *buf,
       buf[m++] = equiv_stress_prev[j];
       buf[m++] = equiv_strain[j];
       buf[m++] = cont_distance[j];
+      buf[m++] = plastic_heat[j];
       buf[m++] = ubuf(num_bond[j]).d;
       for (k = 0; k < num_bond[j]; k++) {
         buf[m++] = ubuf(bond_type[j][k]).d;
@@ -540,6 +545,7 @@ int AtomVecMCA::pack_comm(int n, int *list, double *buf,
         buf[m++] = equiv_stress_prev[j];
         buf[m++] = equiv_strain[j];
         buf[m++] = cont_distance[j]
+        buf[m++] = plastic_heat[j];
       }
     } else {
       if (domain->triclinic == 0) {
@@ -572,6 +578,7 @@ int AtomVecMCA::pack_comm(int n, int *list, double *buf,
         buf[m++] = equiv_stress_prev[j];
         buf[m++] = equiv_strain[j];
         buf[m++] = cont_distance[j]
+        buf[m++] = plastic_heat[j];
       }
     }
   } */
@@ -619,6 +626,7 @@ int AtomVecMCA::pack_comm_vel(int n, int *list, double *buf,
       buf[m++] = equiv_stress_prev[j];
       buf[m++] = equiv_strain[j];
       buf[m++] = cont_distance[j];
+      buf[m++] = plastic_heat[j];
       buf[m++] = ubuf(num_bond[j]).d;
       for (k = 0; k < num_bond[j]; k++) {
         buf[m++] = ubuf(bond_type[j][k]).d;
@@ -669,6 +677,7 @@ int AtomVecMCA::pack_comm_vel(int n, int *list, double *buf,
         buf[m++] = equiv_stress_prev[j];
         buf[m++] = equiv_strain[j];
         buf[m++] = cont_distance[j];
+        buf[m++] = plastic_heat[j];
         buf[m++] = ubuf(num_bond[j]).d;
 //if(tag[j]==10) fprintf(logfile,"pack_comm_vel num_bond[%d(tag=%d)]=%d\n",j,tag[j],num_bond[j]);
         for (k = 0; k < num_bond[j]; k++) {
@@ -719,6 +728,7 @@ int AtomVecMCA::pack_comm_vel(int n, int *list, double *buf,
         buf[m++] = equiv_stress_prev[j];
         buf[m++] = equiv_strain[j];
         buf[m++] = cont_distance[j];
+        buf[m++] = plastic_heat[j];
         buf[m++] = ubuf(num_bond[j]).d;
         for (k = 0; k < num_bond[j]; k++) {
           buf[m++] = ubuf(bond_type[j][k]).d;
@@ -767,6 +777,7 @@ int AtomVecMCA::pack_comm_vel(int n, int *list, double *buf,
         buf[m++] = equiv_stress_prev[j];
         buf[m++] = equiv_strain[j];
         buf[m++] = cont_distance[j]
+        buf[m++] = plastic_heat[j];
       }
     } else {
       if (domain->triclinic == 0) {
@@ -807,6 +818,7 @@ int AtomVecMCA::pack_comm_vel(int n, int *list, double *buf,
           buf[m++] = equiv_stress_prev[j];
           buf[m++] = equiv_strain[j];
           buf[m++] = cont_distance[j]
+          buf[m++] = plastic_heat[j];
         }
       } else {
         dvx = pbc[0]*h_rate[0] + pbc[5]*h_rate[5] + pbc[4]*h_rate[4];
@@ -846,6 +858,7 @@ int AtomVecMCA::pack_comm_vel(int n, int *list, double *buf,
           buf[m++] = equiv_stress_prev[j];
           buf[m++] = equiv_strain[j];
           buf[m++] = cont_distance[j]
+          buf[m++] = plastic_heat[j];
         }
       }
     }
@@ -878,6 +891,7 @@ int AtomVecMCA::pack_comm_hybrid(int n, int *list, double *buf)
       buf[m++] = equiv_stress_prev[j];
       buf[m++] = equiv_strain[j];
       buf[m++] = cont_distance[j];
+      buf[m++] = plastic_heat[j];
       buf[m++] = ubuf(num_bond[j]).d;
       for (k = 0; k < num_bond[j]; k++) {
         buf[m++] = ubuf(bond_type[j][k]).d;
@@ -913,6 +927,7 @@ int AtomVecMCA::pack_comm_hybrid(int n, int *list, double *buf)
       buf[m++] = equiv_stress_prev[j];
       buf[m++] = equiv_strain[j];
       buf[m++] = cont_distance[j]
+      buf[m++] = plastic_heat[j];
     }
  } */
 fprintf(logfile,"AtomVecMCA::pack_comm_hybrid m=%d n=%d \n",m,n);
@@ -945,6 +960,7 @@ void AtomVecMCA::unpack_comm(int n, int first, double *buf)
     equiv_stress_prev[i] = buf[m++];
     equiv_strain[i] = buf[m++];
     cont_distance[i] = buf[m++];
+    plastic_heat[i] = buf[m++];
     num_bond[i] = (int) ubuf(buf[m++]).i;
     for (k = 0; k < num_bond[i]; k++) {
       bond_type[i][k] = (int) ubuf(buf[m++]).i;
@@ -983,6 +999,7 @@ void AtomVecMCA::unpack_comm(int n, int first, double *buf)
       equiv_stress_prev[i] = buf[m++];
       equiv_strain[i] = buf[m++];
       cont_distance[i] = buf[m++];
+      plastic_heat[i] = buf[m++];
     }
   } */
 fprintf(logfile,"AtomVecMCA::unpack_comm m=%d n=%d \n",m,n);
@@ -1021,6 +1038,7 @@ void AtomVecMCA::unpack_comm_vel(int n, int first, double *buf)
     equiv_stress_prev[i] = buf[m++];
     equiv_strain[i] = buf[m++];
     cont_distance[i] = buf[m++];
+    plastic_heat[i] = buf[m++];
     num_bond[i] = (int) ubuf(buf[m++]).i;
 //if(tag[i]==10) fprintf(logfile,"unpack_comm_vel num_bond[%d(tag=%d)]=%d\n",i,tag[i],num_bond[i]);
     for (k = 0; k < num_bond[i]; k++) {
@@ -1069,6 +1087,7 @@ void AtomVecMCA::unpack_comm_vel(int n, int first, double *buf)
       equiv_stress_prev[i] = buf[m++];
       equiv_strain[i] = buf[m++];
       cont_distance[i] = buf[m++];
+      plastic_heat[i] = buf[m++];
     }
   } */
 ///fprintf(logfile,"AtomVecMCA::unpack_comm_vel m=%d n=%d [%d - %d]\n",m,n,first,last);///
@@ -1097,6 +1116,7 @@ int AtomVecMCA::unpack_comm_hybrid(int n, int first, double *buf)
     equiv_stress_prev[i] = buf[m++];
     equiv_strain[i] = buf[m++];
     cont_distance[i] = buf[m++];
+    plastic_heat[i] = buf[m++];
     num_bond[i] = (int) ubuf(buf[m++]).i;
     for (k = 0; k < num_bond[i]; k++) {
       bond_type[i][k] = (int) ubuf(buf[m++]).i;
@@ -1130,6 +1150,7 @@ int AtomVecMCA::unpack_comm_hybrid(int n, int first, double *buf)
     equiv_stress_prev[i] = buf[m++];
     equiv_strain[i] = buf[m++];
     cont_distance[i] = buf[m++];
+    plastic_heat[i] = buf[m++];
   }
   }*/
 fprintf(logfile,"AtomVecMCA::unpack_comm_hybrid m=%d n=%d \n",m,n);
@@ -1250,6 +1271,7 @@ int AtomVecMCA::pack_border(int n, int *list, double *buf,
       buf[m++] = equiv_stress_prev[j];
       buf[m++] = equiv_strain[j];
       buf[m++] = cont_distance[j];
+      buf[m++] = plastic_heat[j];
 
       buf[m++] = ubuf(molecule[j]).d;
       buf[m++] = ubuf(num_bond[j]).d;
@@ -1300,6 +1322,7 @@ int AtomVecMCA::pack_border(int n, int *list, double *buf,
       buf[m++] = equiv_stress_prev[j];
       buf[m++] = equiv_strain[j];
       buf[m++] = cont_distance[j];
+      buf[m++] = plastic_heat[j];
 
       buf[m++] = ubuf(molecule[j]).d;
       buf[m++] = ubuf(num_bond[j]).d;
@@ -1373,6 +1396,7 @@ int AtomVecMCA::pack_border_vel(int n, int *list, double *buf,
       buf[m++] = equiv_stress_prev[j];
       buf[m++] = equiv_strain[j];
       buf[m++] = cont_distance[j];
+      buf[m++] = plastic_heat[j];
 
       buf[m++] = ubuf(molecule[j]).d;
       buf[m++] = ubuf(num_bond[j]).d;
@@ -1434,6 +1458,7 @@ int AtomVecMCA::pack_border_vel(int n, int *list, double *buf,
         buf[m++] = equiv_stress_prev[j];
         buf[m++] = equiv_strain[j];
         buf[m++] = cont_distance[j];
+        buf[m++] = plastic_heat[j];
 
         buf[m++] = ubuf(molecule[j]).d;
         buf[m++] = ubuf(num_bond[j]).d;
@@ -1494,6 +1519,7 @@ int AtomVecMCA::pack_border_vel(int n, int *list, double *buf,
         buf[m++] = equiv_stress_prev[j];
         buf[m++] = equiv_strain[j];
         buf[m++] = cont_distance[j];
+        buf[m++] = plastic_heat[j];
 
         buf[m++] = ubuf(molecule[j]).d;
         buf[m++] = ubuf(num_bond[j]).d;
@@ -1547,6 +1573,7 @@ int AtomVecMCA::pack_border_hybrid(int n, int *list, double *buf)
     buf[m++] = equiv_stress_prev[j];
     buf[m++] = equiv_strain[j];
     buf[m++] = cont_distance[j];
+    buf[m++] = plastic_heat[j];
 
     buf[m++] = ubuf(molecule[j]).d;
     buf[m++] = ubuf(num_bond[j]).d;
@@ -1599,6 +1626,7 @@ void AtomVecMCA::unpack_border(int n, int first, double *buf)
     equiv_stress_prev[i] = buf[m++];
     equiv_strain[i] = buf[m++];
     cont_distance[i] = buf[m++];
+    plastic_heat[i] = buf[m++];
 
     molecule[i] = (int) ubuf(buf[m++]).i; // remove?
     num_bond[i] = (int) ubuf(buf[m++]).i;
@@ -1664,6 +1692,7 @@ void AtomVecMCA::unpack_border_vel(int n, int first, double *buf)
     equiv_stress_prev[i] = buf[m++];
     equiv_strain[i] = buf[m++];
     cont_distance[i] = buf[m++];
+    plastic_heat[i] = buf[m++];
 
     molecule[i] = (int) ubuf(buf[m++]).i;  // remove?
     num_bond[i] = (int) ubuf(buf[m++]).i;
@@ -1715,6 +1744,7 @@ int AtomVecMCA::unpack_border_hybrid(int n, int first, double *buf)
     equiv_stress_prev[i] = buf[m++];
     equiv_strain[i] = buf[m++];
     cont_distance[i] = buf[m++];
+    plastic_heat[i] = buf[m++];
     molecule[i] = (int) ubuf(buf[m++]).i; //remove?
     num_bond[i] = (int) ubuf(buf[m++]).i;
     for (k = 0; k < num_bond[i]; k++) {
@@ -1774,6 +1804,7 @@ int AtomVecMCA::pack_exchange(int i, double *buf)
   buf[m++] = equiv_stress_prev[i];
   buf[m++] = equiv_strain[i];
   buf[m++] = cont_distance[i];
+  buf[m++] = plastic_heat[i];
 
   buf[m++] = ubuf(molecule[i]).d;
   buf[m++] = ubuf(num_bond[i]).d;
@@ -1847,6 +1878,7 @@ int AtomVecMCA::unpack_exchange(double *buf)
   equiv_stress_prev[nlocal] = buf[m++];
   equiv_strain[nlocal] = buf[m++];
   cont_distance[nlocal] = buf[m++];
+  plastic_heat[nlocal] = buf[m++];
 
   molecule[nlocal] = (int) ubuf(buf[m++]).i;
   num_bond[nlocal] = (int) ubuf(buf[m++]).i;
@@ -1896,16 +1928,16 @@ int AtomVecMCA::size_restart()
 
   for (i = 0; i < nlocal; i++)
   {
-    n += 31 + 3*num_bond[i];
-///AS it was 13, we added 18 (rmass[i];density[i];omega[i][3];mca_inertia[i];theta[i][3];theta_prev[i][3];mean_stress[i];mean_stress_prev[i];equiv_stress[i];equiv_stress_prev[i];equiv_strain[i];cont_distance[i]) private variables, so total # is 30
+    n += 32 + 3*num_bond[i];
+///AS it was 13, we added 19 (rmass[i];density[i];omega[i][3];mca_inertia[i];theta[i][3];theta_prev[i][3];mean_stress[i];mean_stress_prev[i];equiv_stress[i];equiv_stress_prev[i];equiv_strain[i];cont_distance[i];plastic_heat[i]) private variables, so total # is 32
 
-    if(atom->n_bondhist) n += 1/*num_bondhist*/ + num_bond[i] * atom->n_bondhist/*bond_hist*/; //CR 26.01.2015
+    if(atom->n_bondhist) n += 1/*num_bondhist*/ + num_bond[i] * atom->n_bondhist/*bond_hist*/;
   }
 
   if (atom->nextra_restart)
     for (int iextra = 0; iextra < atom->nextra_restart; iextra++)
       for (i = 0; i < nlocal; i++)
-	n += modify->fix[atom->extra_restart[iextra]]->size_restart(i);
+        n += modify->fix[atom->extra_restart[iextra]]->size_restart(i);
 
   return n;
 }
@@ -1952,6 +1984,7 @@ int AtomVecMCA::pack_restart(int i, double *buf)
   buf[m++] = equiv_stress_prev[i];
   buf[m++] = equiv_strain[i];
   buf[m++] = cont_distance[i];
+  buf[m++] = plastic_heat[i];
 
 
   buf[m++] = ubuf(molecule[i]).d;
@@ -2027,6 +2060,7 @@ int AtomVecMCA::unpack_restart(double *buf)
   equiv_stress_prev[nlocal] = buf[m++];
   equiv_strain[nlocal] = buf[m++];
   cont_distance[nlocal] = buf[m++];
+  plastic_heat[nlocal] = buf[m++];
 
   molecule[nlocal] = (int) ubuf(buf[m++]).i; //remove?
   num_bond[nlocal] = (int) ubuf(buf[m++]).i;
@@ -2111,6 +2145,7 @@ void AtomVecMCA::create_atom(int itype, double *coord)
   equiv_stress_prev[nlocal] = 0.0;
   equiv_strain[nlocal] = 0.0;
   cont_distance[nlocal] = mca_radius;
+  plastic_heat[nlocal] = 0.0;
 
   for(int k = 0; k < atom->bond_per_atom; k++) { ///num_bond[nlocal]; k++) {
       bond_index[nlocal][k] = -1;
@@ -2178,6 +2213,7 @@ fprintf(logfile,"AtomVecMCA::data_atom\n"); ///AS DEBUG
   equiv_stress_prev[nlocal] = 0.0;
   equiv_strain[nlocal] = 0.0;
   cont_distance[nlocal] = mca_radius;
+  plastic_heat[nlocal] = 0.0;
 
   num_bond[nlocal] = 0;
 
@@ -2267,6 +2303,7 @@ void AtomVecMCA::pack_data(double **buf)
     buf[i][19] = equiv_stress_prev[i];
     buf[i][20] = equiv_strain[i];
     buf[i][21] = cont_distance[i];
+    buf[i][22] = plastic_heat[i];
   }
 }
 
@@ -2305,6 +2342,7 @@ fprintf(stderr, "AtomVecMCA::pack_data:  tag_offset=%d \n", tag_offset);
     buf[i][19] = equiv_stress_prev[i];
     buf[i][20] = equiv_strain[i];
     buf[i][21] = cont_distance[i];
+    buf[i][22] = plastic_heat[i];
   }
 }
 
@@ -2343,7 +2381,7 @@ void AtomVecMCA::write_data(FILE *fp, int n, double **buf)
             buf[i][9],				// rmass[i] / get_init_volume();
             buf[i][10],buf[i][11],buf[i][12],	// theta[i][1] theta[i][2] theta[i][2]
             buf[i][13],buf[i][14],buf[i][15],	// theta_prev[i][1] theta_prev[i][2] theta_prev[i][2]
-            buf[i][16],buf[i][17],buf[i][18],buf[i][19],buf[i][20],buf[i][21]);	// mean_stress[i] mean_stress_prev[i] equiv_stress[i] equiv_stress_prev[i] equiv_strain[i] cont_distance[i]
+            buf[i][16],buf[i][17],buf[i][18],buf[i][19],buf[i][20],buf[i][21],buf[i][22]);	// mean_stress[i] mean_stress_prev[i] equiv_stress[i] equiv_stress_prev[i] equiv_strain[i] cont_distance[i] plastic_heat[i]
 */
 }
 
@@ -2459,6 +2497,7 @@ bigint AtomVecMCA::memory_usage()
   if (atom->memcheck("equiv_stress_prev")) bytes += memory->usage(equiv_stress_prev,nmax*comm->nthreads);
   if (atom->memcheck("equiv_strain")) bytes += memory->usage(equiv_strain,nmax*comm->nthreads);
   if (atom->memcheck("cont_distance")) bytes += memory->usage(cont_distance,nmax*comm->nthreads);
+  if (atom->memcheck("plastic_heat")) bytes += memory->usage(plastic_heat,nmax*comm->nthreads);
 
   if (atom->memcheck("molecule")) bytes += memory->usage(molecule,nmax);
   if (atom->memcheck("nspecial")) bytes += memory->usage(nspecial,nmax,3);

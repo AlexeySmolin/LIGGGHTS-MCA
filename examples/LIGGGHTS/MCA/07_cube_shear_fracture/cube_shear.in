@@ -127,7 +127,7 @@ fix             botV_fix bot mca/setvelocity 0 v_vel_down 0
 # CREATE BONDS BETWEEN PARTICLES
 ####################################################################################################
 variable	cutoff equal ${d}*(1.0+0.02)
-fix 		bondcr all bond/create/mca 1 1 1 ${cutoff} 1 ${bpa} #every itype jtype  btype newperts
+fix 		bondcr all bond/create/mca 1 1 1 ${cutoff} 1 ${bpa} #every itype jtype  btype maxbondsperatom
 
 ####################################################################################################
 # TIME INTEGRATION

@@ -19,7 +19,7 @@ plot \
      './line_if0.dat' using ($1):($2) t "0" with lines, \
      './line_if0.1.dat' using ($1):($2) t "0.1" with lines, \
      './line_if0.25.dat' using ($1):($2) t "0.25" with lines, \
-     './line.dat' using ($1):($2) t "0.5" with lines, \
+     './line_if0.5.dat' using ($1):($2) t "0.5" with lines, \
      './line_if0.75.dat' using ($1):($2) t "0.75" with lines, \
      './line_if1.dat' using ($1):($2) t "1" with lines
 
@@ -29,7 +29,8 @@ set xlabel "dX/L, %"
 set ylabel "F, kN"
 set title "Loading diagram"
 
-plot './line.dat' using (($2-X0)/X0):($5*1.E-3) title "" with lines
+plot './line_if0.5.dat' using (($2-X0)/X0):($5*1.E-3) t "0.5" with lines, \
+     './line_if0.dat' using (($2-X0)/X0):($5*1.E-3) t "0" with lines
 
 pause -1 "Hit return "
 
