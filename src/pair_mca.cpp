@@ -131,7 +131,7 @@ inline void  PairMCA::compute_elastic_force()
 ///  const int nmax = atom->nmax;
   const PairMCA * const mca_pair = (PairMCA*) force->pair;
 
-//fprintf(logfile,"PairMCA::compute_elastic_force\n"); ///AS DEBUG TRACE
+//if (logfile) fprintf(logfile,"PairMCA::compute_elastic_force\n"); ///AS DEBUG TRACE
 
 #if defined (_OPENMP)
 #pragma omp parallel for private(i,j,k,jk,itype,jtype) shared(x,v,omega,theta,theta_prev,bond_hist) default(shared) schedule(static)
@@ -169,7 +169,7 @@ inline void  PairMCA::compute_elastic_force()
         error->one(FLERR,str);
       }
       j = domain->closest_image(i,j);
-///if(tag[i]==10) fprintf(logfile,"PairMCA::compute_elastic_force bond_atom[%d][%d]=%d map()=%d \n",i,k,bond_atom[i][k],j);
+///if(tag[i]==10) if (logfile) fprintf(logfile,"PairMCA::compute_elastic_force bond_atom[%d][%d]=%d map()=%d \n",i,k,bond_atom[i][k],j);
 */
       int bond_index_i = bond_index[i][k];
       if(bond_index_i >= nbondlist) {
@@ -180,10 +180,10 @@ inline void  PairMCA::compute_elastic_force()
       }
       int bond_state = bondlist[bond_index_i][3];
       if(bond_state == NOT_INTERACT) { // pair does not interact
-//        fprintf(logfile,"PairMCA::compute_elastic_force bond %d (%d - %d) does not interact\n",bond_index_i,i,j);
+//        if (logfile) fprintf(logfile,"PairMCA::compute_elastic_force bond %d (%d - %d) does not interact\n",bond_index_i,i,j);
         continue;
       }
-//fprintf(logfile,"PairMCA::compute_elastic_force bond %d (%d - %d(k=%d)) has state %d\n",bond_index_i,i,j,k,bond_state);
+//if (logfile) fprintf(logfile,"PairMCA::compute_elastic_force bond %d (%d - %d(k=%d)) has state %d\n",bond_index_i,i,j,k,bond_state);
 
       double *bond_hist_ik = &(bond_hist[tag[i]-1][k][0]);
       int found = 0;
@@ -214,22 +214,22 @@ inline void  PairMCA::compute_elastic_force()
       d_p = rHi*d_e + rdSgmi;
       ei += d_e;
       pi += d_p;
-//fprintf(logfile,"PairMCA::compute_elastic_force: i=%d j=%d E=%g P=%g oNbrR_i.rE=%g IDi=%d IDj=%d Dij=%g D0ij=%g\n   dE=%g Pj=%g Pi=%g dSgmj=%g dSgmi=%g Hj=%g Hi=%g meanSi=%g meanSj=%g bond_state=%d\n",
+//if (logfile) fprintf(logfile,"PairMCA::compute_elastic_force: i=%d j=%d E=%g P=%g oNbrR_i.rE=%g IDi=%d IDj=%d Dij=%g D0ij=%g\n   dE=%g Pj=%g Pi=%g dSgmj=%g dSgmi=%g Hj=%g Hi=%g meanSi=%g meanSj=%g bond_state=%d\n",
 //i,j,ei,pi,bond_hist_ik[E],tag[i],bond_atom[i][k],r,r0,d_e,pj,(pi-d_p),rdSgmj,rdSgmi,rHj,rHi,mean_stress[i],mean_stress[j],bond_state);
       if((mca_radius*(1.0 + ei)) > r) {
         if((bond_state == BONDED) || (pi <= 0.0)) {
-          fprintf(logfile,"PairMCA::compute_elastic_force: 'Qij>Dij' E=%g oNbrR_i.rE=%g IDi=%d IDj=%d Dij=%g D0ij=%g\n   dE=%g Pj=%g Pi=%g dSgmj=%g dSgmi=%g Hj=%g Hi=%g bond_state=%d\n",
+          if (logfile) fprintf(logfile,"PairMCA::compute_elastic_force: 'Qij>Dij' E=%g oNbrR_i.rE=%g IDi=%d IDj=%d Dij=%g D0ij=%g\n   dE=%g Pj=%g Pi=%g dSgmj=%g dSgmi=%g Hj=%g Hi=%g bond_state=%d\n",
           ei,bond_hist_ik[E],tag[i],bond_atom[i][k],r,r0,d_e,pj,(pi-d_p),rdSgmj,rdSgmi,rHj,rHi,bond_state);
           continue;
         }
       }
-///fprintf(logfile,"PairMCA::compute_elastic_force: E=%g P=%g oNbrR_i.rE=%g IDi=%d IDj=%d Dij=%g D0ij=%g\n   dE=%g Pj=%g Pi=%g dSgmj=%g dSgmi=%g Hj=%g Hi=%g meanSi=%g meanSj=%g bond_state=%d\n",
+///if (logfile) fprintf(logfile,"PairMCA::compute_elastic_force: E=%g P=%g oNbrR_i.rE=%g IDi=%d IDj=%d Dij=%g D0ij=%g\n   dE=%g Pj=%g Pi=%g dSgmj=%g dSgmi=%g Hj=%g Hi=%g meanSi=%g meanSj=%g bond_state=%d\n",
 ///ei,pi,bond_hist_ik[E],tag[i],bond_atom[i][k],r,r0,d_e,pj,(pi-d_p),rdSgmj,rdSgmi,rHj,rHi,mean_stress[i],mean_stress[j],bond_state);
       /// END central force
 
       double vShear[3], vSij[3], vYi[3], vMij[3];
       if((bond_state == UNBONDED) && (pi > 0.0)) { // if happens that unbonded particles attract each other
-///        fprintf(logfile,"PairMCA::compute_elastic_force bond %d (%d - %d) is broken but attracts\n",bond_index_i,i,j);
+///        if (logfile) fprintf(logfile,"PairMCA::compute_elastic_force bond %d (%d - %d) is broken but attracts\n",bond_index_i,i,j);
         double rCDsum = cont_distance[i] + cont_distance[j];
         if (rCDsum > r) {
 //fprintf(stderr,"CMCA3D_TEPModel::ElasticForce(): '(!oNbrR_i.bLinked) && (Pi>0.0)' IDi=%d IDj=%d CDsum=%g Dij=%g oAtR_i.iNCount=%d oAtR_j.iNCount=%d\n",oAtL_i.lID,oAtL_j.lID,rCDsum,rDij,oAtR_i.iNCount,oAtR_j.iNCount);
@@ -246,9 +246,9 @@ inline void  PairMCA::compute_elastic_force()
           ei  = (cont_distance[i] - mca_radius) / mca_radius;
         }
         pi = 0.0;
-        vSij[0]= vSij[1]= vSij[0]= 0.0;
-        vYi[0]= vYi[1]= vYi[0]= 0.0;
-        vMij[0]= vMij[1]= vMij[0]= 0.0;
+        vSij[0]= vSij[1]= vSij[2]= 0.0;
+        vYi[0]= vYi[1]= vYi[2]= 0.0;
+        vMij[0]= vMij[1]= vMij[2]= 0.0;
       } else {
         /// BEGIN shear force
 
@@ -256,8 +256,8 @@ inline void  PairMCA::compute_elastic_force()
         double *nv0 = &(bond_hist_ik[NX_PREV]); // normal unit vector at prev time step
         double dYij[3];
         vectorCross3D(nv0, nv, dYij); // rotaion of the pair
-///if(i == 13) fprintf(logfile,"PairMCA::compute_elastic_force i=%d j=%d nv0= %20.12e %20.12e %20.12e nv= %20.12e %20.12e %20.12e \n",i,j,nv0[0],nv0[1],nv0[2],nv[0],nv[1],nv[2]); ///AS DEBUG
-///if(i == 13) fprintf(logfile,"PairMCA::compute_elastic_force i=%d j=%d nv0xnv= %20.12e %20.12e %20.12e \n",i,j,dYij[0],dYij[1],dYij[2]); ///AS DEBUG
+///if(i == 13) if (logfile) fprintf(logfile,"PairMCA::compute_elastic_force i=%d j=%d nv0= %20.12e %20.12e %20.12e nv= %20.12e %20.12e %20.12e \n",i,j,nv0[0],nv0[1],nv0[2],nv[0],nv[1],nv[2]); ///AS DEBUG
+///if(i == 13) if (logfile) fprintf(logfile,"PairMCA::compute_elastic_force i=%d j=%d nv0xnv= %20.12e %20.12e %20.12e \n",i,j,dYij[0],dYij[1],dYij[2]); ///AS DEBUG
 
         double vdLij[3];
         vectorCopy3D(dYij, vdLij);
@@ -268,7 +268,7 @@ inline void  PairMCA::compute_elastic_force()
         double vdTHi[3], vdTHj[3];
         double vR1[3], vR2[3], vRsum[3];
 #ifdef NO_ROTATIONS
-        vdTHi[0]=vdTHi[2]=vdTHi[2]=vdTHj[0]=vdTHj[1]=vdTHj[2]= 0.0;
+        vdTHi[0]=vdTHi[1]=vdTHi[2]=vdTHj[0]=vdTHj[1]=vdTHj[2]= 0.0;
 #else
         vectorCopy3D(&(theta[i][0]), vR1);
         vectorCopy3D(&(theta_prev[i][0]), vR2);
@@ -329,10 +329,10 @@ inline void  PairMCA::compute_elastic_force()
           double rCOF = mca_pair->cof[itype][jtype];
           if(rCOF <  REAL_NULL_CONST) {
             rFDij = 0.0;
-            vShear[0]= vShear[1]= vShear[0]= 0.0;
-            vSij[0]= vSij[1]= vSij[0]= 0.0;
-            vYi[0]= vYi[1]= vYi[0]= 0.0;
-            vMij[0]= vMij[1]= vMij[0]= 0.0;
+            vShear[0]= vShear[1]= vShear[2]= 0.0;
+            vSij[0]= vSij[1]= vSij[2]= 0.0;
+            vYi[0]= vYi[1]= vYi[2]= 0.0;
+            vMij[0]= vMij[1]= vMij[2]= 0.0;
           } else {
             double rSij;
             double rFDij; // dry friction
@@ -416,7 +416,7 @@ inline void  PairMCA::compute_equiv_stress()
 ///  const int nmax = atom->nmax;
   const double mca_radius = atom->mca_radius;
 
-//fprintf(logfile,"PairMCA::compute_equiv_stress\n"); ///AS DEBUG TRACE
+//if (logfile) fprintf(logfile,"PairMCA::compute_equiv_stress\n"); ///AS DEBUG TRACE
 #if defined (_OPENMP)
 #pragma omp parallel for private(i,k) default(shared) schedule(static)
 #endif
@@ -499,7 +499,7 @@ fprintf(stderr,"iFreeSlots=%d (iNC=%d) rdSumP=%g rdSumE=%g rE=%g\n", iFreeSlots,
 
 void PairMCA::correct_for_plasticity()
 {
-//fprintf(logfile, "PairMCA::correct_for_plasticity \n"); ///AS DEBUG TRACE
+//if (logfile) fprintf(logfile, "PairMCA::correct_for_plasticity \n"); ///AS DEBUG TRACE
   int i,k;
   const int nlocal = atom->nlocal;
 ///  const int nmax = atom->nmax;
@@ -540,9 +540,9 @@ void PairMCA::correct_for_plasticity()
 
     if((rSyi>0.)&&(rSgmInt>REAL_NULL_CONST)&&(rdSgm>0.0)&&(rSR>rSR_Pla)) {
       double rEhi =  mca_pair->Eh[itype][itype];
-//fprintf(logfile,"PairMCA::correct_for_plasticity rEhi[%d][%d]= %g \n",itype,itype,rEhi);
+//if (logfile) fprintf(logfile,"PairMCA::correct_for_plasticity rEhi[%d][%d]= %g \n",itype,itype,rEhi);
       double rSgmPl = rSyi + (rSR - rSR_Pla) * rEhi; // + work harderning
-//fprintf(logfile,"PairMCA::correct_for_plasticity rSR= %g rSR_Pla= %g rSgmPl=%g\n",rSR,rSR_Pla,rSgmPl);
+//if (logfile) fprintf(logfile,"PairMCA::correct_for_plasticity rSR= %g rSR_Pla= %g rSgmPl=%g\n",rSR,rSR_Pla,rSgmPl);
       double rM = rSgmPl/rSgmInt; // radial return factor
       double rMpli = 1.0 - rM;
       if(rMpli > REAL_NULL_CONST) {
@@ -559,7 +559,7 @@ void PairMCA::correct_for_plasticity()
             error->one(FLERR,str);
           }
           j = domain->closest_image(i,j);
-///if(tag[i]==10) fprintf(logfile,"PairMCA::correct_for_plasticity bond_atom[%d][%d]=%d map()=%d \n",i,k,bond_atom[i][k],j);
+///if(tag[i]==10) if (logfile) fprintf(logfile,"PairMCA::correct_for_plasticity bond_atom[%d][%d]=%d map()=%d \n",i,k,bond_atom[i][k],j);
 */
           int bond_index_i = bond_index[i][k];
           int bond_state = bondlist[bond_index_i][3];
@@ -662,7 +662,7 @@ void PairMCA::compute_total_force(int eflag, int vflag)
   if (eflag || vflag) ev_setup(eflag,vflag);
   else evflag = 0;
 
-//fprintf(logfile, "PairMCA::compute_total_force \n");  ///AS DEBUG TRACE
+//if (logfile) fprintf(logfile, "PairMCA::compute_total_force \n");  ///AS DEBUG TRACE
 
 ///#if defined (_OPENMP)
 //#pragma omp parallel for shared(x,f,torque,bondlist,bond_atom,bond_hist) default(none) schedule(static)
@@ -688,7 +688,7 @@ void PairMCA::compute_total_force(int eflag, int vflag)
     //1st check if bond is broken,
     if(bond_state == NOT_INTERACT)
     {
-       fprintf(logfile,"PairMCA::compute_total_force bond %d does not interact\n",n);
+///       if (logfile) fprintf(logfile,"PairMCA::compute_total_force bond %d does not interact\n",n);
        continue;
     }
 
@@ -730,7 +730,7 @@ void PairMCA::compute_total_force(int eflag, int vflag)
     q1 = mca_radius*(1. + bond_hist1[E]);
     q2 = mca_radius*(1. + bond_hist2[E]);
 
-///fprintf(logfile,"PairMCA::compute_total_force:  bond# %d i1=%d(tag=%d) n1=%d i2=%d(tag=%d) n2=%d pi=%g pj=%g ei=%g ej=%g\n",
+///if (logfile) fprintf(logfile,"PairMCA::compute_total_force:  bond# %d i1=%d(tag=%d) n1=%d i2=%d(tag=%d) n2=%d pi=%g pj=%g ei=%g ej=%g\n",
 ///n,i1,tag[i1],n1,i2,tag[i2],n2,pi,pj,bond_hist1[E],bond_hist2[E]);
     //int type = bondlist[n][2];
 
@@ -821,7 +821,7 @@ void PairMCA::compute(int eflag, int vflag)
   if (eflag || vflag) ev_setup(eflag,vflag);
   else evflag = vflag_fdotr = 0;
 
-//fprintf(logfile,"PairMCA::compute\n"); ///AS DEBUG TRACE
+//if (logfile) fprintf(logfile,"PairMCA::compute\n"); ///AS DEBUG TRACE
 ///  swap_prev(); Moved to fixMCAExchangeMeanStress::post_integrate()
 ///  predict_mean_stress(); Moved to fixMCAExchangeMeanStress::post_integrate()
   compute_elastic_force();
@@ -899,8 +899,8 @@ void PairMCA::coeff(int narg, char **arg)
   double ModulusPredictOne_one = 3.0*K_one*2.0*G_one*rCoordNumber /
                                  (3.0*K_one*(rCoordNumber-1.0) + 2.0*G_one);
   double ModulusPredictAll_one = (3.0*K_one + 2.0*G_one*(rCoordNumber-1.0)) / rCoordNumber;
-fprintf(logfile,"Computing Predictor modulii using coordination number=%g :\n",rCoordNumber);
-fprintf(logfile,"ModulusPredictOne= %g\tModulusPredictAll= %g\n",ModulusPredictOne_one, ModulusPredictAll_one);
+if (logfile) fprintf(logfile,"Computing Predictor modulii using coordination number=%g :\n",rCoordNumber);
+if (logfile) fprintf(logfile,"ModulusPredictOne= %g\tModulusPredictAll= %g\n",ModulusPredictOne_one, ModulusPredictAll_one);
 
 
   double Sy_one = -1.0; // no plasticity

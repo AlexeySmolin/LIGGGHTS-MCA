@@ -140,14 +140,14 @@ fix		integr nve_group nve/mca
 # SIMULATION TIME PARAMETERS
 ####################################################################################################
 variable	TimeStep equal ${rp}/(sqrt((${K}+4.*${G}/3.)/${rho})) # Time step = ${rp}/(sqrt((${K}+4.*${G}/3.)/${rho}))
-variable	dt equal 1.e-5	#4.0E-5
+variable	dt equal 4.0E-5
 if "${TimeStep} < ${dt}" then &
   "print 'Recommended time step ${TimeStep} is smaller than dt= ${dt}'" &
   quit
 variable	fulltime equal 0.1	#1.	##4.	# Simulation time
-variable	runstep equal  ${fulltime}/${dt}
+variable	runstep equal  round(${fulltime}/${dt})
 variable	savetime equal 0.001 #0.01	##0.04	# 0.0001
-variable	filestep equal ${savetime}/${dt}
+variable	filestep equal round(${savetime}/${dt})
 timestep	${dt}
 
 ####################################################################################################

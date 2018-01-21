@@ -329,7 +329,7 @@ void FixBondCreateMCA::setup(int vflag)
   int nall = nlocal + nghost;
   int newton_bond = force->newton_bond;
 
-//fprintf(logfile, "FixBondCreateMCA::setup newton_bond=%d\n",newton_bond);///AS DEBUG
+//if (logfile) fprintf(logfile, "FixBondCreateMCA::setup newton_bond=%d\n",newton_bond);///AS DEBUG
   for (i = 0; i < nall; i++) bondcount[i] = 0;
 
   for (i = 0; i < nlocal; i++)
@@ -354,7 +354,7 @@ void FixBondCreateMCA::setup(int vflag)
 /*
 void FixBondCreateMCA::pre_force(int vflag) - moved it to BondMCA::build_bond_index() caled from Neighbor::bond_all()
 {
-fprintf(logfile, "FixBondCreateMCA::pre_force \n");///AS DEBUG
+if (logfile) fprintf(logfile, "FixBondCreateMCA::pre_force \n");///AS DEBUG
   build_bond_index();
 }*/
 
@@ -371,7 +371,7 @@ void FixBondCreateMCA::post_integrate()
   if (nevery == 0 || update->ntimestep % nevery ) {
     return;
   }
-//  fprintf(logfile, "FixBondCreateMCA::post_integrate iatomtype=%d jatomtype=%d btype=%d cutsq=%g\n",iatomtype, jatomtype, btype, cutsq);///AS DEBUG
+//  if (logfile) fprintf(logfile, "FixBondCreateMCA::post_integrate iatomtype=%d jatomtype=%d btype=%d cutsq=%g\n",iatomtype, jatomtype, btype, cutsq);///AS DEBUG
 
   // need updated ghost atom positions
 
@@ -420,7 +420,7 @@ void FixBondCreateMCA::post_integrate()
 
   flag = 0;
 
-//fprintf(logfile,"FixBondCreateMCA::post_integrate: nall (%d) = atom->nlocal (%d) + atom->nghost (%d) inum=%d\n",nall,atom->nlocal,atom->nghost,inum);
+//if (logfile) fprintf(logfile,"FixBondCreateMCA::post_integrate: nall (%d) = atom->nlocal (%d) + atom->nghost (%d) inum=%d\n",nall,atom->nlocal,atom->nghost,inum);
 ///#if defined (_OPENMP)
 ///#pragma omp parallel for private(ii,jj,i,j,xtmp,ytmp,ztmp,delx,dely,delz) default(shared) schedule(static)
 ///#endif
@@ -434,14 +434,14 @@ void FixBondCreateMCA::post_integrate()
     jlist = firstneigh[i];
     jnum = numneigh[i];
 
-//if(tag[i]==10) fprintf(logfile,"FixBondCreateMCA::post_integrate: list[%d]= %d tag= %d jnum= %d\n",ii,i,tag[i],jnum);
+//if(tag[i]==10) if (logfile) fprintf(logfile,"FixBondCreateMCA::post_integrate: list[%d]= %d tag= %d jnum= %d\n",ii,i,tag[i],jnum);
 
     for (jj = 0; jj < jnum; jj++) {
 
       j = jlist[jj];
-//if(tag[i]==10) fprintf(logfile,"\t\tjlist[%d] = %d (j &= NEIGHMASK)=",jj,j);
+//if(tag[i]==10) if (logfile) fprintf(logfile,"\t\tjlist[%d] = %d (j &= NEIGHMASK)=",jj,j);
       j &= NEIGHMASK;
-//if(tag[i]==10) fprintf(logfile,"%d tag= %d\n",j,tag[j]);
+//if(tag[i]==10) if (logfile) fprintf(logfile,"%d tag= %d\n",j,tag[j]);
       if (!(mask[j] & groupbit)) continue;
       jtype = type[j];
 
@@ -462,7 +462,7 @@ void FixBondCreateMCA::post_integrate()
       delz = ztmp - x[j][2];
       double rsq = delx*delx + dely*dely + delz*delz;
       if (rsq >= cutsq) {
-//if(tag[i]==10) fprintf(logfile,"FixBondCreateMCA::post_integrate\trsq (%g) >= cutsq (%g) btw atoms %d and %d \n",rsq,cutsq,i,j);
+//if(tag[i]==10) if (logfile) fprintf(logfile,"FixBondCreateMCA::post_integrate\trsq (%g) >= cutsq (%g) btw atoms %d and %d \n",rsq,cutsq,i,j);
         continue;
       }
 
@@ -470,23 +470,23 @@ void FixBondCreateMCA::post_integrate()
         double contsq = cont_distance[i] + cont_distance[j];
         contsq *= contsq;
         if (rsq > contsq) {
-//          fprintf(logfile,"FixBondCreateMCA::post_integrate\trsq (%g) >= contsq (%g) btw atoms %d and %d \n",rsq,contsq,i,j);
+//          if (logfile) fprintf(logfile,"FixBondCreateMCA::post_integrate\trsq (%g) >= contsq (%g) btw atoms %d and %d \n",rsq,contsq,i,j);
           continue;
         }
       }
 
       if(already_bonded(i,j)) {
-//        fprintf(logfile,"FixBondCreateMCA::post_integrate\tExisting bond btw atoms %d and %d \n",i,j);
+//        if (logfile) fprintf(logfile,"FixBondCreateMCA::post_integrate\tExisting bond btw atoms %d and %d \n",i,j);
         continue;
       }
 
       if(npartner[i]==maxbondsperatom || npartner[j]==maxbondsperatom) {
-        fprintf(logfile,"FixBondCreateMCA::post_integrate\tnpartner[%d]=%d and npartner[%d]=%d Rij=%g\n",i,npartner[i],j,npartner[j],sqrt(rsq));
+        if (logfile) fprintf(logfile,"FixBondCreateMCA::post_integrate\tnpartner[%d]=%d and npartner[%d]=%d Rij=%g\n",i,npartner[i],j,npartner[j],sqrt(rsq));
           flag = 1;
           continue;
       }
 
-//if(tag[i]==10) fprintf(logfile,"\t\tPARTNER!!!\n");
+//if(tag[i]==10) if (logfile) fprintf(logfile,"\t\tPARTNER!!!\n");
 //#pragma omp critical
 //      {
       partner[i][npartner[i]] = tag[j];
@@ -544,7 +544,7 @@ void FixBondCreateMCA::post_integrate()
 #endif
   for (i = 0; i < nlocal; i++) {
     if (npartner[i] == 0) {
-      //fprintf(logfile,"FixBondCreateMCA::post_integrate: npartner[%d] == 0\n",i,npartner[i]);
+      //if (logfile) fprintf(logfile,"FixBondCreateMCA::post_integrate: npartner[%d] == 0\n",i,npartner[i]);
       continue;
     }
 
@@ -564,7 +564,7 @@ void FixBondCreateMCA::post_integrate()
         }
         j = domain->closest_image(i,j);
         if(tag[j] != partner[i][k]) {
-            fprintf(logfile,"FixBondCreateMCA::post_integrate: for i=%d partner k=%d j=%d (tag=%d) != partner[i][k]=%d at step %ld\n",i,k,j,tag[j],partner[i][k],update->ntimestep);
+            if (logfile) fprintf(logfile,"FixBondCreateMCA::post_integrate: for i=%d partner k=%d j=%d (tag=%d) != partner[i][k]=%d at step %ld\n",i,k,j,tag[j],partner[i][k],update->ntimestep);
             error->one(FLERR,"Error: tag[j] != partner in fix bond/create/mca");
         }
 
@@ -572,13 +572,13 @@ void FixBondCreateMCA::post_integrate()
         for(int jp = 0; jp < npartner[j]; jp++)
             if(partner[j][jp] == tag[i]) found = 1;
         if (!found) {
-           fprintf(logfile,"FixBondCreateMCA::post_integrate: i=%d(tag=%d) not found as a partner from %d for partner k=%d j=%d (tag=%d) at step %ld\n",i,tag[i],npartner[j],k,j,tag[j],update->ntimestep);
-           for(int jp = 0; jp < npartner[j]; jp++) fprintf(logfile,"\t\tpartner[j][%d]= %d\n",jp,partner[j][jp]);
+           if (logfile) fprintf(logfile,"FixBondCreateMCA::post_integrate: i=%d(tag=%d) not found as a partner from %d for partner k=%d j=%d (tag=%d) at step %ld\n",i,tag[i],npartner[j],k,j,tag[j],update->ntimestep);
+           for(int jp = 0; jp < npartner[j]; jp++) if (logfile) fprintf(logfile,"\t\tpartner[j][%d]= %d\n",jp,partner[j][jp]);
            error->all(FLERR,"Error: tag[i] not found in partners of j in fix bond/create/mca");
         }
 
         if(already_bonded(i,j)) {
-          fprintf(logfile,"FixBondCreateMCA::post_integrate\tExisting bond btw atoms %d and %d \n",i,j);
+          if (logfile) fprintf(logfile,"FixBondCreateMCA::post_integrate\tExisting bond btw atoms %d and %d \n",i,j);
           continue;
         }
 
@@ -588,7 +588,7 @@ void FixBondCreateMCA::post_integrate()
         if (fraction < 1.0) {
           min = MIN(probability[i],probability[j]);
           max = MAX(probability[i],probability[j]);
-          if (0.5*(min+max) >= fraction) {fprintf(logfile,"FixBondCreateMCA::post_integrate: for i=%d partner k=%d j=%d (>= fraction)\n",i,npartner[i],j); continue;}
+          if (0.5*(min+max) >= fraction) {if (logfile) fprintf(logfile,"FixBondCreateMCA::post_integrate: for i=%d partner k=%d j=%d (>= fraction)\n",i,npartner[i],j); continue;}
         }
 
         // if newton_bond is set, only store with I or J
@@ -597,10 +597,13 @@ void FixBondCreateMCA::post_integrate()
         if (!newton_bond /*|| tag[i] < tag[j]*/)
         {
 ///if(tag[i]==10) 
-fprintf(logfile,"FixBondCreateMCA::post_integrate: creating bond btw atoms i=%d and j=%d (tag=%d) (i has now %d bonds) at step %ld\n",i,j,tag[j],num_bond[i]+1,update->ntimestep);
+///if (logfile) fprintf(logfile,"FixBondCreateMCA::post_integrate: creating bond btw atoms i=%d and j=%d (tag=%d) (i has now %d bonds) at step %ld\n",i,j,tag[j],num_bond[i]+1,update->ntimestep);
 
-          if (num_bond[i] == atom->bond_per_atom)
+          if (num_bond[i] == atom->bond_per_atom) {
+	    if (logfile) fprintf(logfile,"FixBondCreateMCA::post_integrate: for i=%d num_bond[i]=%d atom->bond_per_atom=%d (==)!!\n",i,num_bond[i],atom->bond_per_atom);
+	    fprintf(stderr,"FixBondCreateMCA::post_integrate: for i=%d num_bond[i]=%d atom->bond_per_atom=%d (==)!!\n",i,num_bond[i],atom->bond_per_atom);
             error->one(FLERR,"New bond exceeded bonds per atom in fix bond/create/mca");
+	  }
           bond_type[i][num_bond[i]] = btype;
           bond_atom[i][num_bond[i]] = tag[j];
           /*  print these lines
@@ -620,7 +623,7 @@ fprintf(logfile,"FixBondCreateMCA::post_integrate: creating bond btw atoms i=%d 
           dely = ytmp - x[j][1];
           delz = ztmp - x[j][2];
           r = sqrt(delx*delx + dely*dely + delz*delz);
-//if(tag[i]==10) fprintf(logfile,"FixBondCreateMCA::post_integrate: distance btw atoms i=%d and j=%d = %g  (%g %g %g)\n",i,j,r,x[j][0],x[j][1],x[j][2]);
+//if(tag[i]==10) if (logfile) fprintf(logfile,"FixBondCreateMCA::post_integrate: distance btw atoms i=%d and j=%d = %g  (%g %g %g)\n",i,j,r,x[j][0],x[j][1],x[j][2]);
           rinv = -1. / r; // "-" means that unit vector is from i1 to i2
           tmp[R] = tmp[R_PREV] = r;
           tmp[NX_PREV] = tmp[NX] = delx * rinv;
@@ -656,7 +659,7 @@ fprintf(logfile,"FixBondCreateMCA::post_integrate: creating bond btw atoms i=%d 
   createcounttotal += createcount;
   atom->nbonds += createcount;
 
-  if(createcount && comm->me == 0) fprintf(logfile,"Created %d unique bonds at timestep "BIGINT_FORMAT"\n",createcount,update->ntimestep);
+  if(createcount && comm->me == 0) if (logfile) fprintf(logfile,"Created %d unique bonds at timestep "BIGINT_FORMAT"\n",createcount,update->ntimestep);
 
   // trigger reneighboring if any bonds were formed
 
@@ -692,7 +695,7 @@ int FixBondCreateMCA::pack_comm(int n, int *list, double *buf,
       j = list[i];
       buf[m++] = ubuf(bondcount[j]).d; ///static_cast<int>(bondcount[j]);
     }
-///fprintf(logfile,"FixBondCreateMCA::pack_comm m=%d n=%d [%d - %d]\n",m,n,list[0],list[n-1]);
+//if (stderr) fprintf(stderr,"FixBondCreateMCA::pack_comm m=%d n=%d [%d - %d]\n",m,n,list[0],list[n-1]);
     return 1;
   } else {
     for (i = 0; i < n; i++) {
@@ -702,8 +705,8 @@ int FixBondCreateMCA::pack_comm(int n, int *list, double *buf,
         buf[m++] = ubuf(partner[j][k]).d; ///static_cast<int>(partner[j][k]);
       buf[m++] = probability[j];
     }
-///fprintf(logfile,"FixBondCreateMCA::pack_comm m=%d n=%d [%d - %d]\n",m,n,list[0],list[n-1]);
-    return maxbondsperatom + 2;
+//if (stderr) fprintf(stderr,"FixBondCreateMCA::pack_comm m=%d n=%d [%d - %d]\n",m,n,list[0],list[n-1]);
+    return comm_forward;//maxbondsperatom + 2; //m; for last versions of lammps !!!
   }
 }
 
@@ -728,7 +731,7 @@ void FixBondCreateMCA::unpack_comm(int n, int first, double *buf)
       probability[i] = buf[m++];
     }
   }
-///fprintf(logfile,"FixBondCreateMCA::unpack_comm m=%d n=%d [%d - %d]\n",m,n,first,last);
+//if (stderr) fprintf(stderr,"FixBondCreateMCA::unpack_comm m=%d n=%d [%d - %d]\n",m,n,first,last);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -743,7 +746,7 @@ int FixBondCreateMCA::pack_reverse_comm(int n, int first, double *buf)
   if (commflag == 0) {
     for (i = first; i < last; i++)
       buf[m++] = ubuf(bondcount[i]).d; ///bondcount[i];
-///fprintf(logfile,"FixBondCreateMCA::pack_reverse_comm m=%d n=%d [%d - %d]\n",m,n,first,last);
+///if (logfile) fprintf(logfile,"FixBondCreateMCA::pack_reverse_comm m=%d n=%d [%d - %d]\n",m,n,first,last);
     return 1;
   } else {
     for (i = first; i < last; i++) {
@@ -751,8 +754,8 @@ int FixBondCreateMCA::pack_reverse_comm(int n, int first, double *buf)
       for(int k=0; k<maxbondsperatom; k++)
         buf[m++] = ubuf(partner[i][k]).d; ///static_cast<int>(partner[i][k]);
     }
-///fprintf(logfile,"FixBondCreateMCA::pack_reverse_comm m=%d n=%d [%d - %d]\n",m,n,first,last);
-    return maxbondsperatom + 2;
+///if (logfile) fprintf(logfile,"FixBondCreateMCA::pack_reverse_comm m=%d n=%d [%d - %d]\n",m,n,first,last);
+    return comm_reverse; //maxbondsperatom + 1;  //m; for last versions of lammps !!!
   }
 }
 
@@ -790,7 +793,7 @@ void FixBondCreateMCA::unpack_reverse_comm(int n, int *list, double *buf)
     }
   }
   if(flag) error->warning(FLERR,"Could not generate all possible bonds");
-///fprintf(logfile,"FixBondCreateMCA::unpack_reverse_comm m=%d n=%d [%d - %d]\n",m,n,list[0],list[n-1]);
+///if (logfile) fprintf(logfile,"FixBondCreateMCA::unpack_reverse_comm m=%d n=%d [%d - %d]\n",m,n,list[0],list[n-1]);
 }
 
 /* ----------------------------------------------------------------------

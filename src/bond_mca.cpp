@@ -174,7 +174,7 @@ void BondMCA::compute(int eflag, int vflag)
   double cutoff=neighbor->skin;
   ///AS I do not whant to use it, because it requires to be copied every step/// double **bondhistlist = neighbor->bondhistlist;
 
-//fprintf(logfile, "BondMCA::compute \n"); ///AS DEBUG
+//if (logfile) fprintf(logfile, "BondMCA::compute \n"); ///AS DEBUG
 
   comm->reverse_comm(); /// We copy only contact distances
 
@@ -184,9 +184,9 @@ void BondMCA::compute(int eflag, int vflag)
     Temp = fix_Temp->vector_atom;
   } */
 
-//fprintf(logfile,"boxlo[0]=%g boxhi[0]=%g cutoff=%g \n",domain->boxlo[0],domain->boxhi[0],cutoff);
-//fprintf(logfile,"boxlo[1]=%g boxhi[1]=%g cutoff=%g \n",domain->boxlo[1],domain->boxhi[1],cutoff);
-//fprintf(logfile,"boxlo[2]=%g boxhi[2]=%g cutoff=%g \n",domain->boxlo[2],domain->boxhi[2],cutoff);
+//if (logfile) fprintf(logfile,"boxlo[0]=%g boxhi[0]=%g cutoff=%g \n",domain->boxlo[0],domain->boxhi[0],cutoff);
+//if (logfile) fprintf(logfile,"boxlo[1]=%g boxhi[1]=%g cutoff=%g \n",domain->boxlo[1],domain->boxhi[1],cutoff);
+//if (logfile) fprintf(logfile,"boxlo[2]=%g boxhi[2]=%g cutoff=%g \n",domain->boxlo[2],domain->boxhi[2],cutoff);
 
   for (int n = 0; n < nbondlist; n++) {
 
@@ -201,19 +201,19 @@ void BondMCA::compute(int eflag, int vflag)
 
     for (n1 = 0; n1 < num_bond[i1]; n1++) {
       if (bond_atom[i1][n1]==tag[i2]) break;
-//fprintf(logfile, "BondMCA::compute bond_atom[%d][%d]=%d \n", i1, n1, bond_atom[i1][n1]); ///AS DEBUG
+//if (logfile) fprintf(logfile, "BondMCA::compute bond_atom[%d][%d]=%d \n", i1, n1, bond_atom[i1][n1]); ///AS DEBUG
     }
     if (n1 == num_bond[i1]) error->all(FLERR,"Internal error in BondMCA::compute(): n1 not found");
     double *bond_hist1 = bond_hist[tag[i1]-1][n1];
     for (n2 = 0; n2 < num_bond[i2]; n2++) {
       if (bond_atom[i2][n2]==tag[i1]) break;
-//fprintf(logfile, "BondMCA::compute bond_atom[%d][%d]=%d \n", i1, n1, bond_atom[i1][n1]); ///AS DEBUG
+//if (logfile) fprintf(logfile, "BondMCA::compute bond_atom[%d][%d]=%d \n", i1, n1, bond_atom[i1][n1]); ///AS DEBUG
     }
     if (n2 == num_bond[i2]) error->all(FLERR,"Internal error in BondMCA::compute(): n2 not found");
     double *bond_hist2 = bond_hist[tag[i2]-1][n2];
     double rIJ = bond_hist1[R];
     double rJI = bond_hist2[R];
-    if (fabs(rIJ-rJI) > 5.0E-12*(atom->mca_radius)) fprintf(logfile,"BondMCA::compute(): bond %d(%d-%d) rIJ(%-1.16e) != rJI(%-1.16e)\n",n,i1,i2,rIJ,rJI);
+    if (fabs(rIJ-rJI) > 5.0E-12*(atom->mca_radius)) if (logfile) fprintf(logfile,"BondMCA::compute(): bond %d(%d-%d) rIJ(%-1.16e) != rJI(%-1.16e)\n",n,i1,i2,rIJ,rJI);
 
     double cont_distance1 = cont_distance[i1];
     double cont_distance2 = cont_distance[i2];
@@ -225,7 +225,7 @@ void BondMCA::compute(int eflag, int vflag)
           bond_state = bondlist[n][3] = UNBONDED;
           bond_hist1[STATE] = double(bond_state);
           bond_hist2[STATE] = double(bond_state);
-///          fprintf(logfile,"BondMCA::compute(): bond %d is contacting\n",n);
+///          if (logfile) fprintf(logfile,"BondMCA::compute(): bond %d is contacting\n",n);
         }
         else continue;
       } else {
@@ -233,13 +233,13 @@ void BondMCA::compute(int eflag, int vflag)
           bond_state = bondlist[n][3] = NOT_INTERACT;
           bond_hist1[STATE] = double(bond_state);
           bond_hist2[STATE] = double(bond_state);
-//fprintf(logfile,"BondMCA::compute(): bond %d(%d-%d) of %d : rIJ(%-1.16e) > cont_distance1(%-1.16e)\n",n,i1,i2,nbondlist,rIJ,(cont_distance1 + cont_distance2));
-          fprintf(logfile,"BondMCA::compute(): bond %d is not interacting\n",n);
+//if (logfile) fprintf(logfile,"BondMCA::compute(): bond %d(%d-%d) of %d : rIJ(%-1.16e) > cont_distance1(%-1.16e)\n",n,i1,i2,nbondlist,rIJ,(cont_distance1 + cont_distance2));
+///          if (logfile) fprintf(logfile,"BondMCA::compute(): bond %d is not interacting\n",n);
           continue;
         }
         if(bind_mode==BINDSTYLE_NONE) continue;
         else {
-///          fprintf(logfile,"BondMCA::compute(): binding has not been implemented so far\n");
+///          if (logfile) fprintf(logfile,"BondMCA::compute(): binding has not been implemented so far\n");
           continue; // TODO
         }
       }
@@ -285,13 +285,13 @@ void BondMCA::compute(int eflag, int vflag)
 //fprintf(stderr,"J eps=%g dVVo/=%g rT2= %g\n",apzNbr[iNbrx_J].rE,arMS[iAx_J]/(3.0*azSL[sj].rK), rT2);
         criterion_mag = rT1 > rT2 ? rT1 : rT2; //0.5*fabs(rT1 + rT2);
         broken = breakVal1[b_type] < criterion_mag;
-//fprintf(logfile,"bond# %d EQUIV_STRAIN: breakVal1[%d]=%g  rT1=%g rT2=%g\n", n,  b_type, breakVal1[b_type], rT1, rT2);
+//if (logfile) fprintf(logfile,"bond# %d EQUIV_STRAIN: breakVal1[%d]=%g  rT1=%g rT2=%g\n", n,  b_type, breakVal1[b_type], rT1, rT2);
         if(broken) {
           bond_state = bondlist[n][3] = UNBONDED;
           bond_hist1[STATE] = double(bond_state);
           bond_hist2[STATE] = double(bond_state);
-///          fprintf(logfile,"broken bond %d at step %d\n",n,update->ntimestep);
-///          fprintf(logfile,"   it was EQUIV_STRAIN: breakVal1[%d]=%g < criterion_mag=%g\n", b_type, breakVal1[b_type], criterion_mag);
+///          if (logfile) fprintf(logfile,"broken bond %d at step %d\n",n,update->ntimestep);
+///          if (logfile) fprintf(logfile,"   it was EQUIV_STRAIN: breakVal1[%d]=%g < criterion_mag=%g\n", b_type, breakVal1[b_type], criterion_mag);
         }
       }
       if(brk_mode == BREAKSTYLE_EQUIV_STRESS) {
@@ -317,8 +317,8 @@ void BondMCA::compute(int eflag, int vflag)
         if(broken) {
           bond_state = bondlist[n][3] = UNBONDED;
           bond_hist1[STATE] = bond_hist2[STATE] = double(bond_state);
-///          fprintf(logfile,"broken bond %d at step %d\n",n,update->ntimestep);
-///          fprintf(logfile,"   it was EQUIV_STRESS: breakVal1[%d]=%g < criterion_mag=%g\n", b_type, breakVal1[b_type], criterion_mag);
+///          if (logfile) fprintf(logfile,"broken bond %d at step %d\n",n,update->ntimestep);
+///          if (logfile) fprintf(logfile,"   it was EQUIV_STRESS: breakVal1[%d]=%g < criterion_mag=%g\n", b_type, breakVal1[b_type], criterion_mag);
         }
       }
       if(brk_mode == BREAKSTYLE_DRUCKER_PRAGER) {
@@ -340,14 +340,14 @@ void BondMCA::compute(int eflag, int vflag)
         if(broken) {
           bond_state = bondlist[n][3] = UNBONDED;
           bond_hist1[STATE] = bond_hist2[STATE] = double(bond_state);
-///          fprintf(logfile,"broken bond %d at step %d\n",n,update->ntimestep);
-/////////          fprintf(logfile,"   it was DRUCKER_PRAGER: breakVal1[%d]=%g breakVal2[%d]=%g < criterion_mag=%g\n", b_type, breakVal1[b_type], breakVal2[b_type], criterion_mag);
+///          if (logfile) fprintf(logfile,"broken bond %d at step %d\n",n,update->ntimestep);
+/////////          if (logfile) fprintf(logfile,"   it was DRUCKER_PRAGER: breakVal1[%d]=%g breakVal2[%d]=%g < criterion_mag=%g\n", b_type, breakVal1[b_type], breakVal2[b_type], criterion_mag);
         }
       }
       if((broken)  && (rIJ > (cont_distance1 + cont_distance2))) {
           bond_state = bondlist[n][3] = NOT_INTERACT;
           bond_hist1[STATE] = bond_hist2[STATE] = double(bond_state);
-          fprintf(logfile,"BondMCA::compute(): bond %d is broken and not interacting\n",n);
+//          if (logfile) fprintf(logfile,"BondMCA::compute(): bond %d is broken and not interacting\n",n);
       }
     }
   }
@@ -361,7 +361,7 @@ void BondMCA::build_bond_index()
 {
   const int nbondlist = neighbor->nbondlist;
   const int nlocal = atom->nlocal;
-///fprintf(logfile, "BondMCA::build_bond_index \n");///AS DEBUG
+///if (logfile) fprintf(logfile, "BondMCA::build_bond_index \n");///AS DEBUG
 
 #if defined (_OPENMP)
 #pragma omp parallel for default(shared) schedule(static)
@@ -400,9 +400,9 @@ void BondMCA::build_bond_index()
       int b_state2 = int(bond_hist[tag[i2]-1][n2][STATE]);
       if(b_state1 != b_state2) error->all(FLERR,"Internal error in BondMCA::build_bond_index: b_state1 != b_state2");
       bondlist[n][3] = b_state1;
-//fprintf(logfile, "BondMCA::build_bond_index bond_index[%d][%d]=%d\n",i1,i2,n);///AS DEBUG
+//if (logfile) fprintf(logfile, "BondMCA::build_bond_index bond_index[%d][%d]=%d\n",i1,i2,n);///AS DEBUG
     } else {
-//fprintf(logfile, "BondMCA::build_bond_index bond_index[%d][%d] NOT FOUND nlocal=%d\n",i1,i2,nlocal);///AS DEBUG
+//if (logfile) fprintf(logfile, "BondMCA::build_bond_index bond_index[%d][%d] NOT FOUND nlocal=%d\n",i1,i2,nlocal);///AS DEBUG
     }
   }
 
@@ -512,14 +512,14 @@ void BondMCA::coeff(int narg, char **arg)
       if (narg < (i_arg+2)) error->all(FLERR,"Incorrect 'Equivalent Strain' arg for MCA bond coefficients");
       i_arg++;
       breakVal1_one = force->numeric(FLERR,arg[i_arg]);
-//fprintf(logfile,"BondMCA::coeff():BREAKSTYLE_EQUIV_STRAIN breakmode_one=%d breakVal1_one=%g\n",breakmode_one,breakVal1_one);
+//if (logfile) fprintf(logfile,"BondMCA::coeff():BREAKSTYLE_EQUIV_STRAIN breakmode_one=%d breakVal1_one=%g\n",breakmode_one,breakVal1_one);
     }
     else if(style == 2) {
       breakmode_one = BREAKSTYLE_EQUIV_STRESS;
       if (narg < (i_arg+2)) error->all(FLERR,"Incorrect 'Equivalent Stress' arg for MCA bond coefficients");
       i_arg++;
       breakVal1_one = force->numeric(FLERR,arg[i_arg]);
-//fprintf(logfile,"BondMCA::coeff():BREAKSTYLE_EQUIV_STRESS breakmode_one=%d breakVal1_one=%g\n",breakmode_one,breakVal1_one);
+//if (logfile) fprintf(logfile,"BondMCA::coeff():BREAKSTYLE_EQUIV_STRESS breakmode_one=%d breakVal1_one=%g\n",breakmode_one,breakVal1_one);
     }
     else if(style == 3) {
       breakmode_one = BREAKSTYLE_DRUCKER_PRAGER;
@@ -531,8 +531,8 @@ void BondMCA::coeff(int narg, char **arg)
       double rVariable = breakVal2_one / breakVal1_one;
       shapeDrPr_one  = 0.5 * (rVariable + 1.0);
       volumeDrPr_one = 1.5 * (rVariable - 1.0);
-//fprintf(logfile,"BondMCA::coeff():BREAKSTYLE_DRUCKER_PRAGER breakmode_one=%d tension_strength=%g compression_strength=%g\n",breakmode_one,breakVal1_one,breakVal2_one);
-//fprintf(logfile,"BondMCA::coeff():BREAKSTYLE_DRUCKER_PRAGER                  shapeDrPr_one=%g volumeDrPr_one=%g\n",shapeDrPr_one,volumeDrPr_one);
+//if (logfile) fprintf(logfile,"BondMCA::coeff():BREAKSTYLE_DRUCKER_PRAGER breakmode_one=%d tension_strength=%g compression_strength=%g\n",breakmode_one,breakVal1_one,breakVal2_one);
+//if (logfile) fprintf(logfile,"BondMCA::coeff():BREAKSTYLE_DRUCKER_PRAGER                  shapeDrPr_one=%g volumeDrPr_one=%g\n",shapeDrPr_one,volumeDrPr_one);
     }
 
     i_arg++;
@@ -540,7 +540,7 @@ void BondMCA::coeff(int narg, char **arg)
        style = BINDSTYLE_NONE;
     else
       style = force->numeric(FLERR,arg[i_arg]);
-//fprintf(logfile,"BondMCA::coeff(): expecting binding params narg=%d  i_arg=%d style=%d\n",narg,i_arg,style);
+//if (logfile) fprintf(logfile,"BondMCA::coeff(): expecting binding params narg=%d  i_arg=%d style=%d\n",narg,i_arg,style);
     if(style == 0) {
       bindmode_one = BINDSTYLE_NONE;
     }
@@ -549,14 +549,14 @@ void BondMCA::coeff(int narg, char **arg)
       if (narg < (i_arg+2)) error->all(FLERR,"Incorrect 'Pressure' arg for MCA bond coefficients");
       i_arg++;
       bindPressure_one = force->numeric(FLERR,arg[i_arg]);
-//fprintf(logfile,"BondMCA::coeff():BINDSTYLE_PRESSURE bindmode_one=%d bindPressure_one=%g\n",bindmode_one,bindPressure_one);
+//if (logfile) fprintf(logfile,"BondMCA::coeff():BINDSTYLE_PRESSURE bindmode_one=%d bindPressure_one=%g\n",bindmode_one,bindPressure_one);
     }
     else if(style == 2) {
       bindmode_one = BINDSTYLE_PLASTIC_HEAT;
       if (narg < (i_arg+2)) error->all(FLERR,"Incorrect 'Plastic Heat' arg for MCA bond coefficients");
       i_arg++;
       bindPlastHeat_one = force->numeric(FLERR,arg[i_arg]);
-//fprintf(logfile,"BondMCA::coeff():BINDSTYLE_PLASTIC_HEAT bindmode_one=%d bindPlastHeat_one=%g\n",bindmode_one,bindPlastHeat_one);
+//if (logfile) fprintf(logfile,"BondMCA::coeff():BINDSTYLE_PLASTIC_HEAT bindmode_one=%d bindPlastHeat_one=%g\n",bindmode_one,bindPlastHeat_one);
     }
     else if(style == 3) {
       bindmode_one = BINDSTYLE_COMBINED;
@@ -565,7 +565,7 @@ void BondMCA::coeff(int narg, char **arg)
       bindPressure_one = force->numeric(FLERR,arg[i_arg]);
       i_arg++;
       bindPlastHeat_one = force->numeric(FLERR,arg[i_arg]);
-//fprintf(logfile,"BondMCA::coeff():BINDSTYLE_COMBINED bindmode_one=%d bindPressure_one=%g bindPlastHeat_one=%g\n",bindmode_one,bindPressure_one,bindPlastHeat_one);
+//if (logfile) fprintf(logfile,"BondMCA::coeff():BINDSTYLE_COMBINED bindmode_one=%d bindPressure_one=%g bindPlastHeat_one=%g\n",bindmode_one,bindPressure_one,bindPlastHeat_one);
     }
     else  error->all(FLERR,"Incorrect args for MCA bond coefficients");
 
@@ -575,7 +575,7 @@ void BondMCA::coeff(int narg, char **arg)
 
   int ilo,ihi;
   force->bounds(arg[0],atom->nbondtypes,ilo,ihi);
-///fprintf(logfile,"BondMCA::coeff(): ilo=%d ihi=%d \n",ilo,ihi);
+///if (logfile) fprintf(logfile,"BondMCA::coeff(): ilo=%d ihi=%d \n",ilo,ihi);
   int count = 0;
   for (int i = ilo; i <= ihi; i++) {
     breakmode[i] = breakmode_one;
@@ -587,7 +587,7 @@ void BondMCA::coeff(int narg, char **arg)
     volumeDrPr[i] = volumeDrPr_one;
     bindPressure[i] = bindPressure_one;
     bindPlastHeat[i] = bindPlastHeat_one;
-///fprintf(logfile,"BondMCA::coeff():i=%d crackVelo=%g\n\tbreakmode=%d breakVal1=%g breakVal2=%g shapeDrPr=%g volumeDrPr=%g\n\tbindmode=%d bindPressure=%g bindPlastHeat=%g\n",
+///if (logfile) fprintf(logfile,"BondMCA::coeff():i=%d crackVelo=%g\n\tbreakmode=%d breakVal1=%g breakVal2=%g shapeDrPr=%g volumeDrPr=%g\n\tbindmode=%d bindPressure=%g bindPlastHeat=%g\n",
 ///i,crackVelo[i],breakmode[i],breakVal1[i],breakVal2[i],shapeDrPr[i],volumeDrPr[i],bindmode[i],bindPressure[i],bindPlastHeat[i]);
     setflag[i] = 1;
     count++;

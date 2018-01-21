@@ -180,6 +180,7 @@ bond_coeff  N ${COF} ${CrackVelo} ${FRACT_CRITERION} ${FRACT_PARAM} ${BIND_CRITE
 
 // Indices of values in 'bond_hist' array
 namespace MCAAtomConst {
+  static const int MAX_BONDS = 30;
   static const double IMPLFACTOR = 0.5;
   static const int BONDED   = 0; // state of the bond: bonded
   static const int UNBONDED = 1; // state of the bond: unbonded

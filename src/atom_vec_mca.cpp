@@ -61,7 +61,6 @@ using namespace LAMMPS_NS;
 using namespace MathConst;
 
 #define DELTA 10000
-#define MAX_BONDS 30
 
 enum{NONE,SC,BCC,FCC,HCP,DIAMOND,SQ,SQ2,HEX,CUSTOM};///AS taken from 'lattice.c'
 
@@ -80,7 +79,7 @@ AtomVecMCA::AtomVecMCA(LAMMPS *lmp) : AtomVec(lmp)
 
 ///AS TODO What is border communications? What is forward and reverse communications? What we need for them?
   size_forward = 9;  ///AS TODO # of values per atom in comm !! Later choose what to pass via MPI
-  size_reverse = 6;  // # in reverse comm
+  size_reverse = 1;  ///AS we use reverse_comm to exchage 'cont_distance' only // 6;  // # in reverse comm
   size_border = 22+MAX_BONDS*(2+BOND_HIST_LEN);  // # in border comm (periodic boundary ?)
   size_velocity = 6; ///AS # of velocity based quantities
   size_data_atom = 19;///AS it seems that 22-3=19 TODO number of values in Atom line
@@ -119,7 +118,7 @@ void AtomVecMCA::settings(int narg, char **arg)
     error->all(FLERR,"Illegal atom_style mca command, expecting 'radius'");
 
   mca_radius = atom->mca_radius = atof(arg[1]);
-fprintf(logfile, "atom->mca_radius= %g  arg[1] '%s' \n", atom->mca_radius, arg[1]);  ///AS DEBUG
+//if (logfile) fprintf(logfile, "atom->mca_radius= %g  arg[1] '%s' \n", atom->mca_radius, arg[1]);  ///AS DEBUG
 
   if(strcmp(arg[2],"packing")) // 
     error->all(FLERR,"Illegal atom_style mca command, expecting 'packing'");
@@ -147,7 +146,7 @@ fprintf(logfile, "atom->mca_radius= %g  arg[1] '%s' \n", atom->mca_radius, arg[1
     error->all(FLERR,"Illegal atom_style mca command, expecting 'bonds_per_atom'");
 
   atom->bond_per_atom = atoi(arg[7]);
-//fprintf(logfile, "atom->bond_per_atom= %d < atom->coord_num %d atom->packing= %d arg[3] '%s' \n", atom->bond_per_atom, atom->coord_num, atom->packing, arg[3]);
+//if (logfile) fprintf(logfile, "atom->bond_per_atom= %d < atom->coord_num %d atom->packing= %d arg[3] '%s' \n", atom->bond_per_atom, atom->coord_num, atom->packing, arg[3]);
   if (atom->bond_per_atom < atom->coord_num) 
     error->all(FLERR,"Illegal atom_style mca command, 'bonds_per_atom' must be >= coordination number for packing");
   if (atom->bond_per_atom > MAX_BONDS)
@@ -310,21 +309,21 @@ void AtomVecMCA::grow(int n)
 
   bond_type = memory->grow(atom->bond_type,nmax,atom->bond_per_atom,"atom:bond_type");
   bond_atom = memory->grow(atom->bond_atom,nmax,atom->bond_per_atom,"atom:bond_atom");
-fprintf(logfile, "AtomVecMCA::grow atom->bond_index= %d \n", atom->bond_index);  ///AS DEBUG
+if (logfile) fprintf(logfile, "AtomVecMCA::grow atom->bond_index= %d \n", atom->bond_index);  ///AS DEBUG
   bond_index = memory->grow(atom->bond_index,nmax,atom->bond_per_atom,"atom:bond_index");
   bond_mca = memory->grow(atom->bond_mca,nmax,atom->bond_per_atom,"atom:bond_mca");
 
   if(atom->n_bondhist < 0)
     error->all(FLERR,"atom->n_bondhist < 0 suggests that 'bond_style mca' has not been called before 'read_restart' command! Please check that.");
 
-fprintf(logfile, "AtomVecMCA::grow atom->n_bondhist= %d \n", atom->n_bondhist);  ///AS DEBUG
+if (logfile) fprintf(logfile, "AtomVecMCA::grow atom->n_bondhist= %d \n", atom->n_bondhist);  ///AS DEBUG
   if(atom->n_bondhist)
   {
      bond_hist = atom->bond_hist =
         memory->grow(atom->bond_hist,nmax,atom->bond_per_atom,atom->n_bondhist,"atom:bond_hist");
   }
 
-fprintf(logfile, "AtomVecMCA::grow atom->nextra_grow= %d \n", atom->nextra_grow);  ///AS DEBUG
+if (logfile) fprintf(logfile, "AtomVecMCA::grow atom->nextra_grow= %d \n", atom->nextra_grow);  ///AS DEBUG
   if (atom->nextra_grow)
     for (int iextra = 0; iextra < atom->nextra_grow; iextra++)
       modify->fix[atom->extra_grow[iextra]]->grow_arrays(nmax);
@@ -582,7 +581,7 @@ int AtomVecMCA::pack_comm(int n, int *list, double *buf,
       }
     }
   } */
-fprintf(logfile,"AtomVecMCA::pack_comm m=%d n=%d \n",m,n);
+if (logfile) fprintf(logfile,"AtomVecMCA::pack_comm m=%d n=%d \n",m,n);
 
   return m;
 }
@@ -679,13 +678,13 @@ int AtomVecMCA::pack_comm_vel(int n, int *list, double *buf,
         buf[m++] = cont_distance[j];
         buf[m++] = plastic_heat[j];
         buf[m++] = ubuf(num_bond[j]).d;
-//if(tag[j]==10) fprintf(logfile,"pack_comm_vel num_bond[%d(tag=%d)]=%d\n",j,tag[j],num_bond[j]);
+//if(tag[j]==10) if (logfile) fprintf(logfile,"pack_comm_vel num_bond[%d(tag=%d)]=%d\n",j,tag[j],num_bond[j]);
         for (k = 0; k < num_bond[j]; k++) {
           buf[m++] = ubuf(bond_type[j][k]).d;
           buf[m++] = ubuf(bond_atom[j][k]).d;
           buf[m++] = ubuf(bond_index[j][k]).d;
           buf[m++] = ubuf(bond_mca[j][k]).d;
-//if(tag[j]==10) fprintf(logfile,"\tbond_atom[j][%d]=%d m=%d buf[m]=%+20.14e\n",k,bond_atom[j][k],m-1,buf[m-1]);
+//if(tag[j]==10) if (logfile) fprintf(logfile,"\tbond_atom[j][%d]=%d m=%d buf[m]=%+20.14e\n",k,bond_atom[j][k],m-1,buf[m-1]);
         }
         if(atom->n_bondhist) {
           int tag_j = tag[j] - 1;
@@ -864,7 +863,7 @@ int AtomVecMCA::pack_comm_vel(int n, int *list, double *buf,
     }
   } */
 
-///fprintf(logfile,"AtomVecMCA::pack_comm_vel m=%d n=%d [%d - %d]\n",m,n,list[0],list[n-1]);///
+//if (logfile) fprintf(logfile,"AtomVecMCA::pack_comm_vel m=%d n=%d [%d - %d]\n",m,n,list[0],list[n-1]);///
   return m;
 }
 
@@ -930,7 +929,7 @@ int AtomVecMCA::pack_comm_hybrid(int n, int *list, double *buf)
       buf[m++] = plastic_heat[j];
     }
  } */
-fprintf(logfile,"AtomVecMCA::pack_comm_hybrid m=%d n=%d \n",m,n);
+if (logfile) fprintf(logfile,"AtomVecMCA::pack_comm_hybrid m=%d n=%d \n",m,n);
   return m;
 }
 
@@ -1002,7 +1001,7 @@ void AtomVecMCA::unpack_comm(int n, int first, double *buf)
       plastic_heat[i] = buf[m++];
     }
   } */
-fprintf(logfile,"AtomVecMCA::unpack_comm m=%d n=%d \n",m,n);
+if (logfile) fprintf(logfile,"AtomVecMCA::unpack_comm m=%d n=%d \n",m,n);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1040,13 +1039,13 @@ void AtomVecMCA::unpack_comm_vel(int n, int first, double *buf)
     cont_distance[i] = buf[m++];
     plastic_heat[i] = buf[m++];
     num_bond[i] = (int) ubuf(buf[m++]).i;
-//if(tag[i]==10) fprintf(logfile,"unpack_comm_vel num_bond[%d(tag=%d)]=%d\n",i,tag[i],num_bond[i]);
+//if(tag[i]==10) if (logfile) fprintf(logfile,"unpack_comm_vel num_bond[%d(tag=%d)]=%d\n",i,tag[i],num_bond[i]);
     for (k = 0; k < num_bond[i]; k++) {
       bond_type[i][k] = (int) ubuf(buf[m++]).i;
       bond_atom[i][k] = (int) ubuf(buf[m++]).i;
       bond_index[i][k] = (int) ubuf(buf[m++]).i;
       bond_mca[i][k] = (int) ubuf(buf[m++]).i;
-//if(tag[i]==10) fprintf(logfile,"\tbond_atom[i][%d]=%d m=%d buf[m]=%+20.14e\n",k,bond_atom[i][k],m-1,buf[m-1]);
+//if(tag[i]==10) if (logfile) fprintf(logfile,"\tbond_atom[i][%d]=%d m=%d buf[m]=%+20.14e\n",k,bond_atom[i][k],m-1,buf[m-1]);
     }
     if(atom->n_bondhist)
     {
@@ -1090,7 +1089,7 @@ void AtomVecMCA::unpack_comm_vel(int n, int first, double *buf)
       plastic_heat[i] = buf[m++];
     }
   } */
-///fprintf(logfile,"AtomVecMCA::unpack_comm_vel m=%d n=%d [%d - %d]\n",m,n,first,last);///
+//if (logfile) fprintf(logfile,"AtomVecMCA::unpack_comm_vel m=%d n=%d [%d - %d]\n",m,n,first,last);///
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1153,7 +1152,7 @@ int AtomVecMCA::unpack_comm_hybrid(int n, int first, double *buf)
     plastic_heat[i] = buf[m++];
   }
   }*/
-fprintf(logfile,"AtomVecMCA::unpack_comm_hybrid m=%d n=%d \n",m,n);
+if (logfile) fprintf(logfile,"AtomVecMCA::unpack_comm_hybrid m=%d n=%d \n",m,n);
   return m;
 }
 
@@ -1176,7 +1175,7 @@ int AtomVecMCA::pack_reverse(int n, int first, double *buf)
 */
     buf[m++] = cont_distance[i];
   }
-//fprintf(logfile,"AtomVecMCA::pack_reverse m=%d n=%d first=%d\n",m,n,first);
+//if (logfile) fprintf(logfile,"AtomVecMCA::pack_reverse m=%d n=%d first=%d\n",m,n,first);
   return m;
 }
 
@@ -1216,7 +1215,7 @@ void AtomVecMCA::unpack_reverse(int n, int *list, double *buf)
 */
     cont_distance[i] = buf[m++];
   }
-//fprintf(logfile,"AtomVecMCA::unpack_reverse m=%d n=%d first=%d\n",m,n,list[0]);
+//if (logfile) fprintf(logfile,"AtomVecMCA::unpack_reverse m=%d n=%d first=%d\n",m,n,list[0]);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1345,7 +1344,7 @@ int AtomVecMCA::pack_border(int n, int *list, double *buf,
     for (int iextra = 0; iextra < atom->nextra_border; iextra++)
       m += modify->fix[atom->extra_border[iextra]]->pack_border(n,list,&buf[m]);
 
-fprintf(logfile,"AtomVecMCA::pack_border m=%d\n",m);
+if (logfile) fprintf(logfile,"AtomVecMCA::pack_border m=%d\n",m);
   return m;
 }
 
@@ -1406,12 +1405,12 @@ int AtomVecMCA::pack_border_vel(int n, int *list, double *buf,
         buf[m++] = ubuf(bond_index[j][k]).d;
         buf[m++] = ubuf(bond_mca[j][k]).d;
       }
-      if(atom->n_bondhist) {
-        int tag_j = tag[j] - 1;
-        for (k = 0; k < num_bond[j]; k++)
-          for (l = 0; l < atom->n_bondhist; l++)
-            ;///buf[m++] = bond_hist[tag_j][k][l];
-      }
+///      if(atom->n_bondhist) {
+///        int tag_j = tag[j] - 1;
+///        for (k = 0; k < num_bond[j]; k++)
+///          for (l = 0; l < atom->n_bondhist; l++)
+///            ;///buf[m++] = bond_hist[tag_j][k][l];
+///      }
     }
   } else {
     if (domain->triclinic == 0) {
@@ -1429,7 +1428,7 @@ int AtomVecMCA::pack_border_vel(int n, int *list, double *buf,
         buf[m++] = x[j][0] + dx;
         buf[m++] = x[j][1] + dy;
         buf[m++] = x[j][2] + dz;
-//if(tag[j]==10) fprintf(logfile,"pack_border_vel %d(tag=%d) X= %g %g %g\n",j,tag[j],x[j][0],x[j][1],x[j][2]);
+//if(tag[j]==10) if (logfile) fprintf(logfile,"pack_border_vel %d(tag=%d) X= %g %g %g\n",j,tag[j],x[j][0],x[j][1],x[j][2]);
 
         buf[m++] = ubuf(tag[j]).d;
         buf[m++] = ubuf(type[j]).d;
@@ -1462,20 +1461,20 @@ int AtomVecMCA::pack_border_vel(int n, int *list, double *buf,
 
         buf[m++] = ubuf(molecule[j]).d;
         buf[m++] = ubuf(num_bond[j]).d;
-//if(tag[j]==10) fprintf(logfile,"pack_border_vel num_bond[%d(tag=%d)]=%d\n",j,tag[j],num_bond[j]);
+//if(tag[j]==10) if (logfile) fprintf(logfile,"pack_border_vel num_bond[%d(tag=%d)]=%d\n",j,tag[j],num_bond[j]);
         for (k = 0; k < num_bond[j]; k++) {
           buf[m++] = ubuf(bond_type[j][k]).d;
           buf[m++] = ubuf(bond_atom[j][k]).d;
           buf[m++] = ubuf(bond_index[j][k]).d;
           buf[m++] = ubuf(bond_mca[j][k]).d;
-//if(tag[j]==10) fprintf(logfile,"\tbond_atom[j][%d]=%d m=%d buf[m]=%+20.14e\n",k,bond_atom[j][k],m-1,buf[m-1]);
+//if(tag[j]==10) if (logfile) fprintf(logfile,"\tbond_atom[j][%d]=%d m=%d buf[m]=%+20.14e\n",k,bond_atom[j][k],m-1,buf[m-1]);
         }
-        if(atom->n_bondhist) {
-          int tag_j = tag[j] - 1;
-          for (k = 0; k < num_bond[j]; k++)
-            for (l = 0; l < atom->n_bondhist; l++)
-              ;///buf[m++] = bond_hist[tag_j][k][l];
-        }
+///        if(atom->n_bondhist) {
+///          int tag_j = tag[j] - 1;
+///          for (k = 0; k < num_bond[j]; k++)
+///            for (l = 0; l < atom->n_bondhist; l++)
+///              ;///buf[m++] = bond_hist[tag_j][k][l];
+///        }
       }
     } else {
       dvx = pbc[0]*h_rate[0] + pbc[5]*h_rate[5] + pbc[4]*h_rate[4];
@@ -1529,12 +1528,12 @@ int AtomVecMCA::pack_border_vel(int n, int *list, double *buf,
           buf[m++] = ubuf(bond_index[j][k]).d;
           buf[m++] = ubuf(bond_mca[j][k]).d;
         }
-        if(atom->n_bondhist) {
-          int tag_j = tag[j] - 1;
-          for (k = 0; k < num_bond[j]; k++)
-            for (l = 0; l < atom->n_bondhist; l++)
-              ;///buf[m++] = bond_hist[tag_j][k][l];
-        }
+///        if(atom->n_bondhist) {
+///          int tag_j = tag[j] - 1;
+///          for (k = 0; k < num_bond[j]; k++)
+///            for (l = 0; l < atom->n_bondhist; l++)
+///              ;///buf[m++] = bond_hist[tag_j][k][l];
+///        }
       }
     }
   }
@@ -1543,7 +1542,7 @@ int AtomVecMCA::pack_border_vel(int n, int *list, double *buf,
     for (int iextra = 0; iextra < atom->nextra_border; iextra++)
       m += modify->fix[atom->extra_border[iextra]]->pack_border(n,list,&buf[m]);
 
-//fprintf(logfile,"AtomVecMCA::pack_border_vel m=%d n=%d [%d - %d] deform_vremap=%d\n",m,n,list[0],list[n-1],deform_vremap);
+//if (logfile) fprintf(logfile,"AtomVecMCA::pack_border_vel m=%d n=%d [%d - %d] deform_vremap=%d\n",m,n,list[0],list[n-1],deform_vremap);
   return m;
 }
 
@@ -1648,7 +1647,7 @@ void AtomVecMCA::unpack_border(int n, int first, double *buf)
     for (int iextra = 0; iextra < atom->nextra_border; iextra++)
       m += modify->fix[atom->extra_border[iextra]]->
         unpack_border(n,first,&buf[m]);
-fprintf(logfile,"AtomVecMCA::unpack_border m=%d n=%d \n",m,n);
+if (logfile) fprintf(logfile,"AtomVecMCA::unpack_border m=%d n=%d \n",m,n);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1667,7 +1666,7 @@ void AtomVecMCA::unpack_border_vel(int n, int first, double *buf)
     x[i][2] = buf[m++];
 
     tag[i] = (int) ubuf(buf[m++]).i;
-//if(tag[i]==10) fprintf(logfile,"unpack_border_vel %d(tag=%d) X= %g %g %g\n",i,tag[i],x[i][0],x[i][1],x[i][2]);
+//if(tag[i]==10) if (logfile) fprintf(logfile,"unpack_border_vel %d(tag=%d) X= %g %g %g\n",i,tag[i],x[i][0],x[i][1],x[i][2]);
     type[i] = (int) ubuf(buf[m++]).i;
     mask[i] = (int) ubuf(buf[m++]).i;
     rmass[i] = buf[m++];
@@ -1696,27 +1695,27 @@ void AtomVecMCA::unpack_border_vel(int n, int first, double *buf)
 
     molecule[i] = (int) ubuf(buf[m++]).i;  // remove?
     num_bond[i] = (int) ubuf(buf[m++]).i;
-//if(tag[i]==10) fprintf(logfile,"unpack_border_vel num_bond[%d(tag=%d)]=%d\n",i,tag[i],num_bond[i]);
+//if(tag[i]==10) if (logfile) fprintf(logfile,"unpack_border_vel num_bond[%d(tag=%d)]=%d\n",i,tag[i],num_bond[i]);
     for (k = 0; k < num_bond[i]; k++) {
       bond_type[i][k] = (int) ubuf(buf[m++]).i;
       bond_atom[i][k] = (int) ubuf(buf[m++]).i;
       bond_index[i][k] = (int) ubuf(buf[m++]).i;
       bond_mca[i][k] = (int) ubuf(buf[m++]).i;
-//if(tag[i]==10) fprintf(logfile,"\tbond_atom[i][%d]=%d m=%d buf[m]=%+20.14e\n",k,bond_atom[i][k],m-1,buf[m-1]);
+//if(tag[i]==10) if (logfile) fprintf(logfile,"\tbond_atom[i][%d]=%d m=%d buf[m]=%+20.14e\n",k,bond_atom[i][k],m-1,buf[m-1]);
     }
-    if(atom->n_bondhist) {
-      int tag_i = tag[i] - 1;
-      for (k = 0; k < num_bond[i]; k++)
-        for (l = 0; l < atom->n_bondhist; l++)
-          ;///bond_hist[tag_i][k][l] = buf[m++];
-    }
+///    if(atom->n_bondhist) {
+///      int tag_i = tag[i] - 1;
+///      for (k = 0; k < num_bond[i]; k++)
+///        for (l = 0; l < atom->n_bondhist; l++)
+///          ;///bond_hist[tag_i][k][l] = buf[m++];
+///    }
   }
 
 if (atom->nextra_border)
     for (int iextra = 0; iextra < atom->nextra_border; iextra++)
       m += modify->fix[atom->extra_border[iextra]]->
         unpack_border(n,first,&buf[m]);
-//fprintf(logfile,"AtomVecMCA::unpack_border_vel m=%d n=%d [%d - %d]\n",m,n,first,last);
+//if (logfile) fprintf(logfile,"AtomVecMCA::unpack_border_vel m=%d n=%d [%d - %d]\n",m,n,first,last);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1808,13 +1807,13 @@ int AtomVecMCA::pack_exchange(int i, double *buf)
 
   buf[m++] = ubuf(molecule[i]).d;
   buf[m++] = ubuf(num_bond[i]).d;
-//if(tag[i]==10) fprintf(logfile,"pack_exchange num_bond[%d(tag=%d)]=%d\n",i,tag[i],num_bond[i]);
+//if(tag[i]==10) if (logfile) fprintf(logfile,"pack_exchange num_bond[%d(tag=%d)]=%d\n",i,tag[i],num_bond[i]);
   for (k = 0; k < num_bond[i]; k++) {
     buf[m++] = ubuf(bond_type[i][k]).d;
     buf[m++] = ubuf(bond_atom[i][k]).d;
     buf[m++] = ubuf(bond_index[i][k]).d;
     buf[m++] = ubuf(bond_mca[i][k]).d;
-//if(tag[i]==10) fprintf(logfile,"\tbond_atom[i][%d]=%d m=%d buf[m]=%+20.14e\n",k,bond_atom[i][k],m-1,buf[m-1]);
+//if(tag[i]==10) if (logfile) fprintf(logfile,"\tbond_atom[i][%d]=%d m=%d buf[m]=%+20.14e\n",k,bond_atom[i][k],m-1,buf[m-1]);
   }
   if(atom->n_bondhist) {
     int tag_i = tag[i] - 1;
@@ -1833,7 +1832,7 @@ int AtomVecMCA::pack_exchange(int i, double *buf)
       m += modify->fix[atom->extra_grow[iextra]]->pack_exchange(i,&buf[m]);
 
   buf[0] = m;
-fprintf(logfile,"AtomVecMCA::pack_exchange m=%d i=%d\n",m,i);
+if (logfile) fprintf(logfile,"AtomVecMCA::pack_exchange m=%d i=%d\n",m,i);
   return m;
 }
 
@@ -1882,13 +1881,13 @@ int AtomVecMCA::unpack_exchange(double *buf)
 
   molecule[nlocal] = (int) ubuf(buf[m++]).i;
   num_bond[nlocal] = (int) ubuf(buf[m++]).i;
-//if(tag[nlocal]==10) fprintf(logfile,"unpack_exchange num_bond[%d(tag=%d)]=%d\n",nlocal,tag[nlocal],num_bond[nlocal]);
+//if(tag[nlocal]==10) if (logfile) fprintf(logfile,"unpack_exchange num_bond[%d(tag=%d)]=%d\n",nlocal,tag[nlocal],num_bond[nlocal]);
   for (k = 0; k < num_bond[nlocal]; k++) {
     bond_type[nlocal][k] = (int) ubuf(buf[m++]).i;
     bond_atom[nlocal][k] = (int) ubuf(buf[m++]).i;
     bond_index[nlocal][k] = (int) ubuf(buf[m++]).i;
     bond_mca[nlocal][k] = (int) ubuf(buf[m++]).i;
-//if(tag[nlocal]==10) fprintf(logfile,"\tbond_atom[nlocal][%d]=%d m=%d buf[m]=%+20.14e\n",k,bond_atom[nlocal][k],m-1,buf[m-1]);
+//if(tag[nlocal]==10) if (logfile) fprintf(logfile,"\tbond_atom[nlocal][%d]=%d m=%d buf[m]=%+20.14e\n",k,bond_atom[nlocal][k],m-1,buf[m-1]);
   }
   if(atom->n_bondhist) {
     int tag_l = tag[nlocal] - 1;
@@ -1909,7 +1908,7 @@ int AtomVecMCA::unpack_exchange(double *buf)
 	unpack_exchange(nlocal,&buf[m]);
 
   atom->nlocal++;
-fprintf(logfile,"AtomVecMCA::unpack_exchange m=%d nlocal=%d\n",m,nlocal);
+if (logfile) fprintf(logfile,"AtomVecMCA::unpack_exchange m=%d nlocal=%d\n",m,nlocal);
   return m;
 }
 
@@ -2131,7 +2130,7 @@ void AtomVecMCA::create_atom(int itype, double *coord)
   // The radius of this ball is not the same as mca_radius, but
   // is calculated from the initial volume of the particle.
   mca_inertia[nlocal] = 0.4*pow(3.0*get_init_volume()/(4.0*MY_PI), 2.0/3.0) * rmass[nlocal];
-///fprintf(logfile, "AtomVecMCA::create_atom # %d at %20.12e %20.12e %20.12e rmass= %20.12e mca_radius= %g contact_area= %g mca_inertia=%g\n",nlocal,coord[0],coord[1],coord[2],rmass[nlocal],atom->mca_radius,atom->contact_area,mca_inertia[nlocal]); ///AS DEBUG
+///if (logfile) fprintf(logfile, "AtomVecMCA::create_atom # %d at %20.12e %20.12e %20.12e rmass= %20.12e mca_radius= %g contact_area= %g mca_inertia=%g\n",nlocal,coord[0],coord[1],coord[2],rmass[nlocal],atom->mca_radius,atom->contact_area,mca_inertia[nlocal]); ///AS DEBUG
 
   theta[nlocal][0] = 0.0;
   theta[nlocal][1] = 0.0;
@@ -2164,7 +2163,7 @@ void AtomVecMCA::create_atom(int itype, double *coord)
 
 void AtomVecMCA::data_atom(double *coord, tagint imagetmp, char **values)
 {
-fprintf(logfile,"AtomVecMCA::data_atom\n"); ///AS DEBUG
+if (logfile) fprintf(logfile,"AtomVecMCA::data_atom\n"); ///AS DEBUG
   int nlocal = atom->nlocal;
   if (nlocal == nmax) grow(0);
 

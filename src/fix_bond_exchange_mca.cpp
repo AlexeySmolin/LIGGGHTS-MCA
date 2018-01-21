@@ -69,7 +69,7 @@ using namespace MCAAtomConst;
 FixBondExchangeMCA::FixBondExchangeMCA(LAMMPS *lmp, int narg, char **arg) :
   Fix(lmp, narg, arg)
 {
-    fprintf(logfile,"constructor FixBondExchangeMCA ###########\n");
+//    if (logfile) fprintf(logfile,"constructor FixBondExchangeMCA ###########\n");
     restart_global = 1;
     laststep=-1;
 }
@@ -106,7 +106,7 @@ void FixBondExchangeMCA::pre_exchange()
 
   int newton_bond = force->newton_bond;
 
-///fprintf(logfile,"FixBondExchangeMCA::pre_exchange\n");
+///if (logfile) fprintf(logfile,"FixBondExchangeMCA::pre_exchange\n");
 ///fprintf(stderr,"FixBondExchangeMCA::pre_exchange\n");
 
   /* task 1: propagate bond contact history  AS - we do not need this!!!
@@ -156,7 +156,7 @@ void FixBondExchangeMCA::pre_exchange()
       if(bondlist[n][3] == NOT_INTERACT) list_bond_id.push_back(n);// load all broken bond ids into the list
 
   //DEBUG
-  if (list_bond_id.size()>0) fprintf(logfile,"FixBondExchangeMCA::pre_exchange will delete %d broken bonds at step %d\n",list_bond_id.size(),update->ntimestep);
+  if (list_bond_id.size()>0) if (logfile) fprintf(logfile,"FixBondExchangeMCA::pre_exchange will delete %ld broken bonds at step %ld\n",list_bond_id.size(),update->ntimestep);
 
   for (it1=list_bond_id.begin(); it1!=list_bond_id.end(); ++it1)
   {
@@ -166,7 +166,7 @@ void FixBondExchangeMCA::pre_exchange()
 
     if(bondlist[n][3] < NOT_INTERACT) continue;
 
-    fprintf(logfile,"FixBondExchangeMCA::pre_exchange detected bond %d:%d(tag=%d)<->%d(tag=%d) as broken at step %ld\n",n,i1,atom->tag[i1],i2,atom->tag[i2],update->ntimestep);
+    if (logfile) fprintf(logfile,"FixBondExchangeMCA::pre_exchange detected bond %d:%d(tag=%d)<->%d(tag=%d) as broken at step %ld\n",n,i1,atom->tag[i1],i2,atom->tag[i2],update->ntimestep);
     // if the bond is broken, we remove it from both atom data
 
     // delete bond from atom I if I stores it
@@ -212,7 +212,7 @@ inline void FixBondExchangeMCA::remove_bond(int ilocal, int ibond, int bondnumbe
     int *bond_type = atom->bond_type[ilocal];
     int *bond_mca = atom->bond_mca[ilocal];
     double **bond_hist = atom->bond_hist[tag[ilocal] - 1];
-    fprintf(logfile,"FixBondExchangeMCA::remove_bond #%d : ilocal=%d ibond=%d global=%d\n",bondnumber,ilocal,ibond,atom->map(bond_atom[ibond]));
+    if (logfile) fprintf(logfile,"FixBondExchangeMCA::remove_bond #%d : ilocal=%d ibond=%d global=%d\n",bondnumber,ilocal,ibond,atom->map(bond_atom[ibond]));
     ///error->one(FLERR,"romoving bond");
     int nbond = atom->num_bond[ilocal] - 1;
     bond_atom[ibond] = bond_atom[nbond];

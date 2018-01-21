@@ -61,6 +61,8 @@ class FixMCAMeanStress : public Fix {
   int setmask();
   void init();
   void pre_force(int);
+//  int pack_exchange(int, double *); // ??
+//  int unpack_exchange(int, double *); // ??
   int pack_comm(int, int *, double *, int, int *);
   void unpack_comm(int, int, double *);
 

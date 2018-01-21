@@ -318,7 +318,7 @@ void FixMCASetVel::init() {
 /* ---------------------------------------------------------------------- */
 
 void FixMCASetVel::setup(int vflag) {
-///fprintf(logfile, "FixMCASetVel::setup() \n"); ///AS DEBUG
+///if (logfile) fprintf(logfile, "FixMCASetVel::setup() \n"); ///AS DEBUG
 
 	if (strstr(update->integrate_style, "verlet"))
 		post_force(vflag); /// why??
@@ -412,7 +412,7 @@ void FixMCASetVel::post_force(int vflag) {
 
 		modify->addstep_compute(update->ntimestep + 1);
 
-		//fprintf(logfile, "setting velocity at timestep %d\n", update->ntimestep);
+		//if (logfile) fprintf(logfile, "setting velocity at timestep %d\n", update->ntimestep);
 
 		for (int i = 0; i < nlocal; i++)
 			if (mask[i] & groupbit) {

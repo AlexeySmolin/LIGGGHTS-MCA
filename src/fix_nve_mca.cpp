@@ -116,8 +116,8 @@ void FixNVEMCA::initial_integrate(int vflag)
 
   // update 1/2 step for v and omega, and full step for  x for all particles
   // d_omega/dt = torque / inertia
-//fprintf(logfile, "FixNVEMCA::initial_integrate dtv= %g dtf= %g\n",dtv,dtf); ///AS DEBUG
-//fprintf(logfile, "rmass[%d]= %20.12e mca_radius= %g\n",nlocal,rmass[nlocal-1],atom->mca_radius); ///AS DEBUG
+//if (logfile) fprintf(logfile, "FixNVEMCA::initial_integrate dtv= %g dtf= %g\n",dtv,dtf); ///AS DEBUG
+//if (logfile) fprintf(logfile, "rmass[%d]= %20.12e mca_radius= %g\n",nlocal,rmass[nlocal-1],atom->mca_radius); ///AS DEBUG
   int i;
 #if defined (_OPENMP)
 #pragma omp parallel for private(i,dtfm,dtirotate) shared (nlocal,x,v,f,omega,torque,theta) default(none) schedule(static)
@@ -170,7 +170,7 @@ void FixNVEMCA::final_integrate()
 
   // update 1/2 step for v,omega for all particles
   // d_omega/dt = torque / inertia
-//fprintf(logfile, "FixNVEMCA::final_integrate \n"); ///AS DEBUG
+//if (logfile) fprintf(logfile, "FixNVEMCA::final_integrate \n"); ///AS DEBUG
 
   int i;
 #if defined (_OPENMP)
