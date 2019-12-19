@@ -302,7 +302,7 @@ inline void  PairMCA::compute_elastic_force()
 #endif
 
         double rKS = 1. / (qj*rGi + qi*rGj);
-        double rQR = qi * 0.5 * rKS;
+        double rQR = qj * 0.5 * rKS;
         double vYj[3], vYij[3];
         vectorCopy3D(&(bond_hist_ik[SHX_PREV]), vShear);
         vectorCopy3D(&(bond_hist_ik[YX_PREV]), vYi);
@@ -445,10 +445,10 @@ inline void  PairMCA::compute_equiv_stress()
       if (bond_state == NOT_INTERACT) continue;
 
       double * const bond_hist_ik = &(bond_hist_i[k][0]);
-      rdSumE += bond_hist_ik[E];
       double p = bond_hist_ik[P];
-      if ((bond_state == UNBONDED) && (p > 0.0)) continue;
+      if ((bond_state == UNBONDED) && (p > 0.0)) continue; // 01.08.18 this is free surface
       rdSumP += p;
+      rdSumE += bond_hist_ik[E];
     }
     meanstr = rdSumP / Nc;
 #endif
@@ -479,7 +479,7 @@ inline void  PairMCA::compute_equiv_stress()
     if (iNC < Nc) {
       rSumEqStr += iFreeSlots * meanstr*meanstr;
     }
-    equiv_stress[i] = sqrt(4.5*(rSumEqStr) / Nc);;
+    equiv_stress[i] = sqrt(4.5*(rSumEqStr) / Nc);
     int itype = type[i];
     double rKi = 3.0 * mca_pair->K[itype][itype];
     double rE = (rdSumP / rKi - rdSumE); // predictor of the contact distance accounting of plastic strain

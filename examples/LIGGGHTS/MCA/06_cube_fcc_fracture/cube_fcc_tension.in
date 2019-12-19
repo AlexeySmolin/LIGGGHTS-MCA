@@ -2,6 +2,7 @@
 #
 # MCA example 06:  rupture of a cube of elastic-plastic material by pulling one its end.
 # This example shows the possibility of modeling fracture under tensile loading of FCC-packed particles.
+# The second shown possibility is computing stress and strain parameters for 'dump custom' command.
 #
 # unit sytem: Pa / m / s
 #
@@ -206,8 +207,13 @@ thermo_style	custom step atoms #numbond
 thermo		100
 thermo_modify	lost ignore norm no
 compute_modify	thermo_temp dynamic yes
+compute compstress all property/mca mean_stress eq_stress mean_strain eq_strain ## compute stress and strain for dump
+#variable mca_pressure equal c_compstress[1]
+#variable mca_eqstress equal c_compstress[2]
+#variable mca_meanstrain equal c_compstress[3]
+#variable mca_eqstrain equal c_compstress[4]
 
-dump	dmp all custom  ${filestep} post/dump*.liggghts id type x y z vx vy vz fx fy fz omegax omegay omegaz tqx tqy tqz
+dump	dmp all custom  ${filestep} post/dump*.liggghts id type x y z vx vy vz fx fy fz omegax omegay omegaz tqx tqy tqz c_compstress[1] c_compstress[2] c_compstress[3] c_compstress[4]
 
 ####################################################################################################
 # OUTPUT PLOT PARAMETERS

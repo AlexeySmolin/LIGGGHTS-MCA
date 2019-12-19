@@ -256,6 +256,8 @@ inline void  FixMCAMeanStress::predict_mean_stress()
       double r0 = bond_hist_ik[R_PREV];
       double pi = bond_hist_ik[P_PREV];
       double pj = bond_hist[tag[j]-1][jk][P_PREV];
+      int bond_state = bondlist[bond_index[i][k]][3];
+      if((bond_state == UNBONDED) && ((pi > 0.0)||(pj > 0.0))) continue; // 01.08.18 this is free surface
       if (newton_bond) {
         //pj = bond_hist_ik[PJ_PREV]; it means we store bonds only for i < j, but allocate memory for both. why?
         error->all(FLERR,"FixMCAMeanStress::mean_stress_predict does not support 'newton_bond on'");
@@ -345,7 +347,9 @@ inline void  FixMCAMeanStress::predict_mean_stress()
       r = bond_hist_ik[R];
       r0 = bond_hist_ik[R_PREV];
       pi = bond_hist_ik[P_PREV];
+      if((bond_state == UNBONDED) && (pi > 0.0)) pi = 0.0; // 01.08.18 this is free surface
       pj = bond_hist_jk[P_PREV];
+      if((bond_state == UNBONDED) && (pj > 0.0)) pj = 0.0; // 01.08.18 this is free surface
       if (newton_bond) {
         //pj = bond_hist_ik[PJ_PREV];
         error->all(FLERR,"FixMCAMeanStress::mean_stress_predict does not support 'newton on'");
@@ -358,7 +362,7 @@ inline void  FixMCAMeanStress::predict_mean_stress()
       pi += d_p;
 //if (logfile) fprintf(logfile,"FixMCAMeanStress::mean_stress_predict: i=%d j=%d P=%g oNbrR_i.rE=%g IDi=%d IDj=%d Dij=%g D0ij=%g\n   dE=%g Pj=%g Pi=%g dSgmj=%g dSgmi=%g Hj=%g Hi=%g meanSi=%g meanSj=%g bond_state=%d\n",
 //i,j,pi,bond_hist_ik[E],tag[i],bond_atom[i][k],r,r0,d_e,pj,(pi-d_p),rdSgmj,rdSgmi,rHj,rHi,mean_stress[i],mean_stress[j],bond_state);
-      if((bond_state == UNBONDED) && (pi > 0.0)) { // if happens that unbonded particles attract each other
+      if((bond_state == UNBONDED) && (pi > 0.0)) {  // 01.08.18 this is free surface if happens that unbonded particles attract each other
           pi = 0.0;
       }
       rSum += pi;
