@@ -27,6 +27,7 @@
 #include "compute_pressure.h"
 #include "compute_property_atom.h"
 #include "compute_property_local.h"
+#include "compute_property_mca.h"
 #include "compute_property_molecule.h"
 #include "compute_rdf.h"
 #include "compute_reduce.h"

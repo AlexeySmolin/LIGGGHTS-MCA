@@ -659,7 +659,7 @@ void FixBondCreateMCA::post_integrate()
   createcounttotal += createcount;
   atom->nbonds += createcount;
 
-  if(createcount && comm->me == 0) if (logfile) fprintf(logfile,"Created %d unique bonds at timestep "BIGINT_FORMAT"\n",createcount,update->ntimestep);
+  if(createcount && comm->me == 0) if (logfile) fprintf(logfile,"Created %d unique bonds at timestep " BIGINT_FORMAT "\n",createcount,update->ntimestep);
 
   // trigger reneighboring if any bonds were formed
 
