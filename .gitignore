@@ -12,3 +12,5 @@ style_pair.h
 log.liggghts
 *.csv
 *.dat
+.kateproject
+.kateproject.d

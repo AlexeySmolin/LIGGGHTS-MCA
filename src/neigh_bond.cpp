@@ -192,7 +192,8 @@ void Neighbor::bond_check()
     dystart = dy = x[i][1] - x[j][1];
     dzstart = dz = x[i][2] - x[j][2];
     domain->minimum_image(dx,dy,dz);
-    if (dx != dxstart || dy != dystart || dz != dzstart) flag = 1;
+    if (dx != dxstart || dy != dystart || dz != dzstart) {flag = 1;
+fprintf(stderr,"bond=%d %d<->%d dx=%g dxstart=%g | dy=%g dystart=%g | dz=%g dzstart=%g x[i][2]=%g x[j][2]=%g\n",m,i,j,dx,dxstart,dy,dystart,dz,dzstart,x[i][2],x[j][2]); }
   }
 
   int flag_all;

@@ -1335,8 +1335,11 @@ void Comm::forward_comm_fix(Fix *fix)
       if (recvnum[iswap])
         MPI_Irecv(buf_recv,n*recvnum[iswap],MPI_DOUBLE,recvproc[iswap],0,
                   world,&request);
-      if (sendnum[iswap])
+      if (sendnum[iswap]) {
+//	fprintf(stderr,"Comm::forward_comm_fix: n=%d maxsend=%d bufextra=%d maxrecv=%d iswap=%d sendnum[iswap]=%d sendproc[iswap]=%d me=%d\n",
+//		n,maxsend,bufextra,maxrecv,iswap,sendnum[iswap],sendproc[iswap],me);
         MPI_Send(buf_send,n*sendnum[iswap],MPI_DOUBLE,sendproc[iswap],0,world);
+      }
       if (recvnum[iswap]) MPI_Wait(&request,&status);
       buf = buf_recv;
     } else buf = buf_send;

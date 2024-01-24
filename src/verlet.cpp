@@ -272,13 +272,13 @@ void Verlet::run(int n)
   for (int i = 0; i < n; i++) {
 
     ntimestep = ++update->ntimestep;
-    
+
     ev_set(ntimestep);
 
     // initial time integration
 
     modify->initial_integrate(vflag);
-    
+
     if (n_post_integrate) modify->post_integrate();
 
     // regular communication vs neighbor list rebuild
@@ -287,31 +287,35 @@ void Verlet::run(int n)
 
     if (nflag == 0) {
       timer->stamp();
+//if (logfile) fprintf(logfile,"Verlet: forward_comm() at step %ld\n",update->ntimestep);
       comm->forward_comm();
       timer->stamp(TIME_COMM);
     } else {
-      
+
       if (n_pre_exchange) modify->pre_exchange();
-      
+
       if (triclinic) domain->x2lamda(atom->nlocal);
       domain->pbc();
       if (domain->box_change) {
         domain->reset_box();
-        
+
         comm->setup();
         if (neighbor->style) neighbor->setup_bins();
       }
       timer->stamp();
-      
+
+//if (logfile) fprintf(logfile,"Verlet: comm->exchange at step %ld\n",update->ntimestep);
       comm->exchange();
-      
+
       if (sortflag && ntimestep >= atom->nextsort) atom->sort();
+//if (logfile) fprintf(logfile,"Verlet: comm->borders() at step %ld\n",update->ntimestep);
       comm->borders();
       if (triclinic) domain->lamda2x(atom->nlocal+atom->nghost);
       timer->stamp(TIME_COMM);
-      
+
       if (n_pre_neighbor) modify->pre_neighbor();
-      
+
+//if (logfile) fprintf(logfile,"Verlet: neighbor->build() at step %ld\n",update->ntimestep);
       neighbor->build();
       timer->stamp(TIME_NEIGHBOR);
     }
