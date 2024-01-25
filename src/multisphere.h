@@ -46,13 +46,18 @@
 #include "custom_value_tracker.h"
 #include "mpi_liggghts.h"
 #include "update.h"
+#include "math_extra.h"
 #include <vector>
+#include <cmath>
 
 namespace LAMMPS_NS {
 
   class Multisphere : protected Pointers {
 
     friend class FixMultisphere;
+    friend class FixChangeSizeMultisphere;
+    friend class SetMultisphere;
+    friend class FixMoveMultisphere;
 
     public:
 
@@ -75,9 +80,10 @@ namespace LAMMPS_NS {
       void id_extend_body_extend(int *body);
 
       void calc_nbody_all();
-      bool check_lost_atoms(int *body, double *atom_delflag,double *body_existflag);
+      bool check_lost_atoms(int *body, double *atom_delflag,double *body_existflag, double *volumeweight);
 
       int calc_n_steps(int iatom,int body,double *p_ref,double *normalvec,double *v_normal);
+      void recalc_n_steps(double dt_ratio);
       void release(int iatom,int body,double *v_toInsert,double *omega_toInsert);
 
       double max_r_bound();
@@ -95,6 +101,8 @@ namespace LAMMPS_NS {
 
       double extract_ke();
       double extract_rke();
+      double extract_vave();
+      double extract_omega_ave();
 
       // inline access functions
 
@@ -128,6 +136,12 @@ namespace LAMMPS_NS {
       inline void vcm(double *v_cm,int ibody_local)
       { vectorCopy3D(vcm_(ibody_local),v_cm); }
 
+      inline void omega(double * const omega, const int ibody_local)
+      { vectorCopy3D(omega_(ibody_local), omega); }
+
+      inline void angmom(double * const angmom, const int ibody_local)
+      { vectorCopy3D(angmom_(ibody_local), angmom); }
+
       inline void quat(double *quat,int ibody_local)
       { vectorCopy4D(quat_(ibody_local),quat); }
 
@@ -151,14 +165,40 @@ namespace LAMMPS_NS {
       inline double density(int ibody_local)
       { return density_(ibody_local); }
 
+      inline double volume(int ibody_local)
+      { return masstotal_(ibody_local)/density_(ibody_local); }
+
       inline void set_v_body(int ibody_local,double *vel)
       { vcm_.set(ibody_local,vel); }
 
       inline void set_omega_body(int ibody_local,double *omega)
       { omega_.set(ibody_local,omega); }
 
+      inline void set_angmom_via_omega_body(int ibody_local,double *omega)
+      {
+        double angmom[3];
+        MathExtra::omega_to_angmom(omega, ex_space_(ibody_local), ey_space_(ibody_local), ez_space_(ibody_local), inertia_(ibody_local), angmom);
+        omega_.set(ibody_local,omega);
+        angmom_.set(ibody_local,angmom);
+      }
+
+      inline void set_angmom_body(int ibody_local,double *angmom)
+      { angmom_.set(ibody_local,angmom); }
+
+      void set_fflag(int ibody_local,bool *fflag)
+      { fflag_.set(ibody_local, fflag); }
+
+      void set_tflag(int ibody_local,bool *tflag)
+      { tflag_.set(ibody_local, tflag); }
+
       inline class CustomValueTracker& prop()
       { return customValues_; }
+
+      void tagReset(int ibody_local)
+      { id_(ibody_local)=-1; }
+
+      void nrigidReset(int ibody_local, int resetValue)
+      { nrigid_(ibody_local) = resetValue; }
 
     protected:
 
@@ -188,6 +228,7 @@ namespace LAMMPS_NS {
       VectorContainer<double,3> &fcm_;
       VectorContainer<double,3> &torquecm_;
       VectorContainer<double,3> &dragforce_cm_;
+      VectorContainer<double,3> &hdtorque_cm_;
 
       // angular momentum of each in space coords
       // angular velocity of each in space coords
@@ -199,8 +240,8 @@ namespace LAMMPS_NS {
       // density and total mass of each rigid body
       // 3 principal components of inertia of each
       // principal axes of each in space coords
-      ScalarContainer<int> &atomtype_;
-      ScalarContainer<int> &type_;
+      ScalarContainer<int> &atomtype_; 
+      ScalarContainer<int> &type_;     
       ScalarContainer<double> &density_;
       ScalarContainer<double> &masstotal_;
       VectorContainer<double,3> &inertia_;
@@ -219,6 +260,7 @@ namespace LAMMPS_NS {
       VectorContainer<bool,3> &fflag_;
       VectorContainer<bool,3> &tflag_;
 
+      // step to start from for integration
       ScalarContainer<int> &start_step_;
       VectorContainer<double,3> &v_integrate_;
 
@@ -226,6 +268,10 @@ namespace LAMMPS_NS {
       // vector from xcm to center of bound sphere
       ScalarContainer<double> &r_bound_;
       VectorContainer<double,3> &xcm_to_xbound_;
+
+      // temperature and buffer for each body
+      ScalarContainer<double> &temp_;
+      ScalarContainer<double> &temp_old_;
   };
 
   // *************************************

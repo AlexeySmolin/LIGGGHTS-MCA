@@ -3,10 +3,44 @@
 SHELL = /bin/bash
 #.IGNORE:
 
+# Subtargets for makefile auto
+SUBTARGET_PRE_DEBUG = $(@)
+OPTIONSPOSTFIX_PRE_DEBUG =
+ifneq ($(origin postfix), undefined)
+    ifneq (${postfix}, )
+        ifneq (,$(filter $(MAKECMDGOALS), auto clean-auto))
+            ifeq (${postfix}, default)
+                $(error A postfix value of "default" is not allowed)
+            endif
+            SUBTARGET_PRE_DEBUG = $@_${postfix}
+            OPTIONSPOSTFIX_PRE_DEBUG = _${postfix}
+        endif
+    endif
+endif
+SUBTARGET = $(SUBTARGET_PRE_DEBUG)
+OPTIONSPOSTFIX = $(OPTIONSPOSTFIX_PRE_DEBUG)
+ifneq ($(origin debug), undefined)
+    ifneq (${debug}, )
+        ifneq (,$(filter $(MAKECMDGOALS), auto clean-auto))
+            ifeq (,$(filter $(debug), ON FULL))
+                $(error Only values for debug are "ON" and "FULL")
+            endif
+            ifeq (${debug},ON)
+                SUBTARGET = $(SUBTARGET_PRE_DEBUG)-debug
+                OPTIONSPOSTFIX = $(OPTIONSPOSTFIX_PRE_DEBUG)-debug
+            endif
+            ifeq (${debug},FULL)
+                SUBTARGET = $(SUBTARGET_PRE_DEBUG)-fulldebug
+                OPTIONSPOSTFIX = $(OPTIONSPOSTFIX_PRE_DEBUG)-fulldebug
+            endif
+        endif
+    endif
+endif
+
 # Definitions
 
 ROOT =	lmp
-EXE =	$(ROOT)_$@
+EXE =	$(ROOT)_${SUBTARGET}
 SRC =	$(wildcard *.cpp)
 INC =	$(wildcard *.h)
 OBJ = 	$(SRC:.cpp=.o)
@@ -62,24 +96,24 @@ help:
 	@echo ''
 	@echo 'make machine             build LAMMPS where machine is one of:'
 	@echo ''
-	@files="`ls MAKE/Makefile.*`"; \
-	  for file in $$files; do head -1 $$file; done
+	@files="`ls MAKE/ -I Makefile.user* -I Makefile.user_default -I CMakeLists_Catalyst.txt -I Makefile.auto.options* -I deprecated`"; \
+	  for file in $$files; do head -1 MAKE/$$file; done
 	@echo ''
 
 # Build the code
 
 .DEFAULT:
 	@test -f MAKE/Makefile.$@
-	@if [ ! -d Obj_$@ ]; then mkdir Obj_$@; fi
+	@if [ ! -d Obj_${SUBTARGET} ]; then mkdir Obj_${SUBTARGET}; fi
 	@$(SHELL) Make.sh style
 	@$(SHELL) Make.sh models
-	@cp MAKE/Makefile.$@ Obj_$@/Makefile
+	@cp MAKE/Makefile.$@ Obj_${SUBTARGET}/Makefile
 	@if [ ! -e Makefile.package ]; \
 	  then cp Makefile.package.empty Makefile.package; fi
 	@if [ ! -e Makefile.package.settings ]; \
 	  then cp Makefile.package.settings.empty Makefile.package.settings; fi
-	@cp Makefile.package Makefile.package.settings Obj_$@
-	@cd Obj_$@; \
+	@cp Makefile.package Makefile.package.settings Obj_${SUBTARGET}
+	@cd Obj_${SUBTARGET}; \
 	$(MAKE) $(MFLAGS) "OBJ = $(OBJ)" "INC = $(INC)" "SHFLAGS =" \
 	  "EXE = ../$(EXE)" ../$(EXE)
 
@@ -90,10 +124,10 @@ clean:
 	@echo 'make clean-machine       delete object files for one machine'
 
 clean-all:
-	rm -rf Obj_* *.a
+	rm -rf Obj_* *.a *.so MAKE/Makefile.auto.options* $(ROOT)_*
 
 clean-%:
-	rm -rf Obj_$(@:clean-%=%)
+	rm -rf Obj_$(@:clean-%=%)$(OPTIONSPOSTFIX) MAKE/Makefile.$(@:clean-%=%).options$(OPTIONSPOSTFIX) $(ROOT)_$(@:clean-%=%)$(OPTIONSPOSTFIX) lib$(ROOT)_$(@:clean-%=%)$(OPTIONSPOSTFIX).a lib$(ROOT)_$(@:clean-%=%)$(OPTIONSPOSTFIX).so
 
 purge: Purge.list
 	@echo 'Purging obsolete and auto-generated source files'
@@ -121,15 +155,12 @@ stubs:
 
 makelib:
 	@$(SHELL) Make.sh style
-	@$(SHELL) Make.sh Makefile.lib
 
 makeshlib:
 	@$(SHELL) Make.sh style
-	@$(SHELL) Make.sh Makefile.shlib
 
 makelist:
 	@$(SHELL) Make.sh style
-	@$(SHELL) Make.sh Makefile.list
 
 # install LAMMPS shared lib and Python wrapper for Python usage
 

@@ -49,17 +49,16 @@
     the GNU General Public License.
 ------------------------------------------------------------------------- */
 
-#include "mpi.h"
-#include "math.h"
-#include "stdio.h"
-#include "stdlib.h"
-#include "string.h"
+#include <mpi.h>
+#include <cmath>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "limits.h"
 #include "atom.h"
 #include "style_atom.h"
 #include "atom_vec.h"
 #include "atom_vec_ellipsoid.h"
-#include "superquadric_flag.h"
 #include "comm.h"
 #include "neighbor.h"
 #include "force.h"
@@ -128,13 +127,16 @@ Atom::Atom(LAMMPS *lmp) : Pointers(lmp)
   e = de = NULL;
   cv = NULL;
   vest = NULL;
+
 //Superquadric bonus-----------------------------------
-  shape = NULL; //half axes and roundness parameters
+  shape = NULL; //half axes and blockiness parameters
   inertia = NULL; //components Ix, Iy, Iz
-  roundness = NULL;
+  blockiness = NULL;
   volume = NULL; area = NULL;
   quaternion = NULL; //quaternion of current orientation and angular moment
 //------------------------------------------------------
+
+  shapetype = 0;
 
   maxspecial = 1;
   nspecial = NULL;
@@ -179,17 +181,7 @@ Atom::Atom(LAMMPS *lmp) : Pointers(lmp)
   rho_flag = e_flag = cv_flag = vest_flag = 0;
   p_flag = 0; 
 
-  // Used for MCA
-  mca_flag = 0;
-  packing = 1;
-  coord_num = 6;
-  mca_radius = 1.;
-  contact_area = 1.;
-  mca_inertia = mean_stress = mean_stress_prev = NULL;
-  equiv_stress = equiv_stress_prev = equiv_strain = NULL;
-  theta = theta_prev = NULL;
-  cont_distance = NULL;
-  bond_index = NULL;
+  shapetype_flag = 0;
 
   // ntype-length arrays
 
@@ -220,10 +212,28 @@ Atom::Atom(LAMMPS *lmp) : Pointers(lmp)
   atom_style = NULL;
   avec = NULL;
 
+  // USER-SMD
+  contact_radius = NULL;
+  smd_data_9 = NULL;
+  smd_stress = NULL;
+  eff_plastic_strain = NULL;
+  eff_plastic_strain_rate = NULL;
+  damage = NULL;
+
   datamask = ALL_MASK;
   datamask_ext = ALL_MASK;
 
   radvary_flag = 0;
+
+  // USER-SMD
+  smd_flag = 0;
+  contact_radius_flag = 0;
+  smd_data_9_flag = 0;
+  smd_stress_flag = 0;
+  x0_flag = 0;
+  eff_plastic_strain_flag = 0;
+  eff_plastic_strain_rate_flag = 0;
+  damage_flag = 0;
 
   properties = new Properties(lmp); 
 }
@@ -307,26 +317,16 @@ Atom::~Atom()
   memory->destroy(improper_atom3);
   memory->destroy(improper_atom4);
 
-  // Used for MCA
-  memory->destroy(mca_inertia);
-  memory->destroy(theta);
-  memory->destroy(theta_prev);
-  memory->destroy(mean_stress);
-  memory->destroy(mean_stress_prev);
-  memory->destroy(equiv_stress);
-  memory->destroy(equiv_stress_prev);
-  memory->destroy(equiv_strain);
-  memory->destroy(cont_distance);
-  memory->destroy(bond_index);
-
 //Superquadric bonus-----------------------------------
-  memory->destroy(shape); //half axes and roundness parameters
+  memory->destroy(shape); //half axes and blockiness parameters
   memory->destroy(inertia); //components Ix, Iy, Iz
-  memory->destroy(roundness);
+  memory->destroy(blockiness);
   memory->destroy(volume);
   memory->destroy(area);
   memory->destroy(quaternion); //quaternion of current orientation
 //------------------------------------------------------
+
+  memory->destroy(shapetype);
 
   // delete custom atom arrays
 
@@ -394,6 +394,8 @@ void Atom::create_avec(const char *style, int narg, char **arg, char *suffix)
   density_flag = 0; 
   rho_flag = p_flag = 0; 
   vfrac_flag = spin_flag = eradius_flag = ervel_flag = erforce_flag = 0;
+
+  shapetype_flag = 0;
 
   // create instance of AtomVec
   // use grow to initialize atom-based arrays to length 1
@@ -872,7 +874,7 @@ void Atom::data_bonus(int n, char *buf, AtomVec *avec_bonus)
 
 void Atom::data_bodies(int n, char *buf, AtomVecBody *avec_body)
 {
-  int j,m,tagdata,ninteger,ndouble;
+  int j,tagdata,ninteger,ndouble;
 
   char **ivalues = new char*[10*MAXBODY];
   char **dvalues = new char*[10*MAXBODY];
@@ -1432,7 +1434,10 @@ void Atom::setup_sort_bins()
       binsize = pow(1.0*CUDA_CHUNK/natoms*area,1.0/2.0);
     }
   }
-  if (binsize == 0.0) error->all(FLERR,"Atom sorting has bin size = 0.0");
+  if (binsize == 0.0 && !lmp->wb)
+    error->all(FLERR,"Atom sorting has bin size = 0.0");
+  else if (binsize == 0.0)
+    error->all(FLERR,"No particles in the simulation. Please add particle templates");
 
   double bininv = 1.0/binsize;
 
@@ -1579,6 +1584,37 @@ void Atom::update_callback(int ifix)
 }
 
 /* ----------------------------------------------------------------------
+   look if has callback for this fix ID
+------------------------------------------------------------------------- */
+
+bool Atom::has_callback(const char *id, int flag)
+{
+  int ifix;
+  for (ifix = 0; ifix < modify->nfix; ifix++)
+    if (strcmp(id,modify->fix[ifix]->id) == 0) break;
+
+  // compact the list of callbacks
+
+  if (flag == 0) {
+    int match;
+    for (match = 0; match < nextra_grow; match++)
+      if (extra_grow[match] == ifix) return true;
+
+  } else if (flag == 1) {
+    int match;
+    for (match = 0; match < nextra_restart; match++)
+      if (extra_restart[match] == ifix) return true;
+
+  } else if (flag == 2) {
+    int match;
+    for (match = 0; match < nextra_border; match++)
+      if (extra_border[match] == ifix) return true;
+  }
+
+  return false;
+}
+
+/* ----------------------------------------------------------------------
    find custom per-atom vector with name
    return index if found, and flag = 0/1 for int/double
    return -1 if not found
@@ -1693,7 +1729,7 @@ void *Atom::extract(const char *name,int &len)
   if (strcmp(name,"area") == 0) return (void *) area;
 
   len = 2;
-  if (strcmp(name,"roundness") == 0) return (void *) roundness; 
+  if (strcmp(name,"blockiness") == 0) return (void *) blockiness; 
 
   len = 3; 
   if (strcmp(name,"x") == 0) return (void *) x;
@@ -1709,6 +1745,13 @@ void *Atom::extract(const char *name,int &len)
   if (strcmp(name,"rmass") == 0) return (void *) rmass;
   if (strcmp(name,"vfrac") == 0) return (void *) vfrac;
   if (strcmp(name,"s0") == 0) return (void *) s0;
+
+#ifdef SUPERQUADRIC_ACTIVE_FLAG
+  if (strcmp(name,"shape") == 0 && shape!=NULL) return (void *) shape;
+
+  len = 4;
+  if (strcmp(name,"quaternion") == 0 && quaternion!=NULL) return (void *) quaternion;
+#endif
 
   len = -1; 
   return NULL;

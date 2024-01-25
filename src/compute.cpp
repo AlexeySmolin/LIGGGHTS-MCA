@@ -44,9 +44,9 @@
 ------------------------------------------------------------------------- */
 
 #include "lmptype.h"
-#include "mpi.h"
-#include "stdlib.h"
-#include "string.h"
+#include <mpi.h>
+#include <stdlib.h>
+#include <string.h>
 #include "ctype.h"
 #include "compute.h"
 #include "atom.h"
@@ -65,7 +65,9 @@ using namespace LAMMPS_NS;
 
 /* ---------------------------------------------------------------------- */
 
-Compute::Compute(LAMMPS *lmp, int narg, char **arg) : Pointers(lmp)
+Compute::Compute(LAMMPS *lmp, int &iarg, int narg, char ** arg) :
+    Pointers(lmp),
+    update_on_run_end_(false)
 {
   if (narg < 3) error->all(FLERR,"Illegal compute command");
 
@@ -89,6 +91,22 @@ Compute::Compute(LAMMPS *lmp, int narg, char **arg) : Pointers(lmp)
   style = new char[n];
   strcpy(style,arg[2]);
 
+  iarg = 3;
+
+  if (narg >= 4)
+  {
+    if (strcmp(arg[iarg], "update_on_run_end") == 0)
+    {
+        if (narg < 5)
+            error->all(FLERR, "Not enough arguments for keyword 'update_on_run_end'");
+        if (strcmp(arg[iarg+1], "yes") == 0)
+            update_on_run_end_ = true;
+        else if (strcmp(arg[iarg+1], "no"))
+            error->all(FLERR, "Value for keyword 'update_on_run_end' must be either 'yes' or 'no'");
+        iarg += 2;
+    }
+  }
+
   // set child class defaults
 
   scalar_flag = vector_flag = array_flag = 0;
@@ -109,6 +127,7 @@ Compute::Compute(LAMMPS *lmp, int narg, char **arg) : Pointers(lmp)
 
   extra_dof = domain->dimension;
   dynamic = 0;
+  dynamic_group_allow = 1;
 
   // setup list of timesteps
 
@@ -138,6 +157,8 @@ Compute::~Compute()
 void Compute::modify_params(int narg, char **arg)
 {
   if (narg == 0) error->all(FLERR,"Illegal compute_modify command");
+  if (!lmp->wb && strcmp(id, "thermo_temp") == 0 && comm->me == 0)
+    error->warning(FLERR,"Changing thermo_temp compute object. This object is deprecated and will be removed in the future.");
 
   int iarg = 0;
   while (iarg < narg) {

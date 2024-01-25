@@ -35,10 +35,12 @@
 
     Christoph Kloss (DCS Computing GmbH, Linz)
     Christoph Kloss (JKU Linz)
-    Philippe Richard Berger (JKU Linz)
+    Richard Berger (JKU Linz)
+    Arno Mayrhofer (CFDEMresearch GmbH, Linz)
 
     Copyright 2012-     DCS Computing GmbH, Linz
     Copyright 2009-2012 JKU Linz
+    Copyright 2016-     CFDEMresearch GmbH, Linz
 ------------------------------------------------------------------------- */
 
 #ifdef FIX_CLASS
@@ -61,6 +63,9 @@ namespace LCM = LIGGGHTS::ContactModels;
 namespace LAMMPS_NS {
 
 class FixWallGran : public Fix, public LIGGGHTS::IContactHistorySetup {
+
+ friend class LIGGGHTS::Walls::IGranularWall;
+
  public:
   FixWallGran(class LAMMPS *, int, char **);
   ~FixWallGran();
@@ -81,95 +86,129 @@ class FixWallGran : public Fix, public LIGGGHTS::IContactHistorySetup {
 
   /* PUBLIC ACCESS FUNCTIONS */
 
-  void setSkinDistance(double newSkinDistance)
-  { skinDistance_ = newSkinDistance; }
+  virtual void createMulticontactData();
 
   void setDnum(int newDnum)
   { dnum_ = newDnum; }
 
-  inline int store_force()
+  inline int store_force() const
   { return store_force_; }
 
-  inline int iarg()
+  inline FixPropertyAtom* fix_wallforce() const
+  { return fix_wallforce_; }
+
+  inline int iarg() const
   { return iarg_; }
 
-  int add_history_value(std::string name, std::string newtonflag) {
-      return dnum_++;
-  }
+  int add_history_value(std::string name, std::string newtonflag)
+  {  return dnum_++; }
 
-  inline int dnum()
+  int get_history_offset(const std::string hname)
+  {  return impl->get_history_offset(hname);}
+
+  bool contact_match(const std::string mtype, const std::string model)
+  {  return impl->contact_match(mtype, model); }
+
+  inline int dnum() const
   { return dnum_; }
 
-  inline int n_meshes()
+  inline int n_meshes() const
   { return n_FixMesh_; }
 
-  inline class FixMeshSurface ** mesh_list()
+  inline class FixMeshSurface ** mesh_list() const
   { return FixMesh_list_; }
 
-  inline int atom_type_wall()
+  inline int atom_type_wall() const
   { return atom_type_wall_; }
 
-  inline bool is_mesh_wall()
+  inline bool is_mesh_wall() const
   { return 1 == meshwall_; }
 
-  inline bool store_force_contact()
+  inline int computeflag() const
+  { return computeflag_; }
+
+  inline int shearupdate() const
+  { return shearupdate_; }
+
+  inline int heattransfer_flag() const
+  { return heattransfer_flag_; }
+
+  inline int stress_flag() const
+  { return stress_flag_; }
+
+  inline bool store_force_contact() const
   { return store_force_contact_; }
 
-  class PrimitiveWall* primitiveWall();
+  inline int store_force_contact_every() const
+  { return store_force_contact_every_; }
 
-  int n_contacts_all();
-  int n_contacts_all(int);
-  int n_contacts_local();
-  int n_contacts_local(int);
-  int is_moving();
+  inline bool store_force_contact_stress() const
+  { return store_force_contact_stress_; }
 
-  void register_compute_wall_local(ComputePairGranLocal *,int&);
-  void unregister_compute_wall_local(ComputePairGranLocal *ptr);
+  inline ComputePairGranLocal * compute_wall_gran_local() const
+  { return cwl_; }
 
-  ComputePairGranLocal * compute_pair_gran_local() {
-    return cwl_;
-  }
+  inline int addflag() const
+  { return addflag_; }
 
-  int addflag() const {
-    return addflag_;
-  }
+  inline int body(int i) const
+  { return body_[i]; }
 
-  int body(int i) {
-    return body_[i];
-  }
+  inline double masstotal(int i) const
+  { return masstotal_[i]; }
 
-  double masstotal(int i) {
-    return masstotal_[i];
-  }
+  inline class FixRigid *fix_rigid() const
+  { return fix_rigid_; }
 
-  class FixRigid *fix_rigid() {
-    return fix_rigid_;
-  }
-
-  void add_contactforce_wall(int ip, const LCM::ForceData & i_forces,int idTri)
+  inline void add_contactforce_wall(int ip, const LCM::ForceData & i_forces,int idTri)
   {
     // add to fix wallforce contact
     // adds 0 as ID for primitive wall
     double forces_torques_i[6];
 
-    if(!fix_wallforce_contact_->has_partner(ip,idTri))
+    if(fix_wallforce_contact_->has_partner(ip,idTri) == -1)
     {
       vectorCopy3D(i_forces.delta_F,&(forces_torques_i[0]));
       vectorCopy3D(i_forces.delta_torque,&(forces_torques_i[3]));
       fix_wallforce_contact_->add_partner(ip,idTri,forces_torques_i);
+      
     }
   }
 
-  void cwl_add_wall_2(const LCM::SurfacesIntersectData & sidata, const LCM::ForceData & i_forces)
+  inline void add_contactforce_stress_wall(int ip, const LCM::ForceData & i_forces, const double *const delta, const double *const vwall, int idTri)
   {
-    const double fx = i_forces.delta_F[0];
-    const double fy = i_forces.delta_F[1];
-    const double fz = i_forces.delta_F[2];
-    const double tor1 = i_forces.delta_torque[0]*sidata.area_ratio;
-    const double tor2 = i_forces.delta_torque[1]*sidata.area_ratio;
-    const double tor3 = i_forces.delta_torque[2]*sidata.area_ratio;
-    cwl_->add_wall_2(sidata.i,fx,fy,fz,tor1,tor2,tor3,sidata.contact_history,sidata.rsq);
+    // add to fix wallforce contact
+    // adds 0 as ID for primitive wall
+    double forces_delta_i[9];
+
+    if(fix_wallforce_contact_stress_->has_partner(ip,idTri) == -1)
+    {
+      vectorCopy3D(i_forces.delta_F,&(forces_delta_i[0]));
+      vectorCopy3D(delta,&(forces_delta_i[3]));
+      vectorCopy3D(vwall,&(forces_delta_i[6]));
+      fix_wallforce_contact_stress_->add_partner(ip,idTri,forces_delta_i);
+    }
   }
+
+  bool store_sum_normal_force() const
+  { return fix_sum_normal_force_ != NULL; }
+
+  double * get_sum_normal_force_ptr(const int i)
+  { return &(fix_sum_normal_force_->vector_atom[i]); }
+
+  class PrimitiveWall* primitiveWall();
+
+  int n_contacts_all(int &nIntersect);
+  int n_contacts_all(int contact_groupbit,int &nIntersect);
+  int n_contacts_local(int &nIntersect);
+  int n_contacts_local(int contact_groupbit,int &nIntersect);
+  int is_moving();
+
+  void register_compute_wall_local(ComputePairGranLocal *,int&);
+  void unregister_compute_wall_local(ComputePairGranLocal *ptr);
+
+  void wall_temperature_unique(bool &has_temp,bool &temp_unique, double &temperature_unique);
+  void addHeatFlux(class TriMesh *mesh,int i,const double ri,double rsq,double area_ratio);
 
  protected:
 
@@ -189,7 +228,7 @@ class FixWallGran : public Fix, public LIGGGHTS::IContactHistorySetup {
   double **x_, **f_, *radius_, *rmass_, **wallforce_, r0_;
 
 #ifdef SUPERQUADRIC_ACTIVE_FLAG
-  double **quat_, **shape_, **roundness_;
+  double **quat_, **shape_, **blockiness_;
 #endif
 
   void set_r0(double _r0)
@@ -210,7 +249,6 @@ class FixWallGran : public Fix, public LIGGGHTS::IContactHistorySetup {
   // virtual functions that allow implementation of the
   // actual physics in the derived classes
   virtual void compute_force(LCM::SurfacesIntersectData & sidata, double *vwall);
-  void addHeatFlux(class TriMesh *mesh,int i,double rsq,double area_ratio);
 
   // sets flag that neigh list shall be built
   virtual void pre_neighbor();
@@ -228,6 +266,7 @@ class FixWallGran : public Fix, public LIGGGHTS::IContactHistorySetup {
   // heat transfer
   class FixPropertyAtom *fppa_T;
   class FixPropertyAtom *fppa_hf;
+  class FixPropertyAtom *fppa_htcw; 
 
   double Temp_wall;
   double fixed_contact_area_;
@@ -240,7 +279,15 @@ class FixWallGran : public Fix, public LIGGGHTS::IContactHistorySetup {
 
   // per-contact force storage
   bool store_force_contact_;
+  int store_force_contact_every_;
   class FixContactPropertyAtomWall *fix_wallforce_contact_;
+
+  // for stress computation
+  bool store_force_contact_stress_;
+  class FixContactPropertyAtomWall *fix_wallforce_contact_stress_;
+
+  // storage for per contact data (for multicontact models)
+  class FixContactPropertyAtomWall *fix_store_multicontact_data_;
 
   int nlevels_respa_;
 
@@ -250,7 +297,7 @@ class FixWallGran : public Fix, public LIGGGHTS::IContactHistorySetup {
 
   // distance in order to calculate interaction with
   // rough wall
-  double skinDistance_;
+  //double skinDistance_;
 
   // number of values for contact history
   int dnum_;
@@ -275,12 +322,13 @@ class FixWallGran : public Fix, public LIGGGHTS::IContactHistorySetup {
   bool store_force_;
   class FixPropertyAtom *fix_wallforce_;
 
+  // storage for simplistic pressure computation via normal forces
+  class FixPropertyAtom *fix_sum_normal_force_;
+
   // max neigh cutoff - as in Neighbor
   double cutneighmax_;
 
   virtual void post_force_wall(int vflag);
-
-  inline void post_force_eval_contact(LCM::SurfacesIntersectData & sidata, double * v_wall, int iMesh = -1, FixMeshSurface *fix_mesh = 0, TriMesh *mesh = 0, int iTri = 0);
 };
 
 }

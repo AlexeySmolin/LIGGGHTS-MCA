@@ -52,7 +52,7 @@ using namespace LAMMPS_NS;
   CustomValueTracker::CustomValueTracker(LAMMPS *lmp,AbstractMesh *_ownerMesh)
    : Pointers(lmp),
      ownerMesh_(_ownerMesh),
-     capacityElement_(0)
+     capacityElement_(GROW_CONTAINER()) 
   {
   }
 
@@ -65,24 +65,6 @@ using namespace LAMMPS_NS;
 
   CustomValueTracker::~CustomValueTracker()
   {
-  }
-
-  /* ----------------------------------------------------------------------
-   memory management
-  ------------------------------------------------------------------------- */
-
-  int CustomValueTracker::getCapacity()
-  {
-    return capacityElement_;
-  }
-
-  /* ----------------------------------------------------------------------
-   check if all containers have same length
-  ------------------------------------------------------------------------- */
-
-  int CustomValueTracker::nElementProperties()
-  {
-    return elementProperties_.size();
   }
 
   /* ----------------------------------------------------------------------
@@ -137,26 +119,40 @@ using namespace LAMMPS_NS;
   }
 
   /* ----------------------------------------------------------------------
-   calc statistics (averages, variances)
+   calc statistics (averages, mean square)
   ------------------------------------------------------------------------- */
 
-  bool CustomValueTracker::calcStatistics(double weighting_factor)
+  bool CustomValueTracker::calcStatistics()
   {
-      return elementProperties_.calcStatistics(weighting_factor);
+      return elementProperties_.calcStatistics();
+  }
+
+  void CustomValueTracker::setWeightingFactor(double _weighting_factor)
+  {
+      for (int i=0; i < elementProperties_.size(); ++i)
+      {
+          ContainerBase* iElem = elementProperties_.getBasePointerByIndex(i);
+          if (iElem->getStatLevel() < 2)
+              iElem->setWeightingFactor(_weighting_factor);
+          else
+              //TODO: hard coded different weighting factor for higher statistics level
+              // compare with CustomValueTracker::addElementProperty
+              iElem->setWeightingFactor(5*_weighting_factor);
+      }
   }
 
   /* ----------------------------------------------------------------------
    rotate all properties, applies to vector and multivector only
   ------------------------------------------------------------------------- */
 
-  void CustomValueTracker::rotate(double *totalQ,double *dQ)
+  void CustomValueTracker::rotate(const double * const totalQ, const double * const dQ)
   {
       
       elementProperties_.rotate(dQ);
       globalProperties_.rotate(totalQ);
   }
 
-  void CustomValueTracker::rotate(double *dQ)
+  void CustomValueTracker::rotate(const double * const dQ)
   {
       
       elementProperties_.rotate(dQ);
@@ -178,14 +174,14 @@ using namespace LAMMPS_NS;
    move all properties
   ------------------------------------------------------------------------- */
 
-  void CustomValueTracker::move(double *vecTotal, double *vecIncremental)
+  void CustomValueTracker::move(const double * const vecTotal, const double * const vecIncremental)
   {
       
       elementProperties_.move(vecIncremental);
       globalProperties_.move(vecTotal);
   }
 
-  void CustomValueTracker::move(double *vecIncremental)
+  void CustomValueTracker::move(const double * const vecIncremental)
   {
       
       elementProperties_.move(vecIncremental);

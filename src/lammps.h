@@ -46,7 +46,8 @@
 #ifndef LMP_LAMMPS_H
 #define LMP_LAMMPS_H
 
-#include "stdio.h"
+#include <stdio.h>
+#include "mpi.h"
 
 namespace LAMMPS_NS {
 
@@ -75,6 +76,8 @@ class LAMMPS {
   FILE *logfile;                 // logfile
   FILE *thermofile;              
 
+  double initclock;              // wall clock at instantiation
+
   char *suffix;                  // suffix to add to input script style names
   int suffix_enable;             // 1 if suffix enabled, 0 if disabled
   int cite_enable;               // 1 if generating log.cite, 0 if disabled
@@ -83,6 +86,7 @@ class LAMMPS {
   class CiteMe *citeme;          // citation info
 
   bool wedgeflag;
+  bool wb;
 
   LAMMPS(int, char **, MPI_Comm);
   ~LAMMPS();
@@ -94,6 +98,8 @@ class LAMMPS {
  private:
   void help();
   void print_style(const char *, int &);
+
+  class RegisterGranularStyles *regGranStyles;
 };
 
 }

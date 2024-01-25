@@ -51,19 +51,19 @@
 
   /* ---------------------------------------------------------------------- */
 
-  inline double TriMesh::resolveTriSphereContact(int iPart,int nTri, double rSphere, double *cSphere, double *delta)
+  inline double TriMesh::resolveTriSphereContact(int iPart,int nTri, double rSphere, double *cSphere, double *delta,int &barysign)
   {
     // this is the overlap algorithm, neighbor list build is
     // coded in resolveTriSphereNeighbuild
 
     double bary[3];
-    return resolveTriSphereContactBary(iPart,nTri,rSphere,cSphere,delta,bary);
+    return resolveTriSphereContactBary(iPart,nTri,rSphere,cSphere,delta,bary,barysign);
   }
 
   /* ---------------------------------------------------------------------- */
 
   inline double TriMesh::resolveTriSphereContactBary(int iPart, int nTri, double rSphere,
-                                   double *cSphere, double *delta, double *bary)
+                        double *cSphere, double *delta, double *bary,int &barySign,bool skip_inactive)
   {
     double **n = node_(nTri);
     int obtuseAngleIndex = SurfaceMeshBase::obtuseAngleIndex(nTri);
@@ -77,29 +77,29 @@
     MathExtraLiggghts::calcBaryTriCoords(node0ToSphereCenter,edgeVec(nTri),edgeLen(nTri),bary);
 
     double invlen = 1./(2.*rBound_(nTri));
-    int barySign = (bary[0] > -precision_trimesh()*invlen) + 2*(bary[1] > -precision_trimesh()*invlen) + 4*(bary[2] > -precision_trimesh()*invlen);
+    barySign = (bary[0] > -precision_trimesh()*invlen) + 2*(bary[1] > -precision_trimesh()*invlen) + 4*(bary[2] > -precision_trimesh()*invlen);
 
     double d(0.);
 
     switch(barySign)
     {
     case 1: 
-      d = resolveCornerContactBary(nTri,0,obtuseAngleIndex == 0,cSphere,delta,bary);
+      d = resolveCornerContactBary(nTri,0,obtuseAngleIndex == 0,cSphere,delta,bary,skip_inactive);
       break;
     case 2: 
-      d = resolveCornerContactBary(nTri,1,obtuseAngleIndex == 1,cSphere,delta,bary);
+      d = resolveCornerContactBary(nTri,1,obtuseAngleIndex == 1,cSphere,delta,bary,skip_inactive);
       break;
     case 3: 
-      d = resolveEdgeContactBary(nTri,0,cSphere,delta,bary);
+      d = resolveEdgeContactBary(nTri,0,cSphere,delta,bary,skip_inactive);
       break;
     case 4: 
-      d = resolveCornerContactBary(nTri,2,obtuseAngleIndex == 2,cSphere,delta,bary);
+      d = resolveCornerContactBary(nTri,2,obtuseAngleIndex == 2,cSphere,delta,bary,skip_inactive);
       break;
     case 5: 
-      d = resolveEdgeContactBary(nTri,2,cSphere,delta,bary);
+      d = resolveEdgeContactBary(nTri,2,cSphere,delta,bary,skip_inactive);
       break;
     case 6: 
-      d = resolveEdgeContactBary(nTri,1,cSphere,delta,bary);
+      d = resolveEdgeContactBary(nTri,1,cSphere,delta,bary,skip_inactive);
       break;
     case 7: // face contact - all three barycentric coordinates are > 0
       d = resolveFaceContactBary(nTri,cSphere,node0ToSphereCenter,delta);
@@ -117,7 +117,7 @@
 
   /* ---------------------------------------------------------------------- */
 
-  inline double TriMesh::resolveEdgeContactBary(int iTri, int iEdge, double *p, double *delta, double *bary)
+  inline double TriMesh::resolveEdgeContactBary(int iTri, int iEdge, double *p, double *delta, double *bary,bool skip_inactive)
   {
       int ip = (iEdge+1)%3, ipp = (iEdge+2)%3;
       double nodeToP[3], d(1.);
@@ -129,14 +129,14 @@
 
       if(distFromNode < -SMALL_TRIMESH){
         
-        if(!cornerActive(iTri)[iEdge])
+        if(skip_inactive && !cornerActive(iTri)[iEdge])
             return LARGE_TRIMESH;
         d = calcDist(p,n[iEdge],delta);
         bary[iEdge] = 1.; bary[ip] = 0.; bary[ipp] = 0.;
       }
       else if(distFromNode > edgeLen(iTri)[iEdge] + SMALL_TRIMESH){
         
-        if(!cornerActive(iTri)[ip])
+        if(skip_inactive && !cornerActive(iTri)[ip])
             return LARGE_TRIMESH;
         d = calcDist(p,n[ip],delta);
         bary[iEdge] = 0.; bary[ip] = 1.; bary[ipp] = 0.;
@@ -145,7 +145,7 @@
         
         double closestPoint[3];
 
-        if(!edgeActive(iTri)[iEdge])
+        if(skip_inactive && !edgeActive(iTri)[iEdge])
             return LARGE_TRIMESH;
 
         vectorAddMultiple3D(n[iEdge],distFromNode,edgeVec(iTri)[iEdge],closestPoint);
@@ -163,13 +163,14 @@
   /* ---------------------------------------------------------------------- */
 
   inline double TriMesh::resolveCornerContactBary(int iTri, int iNode, bool obtuse,
-                                                    double *p, double *delta, double *bary)
+                                                    double *p, double *delta, double *bary,bool skip_inactive)
   {
       int ip = (iNode+1)%3, ipp = (iNode+2)%3;
       //double d(1.);
       double *n = node_(iTri)[iNode];
 
-      if(obtuse){
+      if(obtuse)
+      {
         
         double **edge = edgeVec(iTri);
         double nodeToP[3], closestPoint[3];
@@ -178,10 +179,10 @@
 
         double distFromNode = vectorDot3D(nodeToP,edge[ipp]);
         if(distFromNode < SMALL_TRIMESH)
-          {
+        {
             if(distFromNode > -edgeLen(iTri)[ipp]){
               
-              if(!edgeActive(iTri)[ipp])
+              if(skip_inactive && !edgeActive(iTri)[ipp])
                 return LARGE_TRIMESH;
 
               vectorAddMultiple3D(n,distFromNode,edge[ipp],closestPoint);
@@ -193,23 +194,23 @@
               return calcDist(p,closestPoint,delta);
             } else{
               
-              if(!cornerActive(iTri)[ipp])
+              if(skip_inactive && !cornerActive(iTri)[ipp])
                 return LARGE_TRIMESH;
 
               bary[ipp] = 1.; bary[iNode] = bary[ip] = 0.;
               return calcDist(p,node_(iTri)[ipp],delta);
             }
-          }
+        }
 
         distFromNode = vectorDot3D(nodeToP,edge[iNode]);
         if(distFromNode > -SMALL_TRIMESH)
-          {
+        {
             if(distFromNode < edgeLen(iTri)[iNode]){
               
-              if(!edgeActive(iTri)[iNode])
+              if(skip_inactive && !edgeActive(iTri)[iNode])
                 return LARGE_TRIMESH;
 
-              vectorAddMultiple3D(n,distFromNode,edge[ipp],closestPoint);
+              vectorAddMultiple3D(n,distFromNode,edge[iNode],closestPoint);
 
               bary[ipp] = 0.;
               bary[iNode] = 1. - distFromNode/edgeLen(iTri)[iNode];
@@ -218,17 +219,16 @@
               return calcDist(p,closestPoint,delta);
             } else{
               
-              if(!cornerActive(iTri)[ip])
+              if(skip_inactive && !cornerActive(iTri)[ip])
                 return LARGE_TRIMESH;
 
               bary[ip] = 1.; bary[iNode] = bary[ipp] = 0.;
               return calcDist(p,node_(iTri)[ip],delta);
-
             }
-          }
+        }
       }
 
-      if(!cornerActive(iTri)[iNode])
+      if(skip_inactive && !cornerActive(iTri)[iNode])
           return LARGE_TRIMESH;
 
       bary[iNode] = 1.; bary[ip] = bary[ipp] = 0.;

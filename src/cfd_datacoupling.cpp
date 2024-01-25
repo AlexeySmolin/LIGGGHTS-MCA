@@ -39,9 +39,9 @@
     Copyright 2009-2012 JKU Linz
 ------------------------------------------------------------------------- */
 
-#include "math.h"
-#include "stdlib.h"
-#include "string.h"
+#include <cmath>
+#include <stdlib.h>
+#include <string.h>
 #include "atom.h"
 #include "modify.h"
 #include "memory.h"
@@ -324,14 +324,14 @@ void CfdDatacoupling::allocate_external(double**&, int, int, double)
 
 /* ---------------------------------------------------------------------- */
 
-void CfdDatacoupling::allocate_external(int**&, int, char *, int)
+void CfdDatacoupling::allocate_external(int**&, int, const char *, int)
 {
     error->all(FLERR,"CFD datacoupling setting used in LIGGGHTS is incompatible with setting in OF");
 }
 
 /* ---------------------------------------------------------------------- */
 
-void CfdDatacoupling::allocate_external(double**&, int, char*, double)
+void CfdDatacoupling::allocate_external(double**&, int, const char*, double)
 {
     error->all(FLERR,"CFD datacoupling setting used in LIGGGHTS is incompatible with setting in OF");
 }

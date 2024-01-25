@@ -98,10 +98,28 @@ class Atom : protected Pointers {
   double *cv;
 
 //Superquadric bonus-----------------------------------
-  double **shape, **roundness; //half axes and roundness parameters
+  double **shape, **blockiness; //half axes and blockiness parameters
   double **inertia, *volume, *area; //components Ix, Iy, Iz
   double **quaternion; //quaternion of current orientation
 //------------------------------------------------------
+
+  // USR-SMD
+  double *contact_radius;
+  double **smd_data_9;
+  double **smd_stress;
+  double *eff_plastic_strain;
+  double *eff_plastic_strain_rate;
+  double *damage;
+  int smd_flag;
+  int contact_radius_flag;
+  int smd_data_9_flag;
+  int smd_stress_flag;
+  int x0_flag;
+  int eff_plastic_strain_flag;
+  int eff_plastic_strain_rate_flag;
+  int damage_flag;
+
+  int *shapetype;
 
   int **nspecial;               // 0,1,2 = cummulative # of 1-2,1-3,1-4 neighs
   int **special;                // IDs of 1-2,1-3,1-4 neighs of each atom
@@ -175,6 +193,7 @@ class Atom : protected Pointers {
   int p_flag;  
   int n_bondhist; 
   int radvary_flag; 
+  int shapetype_flag; 
 
   // extra peratom info in restart file destined for fix & diag
 
@@ -251,6 +270,7 @@ class Atom : protected Pointers {
   void add_callback(int);
   void delete_callback(const char *, int);
   void update_callback(int);
+  bool has_callback(const char *, int);
 
   int find_custom(char *, int &);
   int add_custom(char *, int);

@@ -1,11 +1,11 @@
 #include <iso646.h>
-#if !defined(__MINGW32__)
+#if !defined(__MINGW32__) && !defined(_WINDOWS)
 #include "erf.h"
 #endif
 #include "direct.h"
-#include "math.h"
+#include <cmath>
 // LAMMPS uses usleep with 100 ms arguments, no microsecond precision needed
-#if !defined(__MINGW32__)
+#if !defined(__MINGW32__) && !defined(_WINDOWS)
 #include "sleep.h"
 #endif
 
@@ -24,9 +24,12 @@
 //  return pow((double)i,j);
 //}
 //#endif
+
+#if !defined(__MINGW32__)
 inline double sqrt(int i){
   return sqrt((double) i);
 }
+#endif
 
 inline double fabs(int i){
   return fabs((double) i);

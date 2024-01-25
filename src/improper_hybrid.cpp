@@ -43,8 +43,8 @@
     the GNU General Public License.
 ------------------------------------------------------------------------- */
 
-#include "math.h"
-#include "string.h"
+#include <cmath>
+#include <string.h>
 #include "ctype.h"
 #include "improper_hybrid.h"
 #include "atom.h"

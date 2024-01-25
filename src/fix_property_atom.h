@@ -81,7 +81,7 @@ class FixPropertyAtom : public Fix {
   void pre_set_arrays();
   virtual void set_arrays(int);
 
-  void set_all(double value);
+  void set_all(double value,bool ghost = true);
 
   void write_restart(FILE *);
   virtual void restart(char *);
@@ -100,6 +100,15 @@ class FixPropertyAtom : public Fix {
 
   virtual void mark_tracers(int ilo, int ihi) { UNUSED(ilo); UNUSED(ihi); }
 
+  inline void set_internal()
+  { internal = true; }
+
+  inline bool get_internal()
+  { return internal; }
+
+  inline int get_nvalues()
+  { return nvalues; }
+
  protected:
   void parse_args(int narg, char **arg);
 
@@ -109,11 +118,17 @@ class FixPropertyAtom : public Fix {
   int commGhost;        // 1 if communicated to ghost particles (via pack_comm/unpack_comm), 0 if not
   int commGhostRev;     // 1 if rev communicated from ghost particles (via pack_comm_rev/unpack_comm_rev), 0 if not
   int nvalues;
+  int nmaxGrown_;
   double *defaultvalues; // default values at particle creation
 
   // in case of initialization from property - name of property
   char *propertyname;
   double *property;
+
+  double extra_value;
+
+  // switch for auto-output
+  bool internal;
 }; //end class
 
 }

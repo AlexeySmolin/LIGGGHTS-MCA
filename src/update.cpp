@@ -43,8 +43,8 @@
     the GNU General Public License.
 ------------------------------------------------------------------------- */
 
-#include "string.h"
-#include "stdlib.h"
+#include <string.h>
+#include <stdlib.h>
 #include "update.h"
 #include "integrate.h"
 #include "min.h"
@@ -70,6 +70,8 @@ Update::Update(LAMMPS *lmp) : Pointers(lmp)
   char *str;
 
   ntimestep = 0;
+  ntimestep_reset_since_last_run = false;
+  timestep_set = false;
   atime = 0.0;
   atimestep = 0;
   first_update = 0;
@@ -102,6 +104,8 @@ Update::Update(LAMMPS *lmp) : Pointers(lmp)
 
   str = (char *) "cg";
   create_minimize(1,&str);
+
+  force_dt_reset_ = false;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -141,6 +145,8 @@ void Update::init()
   // only set first_update if a run or minimize is being performed
 
   first_update = 1;
+
+  ntimestep_reset_since_last_run = false;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -445,18 +451,22 @@ void Update::reset_timestep(int narg, char **arg)
 void Update::reset_timestep(bigint newstep)
 {
   
+  ntimestep_reset_since_last_run = true;
   bigint oldtimestep = ntimestep;
 
   ntimestep = newstep;
   if (ntimestep < 0) error->all(FLERR,"Timestep must be >= 0");
   if (ntimestep > MAXBIGINT) error->all(FLERR,"Too big a timestep");
 
+  atime += (ntimestep - atimestep) * dt;
+  if (atime < 0)
+      atime = 0;
   atimestep = ntimestep;
 
   output->reset_timestep(ntimestep);
 
   for (int i = 0; i < modify->nfix; i++) {
-    if (modify->fix[i]->time_depend)
+    if (modify->fix[i]->time_depend && !force_dt_reset_) 
       error->all(FLERR,
                  "Cannot reset timestep with a time-dependent fix defined");
     modify->fix[i]->reset_timestep(ntimestep,oldtimestep);

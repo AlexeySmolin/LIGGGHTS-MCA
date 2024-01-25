@@ -39,8 +39,8 @@
     Copyright 2009-2012 JKU Linz
 ------------------------------------------------------------------------- */
 
-#include "string.h"
-#include "stdlib.h"
+#include <string.h>
+#include <stdlib.h>
 #include "atom.h"
 #include "force.h"
 #include "update.h"
@@ -49,7 +49,7 @@
 #include "memory.h"
 #include "modify.h"
 #include "comm.h"
-#include "math.h"
+#include <cmath>
 #include "vector_liggghts.h"
 #include "mpi_liggghts.h"
 #include "fix_cfd_coupling_force_implicit.h"
@@ -73,7 +73,6 @@ FixCfdCouplingForceImplicit::FixCfdCouplingForceImplicit(LAMMPS *lmp, int narg, 
     fix_ex_(0),
     fix_KslExtra_(0)
 {
-    int iarg = 3;
 
     bool hasargs = true;
     while(iarg < narg && hasargs)
@@ -259,6 +258,7 @@ void FixCfdCouplingForceImplicit::post_force(int)
   double frc[3];
 
   vectorZeroize3D(dragforce_total);
+  vectorZeroize3D(hdtorque_total);
 
   // add dragforce to force vector
   for (int i = 0; i < nlocal; i++)

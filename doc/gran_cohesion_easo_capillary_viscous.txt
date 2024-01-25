@@ -6,13 +6,16 @@
 
 :line
 
-gran cohesion easo/capillary/viscous :h3
+gran cohesion easo/capillary/viscous model :h3
 
 [Syntax:]
 
 cohesion easo/capillary/viscous :pre
 
-
+zero or more keyword/value pairs may be appended to the end (after all models are specified) :l
+  {tangential_reduce} values = 'on' or 'off'
+    on = tangential model does not see normal force computed by this model
+    off = tangential model does see normal force computed by this model :pre
 
 [Description:]
 
@@ -97,7 +100,7 @@ for the surface liquid transport between particles. Such fixes are
 
 :line
 
-Intialization:
+Initialization:
 
 If you are using the this model model, you must define the following properties:
 fix id all property/global minSeparationDistanceRatio scalar value
@@ -113,10 +116,12 @@ fix id all property/global fluidViscosity scalar value
 fix id all property/global contactAngle peratomtype value_1 value_2 ...
     (value_i=value for contact angle of atom type i and fluid) :pre
 
-[Restrictions:]
-
-This model can ONLY be used as part of "pair gran"_pair_gran.html, not as part
-of a "fix wall/gran"_fix_wall_gran.html.
+The optional keyword {tangential_reduce} defines if the tangential force model should
+"see" the additional normal force excerted by this model. If it is 'off' (which is default)
+then the tangential force model will be able to transmit a larger amount of tangential force
+If {tangential_reduce} = 'on' then the tangential model will not take the normal force
+from this model into account, typically leading to a lower value of tangential force
+(via the Coulomb friction limit)
 
 [Output:]
 
@@ -133,6 +138,9 @@ Currently, there is a restriction that these properties can only be accessed
 after a "run 0"_run.html command.
 
 [Restrictions:]
+
+This model can ONLY be used as part of "pair gran"_pair_gran.html, not as part
+of a "fix wall/gran"_fix_wall_gran.html.
 
 The cohesion model is not available for "atom_style"_atom_style.html superquadric
 
@@ -153,3 +161,16 @@ The cohesion model is not available for "atom_style"_atom_style.html superquadri
 :link(Soulie)
 [(Soulie)] Soulie, Cherblanc, Youssoufi, Saix, Intl. J Numerical and Analytical Methods in Geomechanics, p213, 30 (2006)
 
+[Coarse-graining information:]
+
+Using "coarsegraining"_coarsegraining.html in
+combination with this command might lead to
+different dynamics or system state and thus to 
+inconsistancies.
+
+NOTE: "Coarsegraining"_coarsegraining.html may or 
+may not be available in LIGGGHTS(R)-PUBLIC.
+
+[Default:]
+
+{tangential_reduce} = 'off'

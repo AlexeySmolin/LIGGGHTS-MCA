@@ -54,8 +54,9 @@
 #include "region_neighbor_list.h"
 #include "mpi_liggghts.h"
 #include "comm.h"
-#include <cmath>
 #include "math_extra_liggghts.h"
+#include <cmath>
+#include <algorithm>
 
 #define EPSILON_CURVATURE 0.00001
 
@@ -81,9 +82,18 @@ class SurfaceMesh : public TrackingMesh<NUM_NODES>
         bool areCoplanarNeighs(int tag_i, int tag_j);
         bool isOnSurface(double *pos);
 
-        void move(double *vecTotal, double *vecIncremental);
-        void move(double *vecIncremental);
+        // returns true if surfaces share an edge
+        // called with local index
+        // iEdge, jEdge return indices of first shared edge
+        bool shareEdge(int i, int j, int &iEdge, int &jEdge);
+
+        void move(const double * const vecTotal, const double * const vecIncremental);
+        void move(const double * const vecIncremental);
         void scale(double factor);
+
+        using MultiNodeMesh<NUM_NODES>::rotate;
+        void rotate(const double * const totalQ, const double * const dQ, const double * const origin);
+        void rotate(const double * const dQ, const double * const origin);
 
         virtual int generateRandomOwnedGhost(double *pos) = 0;
         virtual int generateRandomOwnedGhostWithin(double *pos,double delta) = 0;
@@ -95,6 +105,8 @@ class SurfaceMesh : public TrackingMesh<NUM_NODES>
 
         int n_active_edges(int i);
         int n_active_corners(int i);
+
+        void extrudePlanarMesh(const double length, double * &extrusion_tri_nodes, int &extrusion_tri_count);
 
         // public inline access
 
@@ -114,6 +126,9 @@ class SurfaceMesh : public TrackingMesh<NUM_NODES>
         inline void edgeLen(int i,double *el)
         { vectorCopy3D(edgeLen_(i),el); }
 
+        inline double edgeLen(int i,int iEdge)
+        { return edgeLen_(i)[iEdge]; }
+
         inline void edgeVec(int i,int j,double *ev)
         { vectorCopy3D(edgeVec_(i)[j],ev); }
 
@@ -132,6 +147,9 @@ class SurfaceMesh : public TrackingMesh<NUM_NODES>
         inline bool edgeActive(int i,int j)
         { return (edgeActive_)(i)[j]; }
 
+        inline bool cornerActive(int i,int j)
+        { return (cornerActive_)(i)[j]; }
+
         static const int NO_OBTUSE_ANGLE = -1;
 
       protected:
@@ -143,12 +161,8 @@ class SurfaceMesh : public TrackingMesh<NUM_NODES>
         void qualityCheck();
 
         void buildNeighbours();
-        virtual void parallelCorrection();
-
-        // returns true if surfaces share an edge
-        // called with local index
-        // iEdge, jEdge return indices of first shared edge
-        bool shareEdge(int i, int j, int &iEdge, int &jEdge);
+        virtual void parallelCorrectionActiveInactive();
+        virtual void parallelCorrectionNeighs();
 
         bool edgeVecsColinear(double *v,double *w);
         bool coplanarNeighsOverlap(int iSrf,int iEdge,int jSrf,int jEdge);
@@ -161,6 +175,8 @@ class SurfaceMesh : public TrackingMesh<NUM_NODES>
         void checkNodeRecursive(int iSrf,double *nodeToCheck,int &nIdListVisited,
                           int *idListVisited,int &nIdListHasNode,int *idListHasNode,
                           double **edgeList,double **edgeEndPoint,bool &anyActiveEdge);
+
+        #include "surface_mesh_feature_remove.h"
 
         // (re) calc properties
         void calcSurfPropertiesOfNewElement();
@@ -179,9 +195,6 @@ class SurfaceMesh : public TrackingMesh<NUM_NODES>
         virtual bool isInElement(double *pos, int i) = 0;
 
         int randomOwnedGhostElement();
-
-        void rotate(double *totalQ, double *dQ,double *origin);
-        void rotate(double *dQ,double *origin);
 
         // inline access
         inline double&  area(int i)         {return (area_)(i);}
@@ -206,6 +219,8 @@ class SurfaceMesh : public TrackingMesh<NUM_NODES>
         int searchElementByAreaAcc(double area,int lo, int hi);
 
         void growSurface(int iSrf, double by = 1e-13);
+
+        void extrudeEdge(const int nElem, const int edge, const double * const extrudeVec, int &count, double * extrusion_tri_nodes);
 
         // mesh properties
         double curvature_;
@@ -241,11 +256,14 @@ class SurfaceMesh : public TrackingMesh<NUM_NODES>
 
         // for overlap check on element insertion
         
-        RegionNeighborList &neighList_;
+        RegionNeighborList<interpolate_no> &neighList_;
 };
 
 // *************************************
 #include "surface_mesh_I.h"
+
+#include "surface_mesh_feature_remove_I.h"
+
 // *************************************
 
 } /* LAMMPS_NS */

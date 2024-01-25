@@ -49,9 +49,10 @@
     the GNU General Public License.
 ------------------------------------------------------------------------- */
 
-#include "math.h"
-#include "stdio.h"
-#include "string.h"
+#include <cmath>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 #include "fix_nve_sphere.h"
 #include "atom.h"
 #include "atom_vec.h"

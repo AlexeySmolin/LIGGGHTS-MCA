@@ -39,9 +39,9 @@
     Copyright 2009-2012 JKU Linz
 ------------------------------------------------------------------------- */
 
-#include "math.h"
-#include "stdlib.h"
-#include "string.h"
+#include <cmath>
+#include <stdlib.h>
+#include <string.h>
 #include "atom.h"
 #include "atom_vec.h"
 #include "force.h"
@@ -66,6 +66,14 @@ FixPropertyGlobal::FixPropertyGlobal(LAMMPS *lmp, int narg, char **arg) :
 {
     //Check args
     if (narg < 6) error->all(FLERR,"Illegal fix property/global command, not enough arguments");
+
+    if(0 == strcmp(style,"custom_property/global"))
+    {
+        int len = strlen("property/global") + 1;
+        delete []style;
+        style = new char[len];
+        strcpy(style,"property/global");
+    }
 
     //Read args
     int n = strlen(arg[3]) + 1;
@@ -156,8 +164,18 @@ FixPropertyGlobal::FixPropertyGlobal(LAMMPS *lmp, int narg, char **arg) :
                 if(array[i][j] != array[j][i])
                     sflag = false;
 
-        if(!sflag)
-            error->fix_error(FLERR,this,"per-atomtype property matrix must be symmetric");
+        if(!lmp->wb)
+        {
+            if(!sflag)
+                error->fix_error(FLERR,this,"per-atomtype property matrix must be symmetric");
+        }
+        else
+        {
+            char errstr[512];
+            sprintf(errstr,"Property %s is required to be symmetric",variablename);
+            if(!sflag)
+                error->all(FLERR,errstr);
+        }
     }
 }
 
@@ -378,11 +396,11 @@ void FixPropertyGlobal::write()
     fprintf(file,"fix %s %s %s %s ",id,grpname,style,variablename);
 
     // datatype
-    char *datatyp;
-    if(0 == data_style) datatyp = (char*) "scalar";
-    if(1 == data_style) datatyp = (char*) "vector";
-    if(2 == data_style && is_symmetric) datatyp = (char*) "atomtypepair";
-    else if(2 == data_style) datatyp            = (char*) "matrix";
+    const char *datatyp;
+    if(0 == data_style) datatyp = "scalar";
+    if(1 == data_style) datatyp = "vector";
+    if(2 == data_style && is_symmetric) datatyp = "atomtypepair";
+    else if(2 == data_style) datatyp            = "matrix";
     fprintf(file,"%s ",datatyp);
 
     // size_array_cols if required

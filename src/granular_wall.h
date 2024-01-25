@@ -43,6 +43,7 @@
 
 #include "utils.h"
 #include "tri_mesh.h"
+#include "fix_mesh_surface.h"
 #include "contact_interface.h"
 
 namespace LAMMPS_NS {
@@ -53,13 +54,19 @@ namespace LIGGGHTS {
 using namespace LAMMPS_NS;
 
 namespace Walls {
+
   class IGranularWall {
   public:
     typedef FixWallGran ParentType;
     virtual ~IGranularWall();
-    virtual void settings(int nargs, char ** args) = 0;
+    virtual void settings(int nargs, char ** args, IContactHistorySetup *hsetup) = 0;
     virtual void init_granular() = 0;
-    virtual void compute_force(FixWallGran * fwg, ContactModels::SurfacesIntersectData & sidata, double * v_wall,class TriMesh *mesh = 0,int iTri = 0) = 0;
+
+    virtual bool checkSurfaceIntersect(ContactModels::SurfacesIntersectData & sidata) = 0;
+    virtual void compute_force(FixWallGran * wg, ContactModels::SurfacesIntersectData & sidata, bool intersectflag,double *vwall,
+                               class FixMeshSurface * fix_mesh = 0, int iMesh = 0,class TriMesh *mesh = 0,int iTri = 0)  = 0;
+    virtual int get_history_offset(std::string hname) = 0;
+    virtual bool contact_match(const std::string mtype, const std::string model) = 0;
   };
 
   class Factory : public Utils::AbstractFactory<IGranularWall> {

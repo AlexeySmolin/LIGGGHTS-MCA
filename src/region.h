@@ -84,6 +84,10 @@ class Region : protected Pointers {
 
   // called by other classes to check point versus region
 
+  inline int match(double *point) 
+  { return match(point[0],point[1],point[2]);}
+
+  void prematch();
   int match(double, double, double);
   int surface(double, double, double, double);
 
@@ -122,6 +126,7 @@ class Region : protected Pointers {
   virtual int surface_interior(double *, double) = 0;
   virtual int surface_exterior(double *, double) = 0;
   virtual void shape_update() {}
+  virtual void pretransform();
 
  protected:
   void add_contact(int, double *, double, double, double);
@@ -142,7 +147,7 @@ class Region : protected Pointers {
 
   void forward_transform(double &, double &, double &);
   void inverse_transform(double &, double &, double &);
-  void rotate(double &, double &, double &, double);
+  void rotate(double &, double &, double &, const double);
 };
 
 }

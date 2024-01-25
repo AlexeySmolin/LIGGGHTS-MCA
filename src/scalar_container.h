@@ -47,6 +47,8 @@
 #include "general_container.h"
 #include "memory.h"
 #include <limits>
+#include <cmath>
+#include <algorithm>
 
 namespace LAMMPS_NS
 {
@@ -125,8 +127,8 @@ namespace LAMMPS_NS
   {
           if(this->numElem_ == this->maxElem_)
           {
-                  grow<T>(this->arr_,this->maxElem_+GROW,1,1);
-                  this->maxElem_ += GROW;
+                  grow<T>(this->arr_,this->maxElem_+GROW_CONTAINER(),1,1);
+                  this->maxElem_ += GROW_CONTAINER();
           }
           this->arr_[this->numElem_][0][0] = elem;
           this->numElem_++;
@@ -202,7 +204,7 @@ namespace LAMMPS_NS
   {
       T maxim;
 
-      int nn = MathExtraLiggghts::min(to,this->size());
+      int nn = std::min(to,this->size());
 
       if(nn == 0)
         return  (std::numeric_limits<T>::min)();

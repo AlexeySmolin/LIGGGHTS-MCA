@@ -60,7 +60,7 @@ SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::SurfaceMesh(LAMMPS *lmp)
     
     minAngle_softLimit_(cos(0.5*M_PI/180.)),
     
-    minAngle_hardLimit_(0.999995),
+    minAngle_hardLimit_(0.9999995),
 
     // TODO should keep areaMeshSubdomain up-to-date more often for insertion faces
     areaMesh_     (*this->prop().template addGlobalProperty   < ScalarContainer<double> >                 ("areaMesh",     "comm_none","frame_trans_rot_invariant","restart_no",2)),
@@ -81,7 +81,7 @@ SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::SurfaceMesh(LAMMPS *lmp)
     hasNonCoplanarSharedNode_(*this->prop().template addElementProperty< VectorContainer<bool,NUM_NODES> >("hasNonCoplanarSharedNode","comm_exchange_borders","frame_invariant", "restart_no")),
     edgeActive_   (*this->prop().template addElementProperty< VectorContainer<bool,NUM_NODES> >           ("edgeActive",   "comm_exchange_borders","frame_invariant","restart_no")),
     cornerActive_ (*this->prop().template addElementProperty< VectorContainer<bool,NUM_NODES> >           ("cornerActive", "comm_exchange_borders","frame_invariant","restart_no")),
-    neighList_(*new RegionNeighborList(lmp))
+    neighList_(*new RegionNeighborList<interpolate_no>(lmp))
 {
     
     areaMesh_.add(0.);
@@ -313,7 +313,7 @@ void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::calcSurfPropertiesOfNewElement()
       calcObtuseAngleIndex(n,i,dot);
       if(-dot > minAngle_softLimit_)
         hasSmallAngleSoftLimit = true;
-      if(-dot > minAngle_hardLimit_)
+      if(-dot >= minAngle_hardLimit_)
         hasSmallAngleHardLimit = true;
     }
 
@@ -374,15 +374,60 @@ template<int NUM_NODES, int NUM_NEIGH_MAX>
 void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::calcSurfaceNorm(int nElem, double *surfNorm)
 {
     vectorCross3D(edgeVec(nElem)[0],edgeVec(nElem)[1],surfNorm);
+    
+    if(vectorMag3D(surfNorm) <1e-15)
+    {
+        
+        vectorCross3D(edgeVec(nElem)[1],edgeVec(nElem)[2],surfNorm);
+        
+        if(vectorMag3D(surfNorm) <1e-15)
+        {
+            vectorCross3D(edgeVec(nElem)[2],edgeVec(nElem)[0],surfNorm);
+            
+            if(vectorMag3D(surfNorm) <1e-15)
+            {
+                double tmpvec[] = {1.1233,2.123231,-3.3343434};
+                vectorCross3D(edgeVec(nElem)[0],tmpvec,surfNorm);
+                
+                if(vectorMag3D(surfNorm) <1e-15)
+                {
+                    vectorCross3D(edgeVec(nElem)[1],tmpvec,surfNorm);
+                    
+                    if(vectorMag3D(surfNorm) <1e-15)
+                    {
+                        double tmpvec2[] = {1.1233,-2.123231,3.3343434};
+                        vectorCross3D(edgeVec(nElem)[0],tmpvec2,surfNorm);
+                        
+                        if(vectorMag3D(surfNorm) <1e-15)
+                        {
+                            vectorCross3D(edgeVec(nElem)[1],tmpvec2,surfNorm);
+                            
+                        }
+                    }
+                }
+            }
+        }
+        
+    }
+
     vectorScalarDiv3D(surfNorm, vectorMag3D(surfNorm));
 }
 
 template<int NUM_NODES, int NUM_NEIGH_MAX>
 void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::calcEdgeNormals(int nElem, double **edgeNorm)
 {
-    for(int i=0;i<NUM_NODES;i++){
+    for(int i=0;i<NUM_NODES;i++)
+    {
       vectorCross3D(edgeVec(nElem)[i],surfaceNorm(nElem),edgeNorm[i]);
-      vectorScalarDiv3D(edgeNorm[i],vectorMag3D(edgeNorm[i]));
+
+      if(vectorMag3D(edgeNorm[i]) <1e-15)
+      {
+          int otherIndex = (i+1)%3;
+          vectorCopy3D(edgeVec(nElem)[otherIndex],edgeNorm[i]);
+          
+      }
+      else
+        vectorScalarDiv3D(edgeNorm[i],vectorMag3D(edgeNorm[i]));
     }
 }
 
@@ -411,6 +456,9 @@ void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::buildNeighbours()
     
     int nall = this->sizeLocal()+this->sizeGhost();
 
+    if (this->lmp->wb && this->comm->me == 0)
+        fprintf(this->screen,"\nBuilding mesh topology (mesh processing step 2/3) \n");
+
     bool t[NUM_NODES], f[NUM_NODES];
     int neighs[NUM_NEIGH_MAX];
 
@@ -438,13 +486,24 @@ void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::buildNeighbours()
                    this->domain->boxlo[2], this->domain->boxhi[2]);
 
     neighList_.clear();
+
+    double rBound_max = this->rBound_.max();
+    double binsize_factor = rBound_max ;
     
-    if(nall > 0 &&  neighList_.setBoundingBox(bb, this->rBound_.max() /*max bounding radius*/, true))
+    if(nall > 100000 && binsize_factor > cbrt(bb.getVolume())/(4*20.))
+    {
+        binsize_factor = cbrt(bb.getVolume())/(4*20.);
+    }
+
+    if(nall > 0 &&  neighList_.setBoundingBox(bb, binsize_factor, true, true))
     {
         std::vector<int> overlaps;
 
         for (int i = 0; i < nall; ++i)
         {
+            //useless since would need allreduce to work
+            //if (this->lmp->wb && this->comm->me == 0 && 0 == i % 100000)
+            //    fprintf(this->screen,"   successfully built for a chunk of 100000 mesh elements\n");
 
             overlaps.clear();
             neighList_.hasOverlapWith(this->center_(i), this->rBound_(i),overlaps);
@@ -467,8 +526,6 @@ void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::buildNeighbours()
     else if(nall > 0)
         this->error->one(FLERR,"Mesh error: bounding box for neigh topology not set sucessfully");
 
-    fflush(MultiNodeMesh<NUM_NODES>::elementExclusionList());
-
     int *idListVisited = new int[nall];
     int *idListHasNode = new int[nall];
     double **edgeList,**edgeEndPoint;
@@ -482,14 +539,21 @@ void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::buildNeighbours()
             handleCorner(i,iNode,idListVisited,idListHasNode,edgeList,edgeEndPoint);
     }
 
+    if(MultiNodeMesh<NUM_NODES>::minFeatureLength() > 0. && MultiNodeMesh<NUM_NODES>::elementExclusionList())
+        handleExclusion(idListVisited);
+
     delete []idListVisited;
     delete []idListHasNode;
     this->memory->destroy(edgeList);
     this->memory->destroy(edgeEndPoint);
     
-    // correct edge and corner activation/deactivation in parallel
+    fflush(MultiNodeMesh<NUM_NODES>::elementExclusionList());
+
+    // correct edge and corner activation/deactivation and neighs in parallel
     
-    parallelCorrection();
+    parallelCorrectionActiveInactive();
+    parallelCorrectionNeighs();
+
 }
 
 /* ----------------------------------------------------------------------
@@ -499,7 +563,9 @@ void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::buildNeighbours()
 template<int NUM_NODES, int NUM_NEIGH_MAX>
 void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::qualityCheck()
 {
-    
+    if (this->lmp->wb && this->comm->me == 0)
+        fprintf(this->screen,"\nChecking quality of mesh (mesh processing step 3/3) \n");
+
     // iterate over surfaces
     
     int nlocal = this->sizeLocal();
@@ -514,12 +580,23 @@ void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::qualityCheck()
 
     neighList_.clear();
 
-    if(nall > 0 &&  neighList_.setBoundingBox(bb, this->rBound_.max() /*max bounding radius*/, true))
+    double rBound_max = this->rBound_.max();
+    double binsize_factor = rBound_max;
+
+    if(nall > 100000 && binsize_factor > cbrt(bb.getVolume())/(4*20.))
+    {
+        binsize_factor = cbrt(bb.getVolume())/(4*20.);
+    }
+
+    if(nall > 0 &&  neighList_.setBoundingBox(bb, binsize_factor, true,true))
     {
         std::vector<int> overlaps;
 
         for (int i = 0; i < nall; ++i)
         {
+            //useless since would need allreduce to work
+            //if (this->lmp->wb && this->comm->me == 0 && 0 == i % 100000)
+            //    fprintf(this->screen,"   successfully checked a chunk of 100000 mesh elements\n");
 
             overlaps.clear();
             neighList_.hasOverlapWith(this->center_(i), this->rBound_(i),overlaps);
@@ -535,7 +612,10 @@ void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::qualityCheck()
                     fprintf(this->screen,"ERROR: Mesh %s: elements %d and %d (lines %d and %d) are duplicate\n",
                             this->mesh_id_,TrackingMesh<NUM_NODES>::id(i),TrackingMesh<NUM_NODES>::id(j),
                             TrackingMesh<NUM_NODES>::lineNo(i),TrackingMesh<NUM_NODES>::lineNo(j));
-                    if(!this->removeDuplicates())
+
+                    if(MultiNodeMesh<NUM_NODES>::elementExclusionList())
+                        fprintf(MultiNodeMesh<NUM_NODES>::elementExclusionList(),"%d\n",TrackingMesh<NUM_NODES>::lineNo(j));
+                    else if(!this->removeDuplicates())
                         this->error->one(FLERR,"Fix mesh: Bad mesh, cannot continue. You can try re-running with 'heal auto_remove_duplicates'");
                     else
                         this->error->one(FLERR,"Fix mesh: Bad mesh, cannot continue. The mesh probably reached the precision you defined. "
@@ -548,6 +628,8 @@ void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::qualityCheck()
     }
     else if(nall > 0)
         this->error->one(FLERR,"Mesh error: bounding box for neigh topology not set sucessfully");
+
+    fflush(MultiNodeMesh<NUM_NODES>::elementExclusionList());
 
     for(int i = 0; i < nlocal; i++)
     {
@@ -589,7 +671,6 @@ void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::qualityCheck()
                 fprintf(this->screen,"Mesh %s: element %d (line %d) has a really unreasonably high aspect ratio (hard limit: smallest angle must be > %f °) \n",
                         this->mesh_id_,TrackingMesh<NUM_NODES>::id(i),TrackingMesh<NUM_NODES>::lineNo(i),this->angleHardLimit());
              nBelowAngle_hardLimit++;
-
         }
       }
     }
@@ -626,10 +707,10 @@ void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::qualityCheck()
 ------------------------------------------------------------------------- */
 
 template<int NUM_NODES, int NUM_NEIGH_MAX>
-void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::parallelCorrection()
+void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::parallelCorrectionActiveInactive()
 {
     
-    int iGlobal,iLocal;
+    int iGlobal;
     int mine = this->sizeLocal()+this->sizeGhost();
     int sizeGlob = this->sizeGlobal();
     int len = NUM_NODES*sizeGlob;
@@ -645,8 +726,8 @@ void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::parallelCorrection()
 
         for(int j = 0; j < NUM_NODES; j++)
         {
-            edgea[iGlobal*NUM_NODES+j] = edgeActive(i)[j]?1:0;
-            cornera[iGlobal*NUM_NODES+j] = cornerActive(i)[j]?1:0;
+            edgea[iGlobal*NUM_NODES+j] = (edgeActive(i)[j] && edgea[iGlobal*NUM_NODES+j] > 0) ? 1 : 0;
+            cornera[iGlobal*NUM_NODES+j] = (cornerActive(i)[j] && cornera[iGlobal*NUM_NODES+j] > 0) ? 1 : 0;
         }
     }
 
@@ -655,23 +736,27 @@ void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::parallelCorrection()
 
     for(int i = 0; i < sizeGlob; i++)
     {
-        iLocal = this->map(i);
-        if(iLocal >= 0)
+        const int nTri_j = this->map_size(i);
+        for (int j = 0; j < nTri_j; j++)
         {
-            for(int j = 0; j < NUM_NODES; j++)
+            const int iLocal = this->map(i, j);
+            if(iLocal >= 0)
             {
-                if(edgea[i*NUM_NODES+j] == 0)
-                    edgeActive(iLocal)[j] = false;
-                else if(edgea[i*NUM_NODES+j] == 1)
-                    edgeActive(iLocal)[j] = true;
-                else
-                    this->error->one(FLERR,"Illegal situation in SurfaceMesh::parallelCorrection()");
-                if(cornera[i*NUM_NODES+j] == 0)
-                    cornerActive(iLocal)[j] = false;
-                else if(cornera[i*NUM_NODES+j] == 1)
-                    cornerActive(iLocal)[j] = true;
-                else
-                    this->error->one(FLERR,"Illegal situation in SurfaceMesh::parallelCorrection()");
+                for(int j = 0; j < NUM_NODES; j++)
+                {
+                    if(edgea[i*NUM_NODES+j] == 0)
+                        edgeActive(iLocal)[j] = false;
+                    else if(edgea[i*NUM_NODES+j] == 1)
+                        edgeActive(iLocal)[j] = true;
+                    else
+                        this->error->one(FLERR,"Illegal situation in SurfaceMesh::parallelCorrection()");
+                    if(cornera[i*NUM_NODES+j] == 0)
+                        cornerActive(iLocal)[j] = false;
+                    else if(cornera[i*NUM_NODES+j] == 1)
+                        cornerActive(iLocal)[j] = true;
+                    else
+                        this->error->one(FLERR,"Illegal situation in SurfaceMesh::parallelCorrection()");
+                }
             }
         }
     }
@@ -681,14 +766,85 @@ void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::parallelCorrection()
 }
 
 /* ----------------------------------------------------------------------
+   correct neighs in parallel
+------------------------------------------------------------------------- */
+
+template<int NUM_NODES, int NUM_NEIGH_MAX>
+void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::parallelCorrectionNeighs()
+{
+    
+    int iGlobal;
+    int nlocal = this->sizeLocal();
+    int nghost = this->sizeGhost();
+    int sizeGlob = this->sizeGlobal();
+    int len1 = NUM_NEIGH_MAX*sizeGlob;
+    int len2 = sizeGlob;
+
+    int *neighs_found_by_owned_id = new int[len1];
+    vectorInitializeN(neighs_found_by_owned_id,len1,-1);
+
+    int *additionalNeigh_id = new int[len2];
+    vectorInitializeN(additionalNeigh_id,len2,-1);
+
+    for(int i = 0; i < nlocal; i++)
+    {
+        iGlobal = TrackingMesh<NUM_NODES>::id(i);
+
+        for(int iNeigh = 0; iNeigh< nNeighs_(i); iNeigh++)
+        {
+            neighs_found_by_owned_id[iGlobal*NUM_NEIGH_MAX+iNeigh] = neighFaces_(i)[iNeigh];
+        }
+    }
+
+    MPI_Max_Vector(neighs_found_by_owned_id,len1,this->world);
+
+    for(int i = nlocal; i < nlocal+nghost; i++)
+    {
+        iGlobal = TrackingMesh<NUM_NODES>::id(i);
+
+        for(int iNeigh = 0; iNeigh < nNeighs_(i); iNeigh++)
+        {
+            bool already_found = false;
+
+            for(int iFound = 0; iFound < NUM_NEIGH_MAX; iFound++)
+            {
+                if(neighs_found_by_owned_id[iGlobal*NUM_NEIGH_MAX+iFound] == neighFaces_(i)[iNeigh])
+                    already_found = true;
+            }
+
+            if(!already_found)
+                additionalNeigh_id[iGlobal] = neighFaces_(i)[iNeigh];
+        }
+    }
+
+    MPI_Max_Vector(additionalNeigh_id,len2,this->world);
+
+    for(int i = 0; i < nlocal; i++)
+    {
+        iGlobal = TrackingMesh<NUM_NODES>::id(i);
+
+        if(additionalNeigh_id[iGlobal] > -1)
+        {
+            // set neighbor topology
+            if(nNeighs_(i) < NUM_NEIGH_MAX)
+                neighFaces_(i)[nNeighs_(i)] = additionalNeigh_id[iGlobal] ;
+            nNeighs_(i)++;
+        }
+    }
+
+    delete []neighs_found_by_owned_id;
+    delete []additionalNeigh_id;
+}
+
+/* ----------------------------------------------------------------------
    functions to generate mesh topology
 ------------------------------------------------------------------------- */
 
 template<int NUM_NODES, int NUM_NEIGH_MAX>
 bool SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::areCoplanar(int tag_a, int tag_b)
 {
-    int a = this->map(tag_a);
-    int b = this->map(tag_b);
+    int a = this->map(tag_a, 0);
+    int b = this->map(tag_b, 0);
 
     if(a < 0 || b < 0)
         this->error->one(FLERR,"Internal error: Illegal call to SurfaceMesh::areCoplanar()");
@@ -708,8 +864,8 @@ template<int NUM_NODES, int NUM_NEIGH_MAX>
 bool SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::areCoplanarNeighs(int tag_a, int tag_b)
 {
     bool areNeighs = false;
-    int a = this->map(tag_a);
-    int b = this->map(tag_b);
+    int a = this->map(tag_a, 0);
+    int b = this->map(tag_b, 0);
 
     if(a < 0 || b < 0)
         this->error->one(FLERR,"Internal error: Illegal call to SurfaceMesh::areCoplanarNeighs()");
@@ -736,8 +892,8 @@ template<int NUM_NODES, int NUM_NEIGH_MAX>
 bool SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::areCoplanarNodeNeighs(int tag_a, int tag_b)
 {
     bool areNeighs = false;
-    int a = this->map(tag_a);
-    int b = this->map(tag_b);
+    int a = this->map(tag_a, 0);
+    int b = this->map(tag_b, 0);
 
     if(a < 0 || b < 0)
         this->error->one(FLERR,"Internal error: Illegal call to SurfaceMesh::areCoplanarNeighs()");
@@ -749,7 +905,22 @@ bool SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::areCoplanarNodeNeighs(int tag_a, int 
         if(neighFaces_(a)[i] == tag_b)
             areNeighs = true;
 
-    if(!areNeighs && MultiNodeMesh<NUM_NODES>::nSharedNodes(a,b) == 0) return false;
+    const int nTri_j = this->map_size(tag_b);
+    bool found = false;
+    // only check if normals are equal if they are not listed as neigbors
+    if (!areNeighs)
+    {
+        for (int j = 0; j < nTri_j; j++)
+        {
+            const int b_tmp = this->map(tag_b, j);
+            if (MultiNodeMesh<NUM_NODES>::nSharedNodes(a,b_tmp) != 0)
+            {
+                found = true;
+                break;
+            }
+        }
+    }
+    if(!areNeighs && !found) return false;
 
     double dot = vectorDot3D(surfaceNorm(a),surfaceNorm(b));
     
@@ -844,12 +1015,12 @@ bool SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::shareEdge(int iSrf, int jSrf, int &iE
         iEdge = 2;
       
       else
-        iEdge = MathExtraLiggghts::min(iNode1,iNode2);
+        iEdge = std::min(iNode1,iNode2);
 
       if(2 == jNode1+jNode2)
         jEdge = 2;
       else
-        jEdge = MathExtraLiggghts::min(jNode1,jNode2);
+        jEdge = std::min(jNode1,jNode2);
 
       return true;
     }
@@ -868,22 +1039,29 @@ void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::handleSharedEdge(int iSrf, int iEdge,
     if(neighflag)
     {
         
-        if(nNeighs_(iSrf) == NUM_NEIGH_MAX || nNeighs_(jSrf) == NUM_NEIGH_MAX)
+        if(nNeighs_(iSrf) == NUM_NEIGH_MAX)
         {
-            int ii;
-            if(nNeighs_(iSrf) == NUM_NEIGH_MAX)
-                ii = iSrf;
-            else
-                ii = jSrf;
-
             nTooManyNeighs_++;
             if(TrackingMesh<NUM_NODES>::verbose())
                 fprintf(this->screen,"Mesh %s: element id %d (line %d) has %d neighs, but only %d expected\n",
-                        this->mesh_id_,TrackingMesh<NUM_NODES>::id(ii),TrackingMesh<NUM_NODES>::lineNo(ii),nNeighs_(ii)+1,NUM_NEIGH_MAX);
+                        this->mesh_id_,TrackingMesh<NUM_NODES>::id(iSrf),TrackingMesh<NUM_NODES>::lineNo(iSrf),nNeighs_(iSrf)+1,NUM_NEIGH_MAX);
             if(MultiNodeMesh<NUM_NODES>::elementExclusionList())
             {
                 
-                fprintf(MultiNodeMesh<NUM_NODES>::elementExclusionList(),"%d\n",TrackingMesh<NUM_NODES>::lineNo(ii));
+                fprintf(MultiNodeMesh<NUM_NODES>::elementExclusionList(),"%d\n",TrackingMesh<NUM_NODES>::lineNo(iSrf));
+            }
+            
+        }
+        if(nNeighs_(jSrf) == NUM_NEIGH_MAX)
+        {
+            nTooManyNeighs_++;
+            if(TrackingMesh<NUM_NODES>::verbose())
+                fprintf(this->screen,"Mesh %s: element id %d (line %d) has %d neighs, but only %d expected\n",
+                        this->mesh_id_,TrackingMesh<NUM_NODES>::id(jSrf),TrackingMesh<NUM_NODES>::lineNo(jSrf),nNeighs_(jSrf)+1,NUM_NEIGH_MAX);
+            if(MultiNodeMesh<NUM_NODES>::elementExclusionList())
+            {
+                
+                fprintf(MultiNodeMesh<NUM_NODES>::elementExclusionList(),"%d\n",TrackingMesh<NUM_NODES>::lineNo(jSrf));
             }
             
         }
@@ -895,6 +1073,7 @@ void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::handleSharedEdge(int iSrf, int iEdge,
             neighFaces_(jSrf)[nNeighs_(jSrf)] = TrackingMesh<NUM_NODES>::id(iSrf);
         nNeighs_(iSrf)++;
         nNeighs_(jSrf)++;
+
     }
 
     // deactivate one egde
@@ -939,12 +1118,15 @@ int SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::handleCorner(int iSrf, int iNode,
     checkNodeRecursive(iSrf,nodeToCheck,nIdListVisited,idListVisited,
         nIdListHasNode,idListHasNode,edgeList,edgeEndPoint,anyActiveEdge);
 
+    if (!this->domain->is_in_subdomain(nodeToCheck))
+        return nIdListHasNode;
+
     // each element that shares the node contributes two edges
     nEdgeList = 2*nIdListHasNode;
 
     // get max ID
     for(int i = 0; i < nIdListHasNode; i++)
-        maxId = MathExtraLiggghts::max(maxId,idListHasNode[i]);
+        maxId = std::max(maxId,idListHasNode[i]);
 
     // check if any 2 edges coplanar
     
@@ -1006,10 +1188,14 @@ void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::checkNodeRecursive(int iSrf,double *n
         {
             idNeigh = neighFaces_(iSrf)[iN];
             if(idNeigh < 0) return;
-            iNeigh = this->map(idNeigh);
-            if(iNeigh >= 0)
-                checkNodeRecursive(iNeigh,nodeToCheck,nIdListVisited,idListVisited,nIdListHasNode,
-                                    idListHasNode,edgeList,edgeEndPoint,anyActiveEdge);
+            const int nTri_j = this->map_size(idNeigh);
+            for (int j = 0; j < nTri_j; j++)
+            {
+                iNeigh = this->map(idNeigh, j);
+                if(iNeigh >= 0)
+                    checkNodeRecursive(iNeigh,nodeToCheck,nIdListVisited,idListVisited,nIdListHasNode,
+                                       idListHasNode,edgeList,edgeEndPoint,anyActiveEdge);
+            }
         }
     }
     
@@ -1020,13 +1206,13 @@ void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::checkNodeRecursive(int iSrf,double *n
 ------------------------------------------------------------------------- */
 
 template<int NUM_NODES, int NUM_NEIGH_MAX>
-void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::move(double *vecTotal, double *vecIncremental)
+void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::move(const double * const vecTotal, const double * const vecIncremental)
 {
     TrackingMesh<NUM_NODES>::move(vecTotal,vecIncremental);
 }
 
 template<int NUM_NODES, int NUM_NEIGH_MAX>
-void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::move(double *vecIncremental)
+void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::move(const double * const vecIncremental)
 {
     TrackingMesh<NUM_NODES>::move(vecIncremental);
 }
@@ -1047,7 +1233,7 @@ void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::scale(double factor)
 ------------------------------------------------------------------------- */
 
 template<int NUM_NODES, int NUM_NEIGH_MAX>
-void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::rotate(double *totalQ, double *dQ,double *origin)
+void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::rotate(const double * const totalQ, const double * const dQ, const double * const origin)
 {
     TrackingMesh<NUM_NODES>::rotate(totalQ,dQ,origin);
 
@@ -1057,7 +1243,7 @@ void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::rotate(double *totalQ, double *dQ,dou
 }
 
 template<int NUM_NODES, int NUM_NEIGH_MAX>
-void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::rotate(double *dQ,double *origin)
+void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::rotate(const double * const dQ, const double * const origin)
 {
     TrackingMesh<NUM_NODES>::rotate(dQ,origin);
 
@@ -1187,6 +1373,113 @@ double SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::edgePointDist(int iSrf, int iEdge, 
         
         else
             return MathExtraLiggghts::abs(vectorDot3D(edgeNorm(iSrf)[iEdge],nodeToP));
+}
+
+/* ----------------------------------------------------------------------
+    Extrude a planar mesh in direction of the normal by length
+------------------------------------------------------------------------- */
+
+template<int NUM_NODES, int NUM_NEIGH_MAX>
+void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::extrudePlanarMesh(const double length, double * &extrusion_tri_nodes, int &extrusion_tri_count)
+{
+    if(!this->isPlanar())
+        this->error->all(FLERR, "Cannot extrude non-planar mesh");
+
+    const int nlocal = this->sizeLocal();
+
+    if (nlocal == 0 && this->comm->nprocs == 1)
+        return;
+
+    double extrudeVec[3];
+    vectorCopy3D(surfaceNorm(0), extrudeVec);
+    vectorScalarMult3D(extrudeVec, -length);
+
+    extrusion_tri_count = 0;
+    for(int i = 0; i < nlocal; i++)
+        extrusion_tri_count += n_active_edges(i);
+    extrusion_tri_count *= 2;
+
+    // number of triangles local
+    int count_local = extrusion_tri_count;
+    // offset in nodes array for local proc
+    int offset = 0;
+    // number of tris for each processor
+    int *n_tris_proc = new int[this->comm->nprocs];
+    int *offsets_proc= new int[this->comm->nprocs];
+    if (this->comm->nprocs > 1)
+    {
+        // get number of triangles of each processor
+        MPI_Allgather(&count_local, 1, MPI_INT, &n_tris_proc[0], 1, MPI_INT, this->world);
+        // compute total number of triangles and offset
+        extrusion_tri_count = 0;
+        for (int i = 0; i < this->comm->nprocs; i++)
+        {
+            extrusion_tri_count += n_tris_proc[i];
+            if (i < this->comm->me)
+                offset += n_tris_proc[i];
+            // now this becomes the number of vector_components * nodes * triangles
+            n_tris_proc[i] *= 3*3;
+            if (i > 0)
+                offsets_proc[i] = offsets_proc[i-1] + n_tris_proc[i-1];
+            else
+                offsets_proc[i] = 0;
+        }
+    }
+
+    if (extrusion_tri_count == 0)
+        return;
+
+    offset *= 3;
+
+    // number of new triangles = number of active edges * 2 (for rectangle)
+    extrusion_tri_nodes = new double[extrusion_tri_count*3*3];
+    double * outbuf = new double[count_local*3*3];
+
+    // loop over all triangles
+    int count = 0;
+    for(int i = 0; i < nlocal; i++)
+    {
+        // check if which edges of it are active (i.e. are on the boundary)
+        // those will be extended along the normal by two triangles
+        for (int j = 0; j < NUM_NODES; j++)
+        {
+            if(edgeActive(i)[j])
+                extrudeEdge(i, j, extrudeVec, count, outbuf);
+        }
+    }
+
+    if (this->comm->nprocs > 1)
+        MPI_Allgatherv(outbuf, count_local*3*3, MPI_DOUBLE,
+                       &extrusion_tri_nodes[0], n_tris_proc, offsets_proc,
+                       MPI_DOUBLE, this->world);
+    else
+        vectorCopyN(outbuf, extrusion_tri_nodes, count_local*3*3);
+    delete[] outbuf;
+    delete[] n_tris_proc;
+    delete[] offsets_proc;
+}
+
+template<int NUM_NODES, int NUM_NEIGH_MAX>
+void SurfaceMesh<NUM_NODES,NUM_NEIGH_MAX>::extrudeEdge(const int nElem, const int edge, const double * const extrudeVec, int &count, double * extrusion_tri_nodes)
+{
+    vectorCopy3D(MultiNodeMesh<NUM_NODES>::node_(nElem)[(edge+1)%NUM_NODES],
+                 &extrusion_tri_nodes[count*3]);
+    count++;
+    vectorCopy3D(MultiNodeMesh<NUM_NODES>::node_(nElem)[edge],
+                 &extrusion_tri_nodes[count*3]);
+    count++;
+    vectorAdd3D(&extrusion_tri_nodes[(count-2)*3], extrudeVec,
+                &extrusion_tri_nodes[count*3]);
+    count++;
+    vectorCopy3D(&extrusion_tri_nodes[(count-2)*3],
+                 &extrusion_tri_nodes[count*3]);
+    count++;
+    vectorAdd3D(&extrusion_tri_nodes[(count-1)*3], extrudeVec,
+                &extrusion_tri_nodes[count*3]);
+    count++;
+    vectorCopy3D(&extrusion_tri_nodes[(count-3)*3],
+                 &extrusion_tri_nodes[count*3]);
+    count++;
 }
 
 #endif

@@ -49,9 +49,8 @@ FixStyle(massflow/mesh,FixMassflowMesh)
 #define LMP_FIX_MASSFLOW_MESH_H
 
 #include "fix.h"
+#include "scalar_container.h"
 #include <vector>
-
-using namespace std;
 
 namespace LAMMPS_NS {
 
@@ -81,7 +80,7 @@ class FixMassflowMesh : public Fix {
 
   // in case particles counted should be deleted or transferred
   bool delete_atoms_;
-  vector<int> atom_tags_delete_;
+  std::vector<int> atom_tags_delete_;
   double mass_deleted_;
   double nparticles_deleted_;
 
@@ -93,12 +92,16 @@ class FixMassflowMesh : public Fix {
   class FixPropertyAtom* fix_orientation_;
 
  protected:
-  class FixPropertyAtom *fix_counter_;
+  class FixPropertyAtom  *fix_counter_;
+  class FixMeshSurface   *fix_mesh_;
+  class FixNeighlistMesh *fix_neighlist_;
+
+  class FixPropertyAtom *fix_volumeweight_ms_;
 
  private:
-  class FixMeshSurface *fix_mesh_;
+  void setRefPoint();
+
   char fixid_[200];
-  class FixNeighlistMesh *fix_neighlist_;
   double nvec_[3];
   double pref_[3];
   double sidevec_[3];
@@ -109,7 +112,7 @@ class FixMassflowMesh : public Fix {
 
   // mass and particles which was counted
   double mass_;
-  int nparticles_;
+  double nparticles_;
 
   // additional property to sum
   class FixPropertyAtom *fix_property_;
@@ -122,13 +125,9 @@ class FixMassflowMesh : public Fix {
 
   // data for particle and mass flow calculation
   double mass_last_;
-  int nparticles_last_;
+  double nparticles_last_;
   double t_count_, delta_t_;
   bool reset_t_count_;
-
-  class FixMultisphere* fix_ms_;
-  class Multisphere *ms_;
-  class ScalarContainer<int> *ms_counter_;
 
 }; //end class
 

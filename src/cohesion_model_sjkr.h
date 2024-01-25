@@ -49,7 +49,8 @@ COHESION_MODEL(COHESION_SJKR,sjkr,1)
 #define COHESION_MODEL_SJKR_H_
 
 #include "contact_models.h"
-#include "math.h"
+#include "cohesion_model_base.h"
+#include <cmath>
 
 namespace LIGGGHTS {
 namespace ContactModels {
@@ -57,27 +58,30 @@ namespace ContactModels {
   using namespace LAMMPS_NS;
 
   template<>
-  class CohesionModel<COHESION_SJKR> : protected Pointers {
+  class CohesionModel<COHESION_SJKR> : public CohesionModelBase {
   public:
-    static const int MASK = CM_CONNECT_TO_PROPERTIES | CM_SURFACES_INTERSECT;
-
-    int bond_history_offset() {return -1;}
-
-    CohesionModel(LAMMPS * lmp, IContactHistorySetup*,class ContactModelBase *) :
-        Pointers(lmp), cohEnergyDens(NULL)
+    CohesionModel(LAMMPS * lmp, IContactHistorySetup * hsetup, class ContactModelBase * c) :
+        CohesionModelBase(lmp, hsetup, c),
+        cohEnergyDens(NULL)
     {
-      
+        
     }
 
-    void registerSettings(Settings&) {}
+    void registerSettings(Settings& settings) 
+    {
+        settings.registerOnOff("tangential_reduce",tangentialReduce_,false);
+    }
 
-    void connectToProperties(PropertyRegistry & registry) {
-      registry.registerProperty("cohEnergyDens", &MODEL_PARAMS::createCohesionEnergyDensity);
-      registry.connect("cohEnergyDens", cohEnergyDens,"cohesion_model sjkr");
+    inline void postSettings(IContactHistorySetup * hsetup, ContactModelBase *cmb) {}
 
-      // error checks on coarsegraining
-      if(force->cg_active())
-        error->cg(FLERR,"cohesion model sjkr");
+    void connectToProperties(PropertyRegistry & registry)
+    {
+        registry.registerProperty("cohEnergyDens", &MODEL_PARAMS::createCohesionEnergyDensity);
+        registry.connect("cohEnergyDens", cohEnergyDens,"cohesion_model sjkr");
+
+        // error checks on coarsegraining
+        if(force->cg_active())
+            error->cg(FLERR,"cohesion model sjkr");
     }
 
     void surfacesIntersect(SurfacesIntersectData & sidata, ForceData & i_forces, ForceData & j_forces)
@@ -93,7 +97,7 @@ namespace ContactModels {
       else
         Acont = - M_PI/4 * ( (r-ri-rj)*(r+ri-rj)*(r-ri+rj)*(r+ri+rj) )/(r*r); //contact area of the two spheres
       const double Fn_coh = -cohEnergyDens[sidata.itype][sidata.jtype]*Acont;
-      sidata.Fn += Fn_coh;
+      if(tangentialReduce_) sidata.Fn += Fn_coh; 
 
       if(sidata.contact_flags) *sidata.contact_flags |= CONTACT_COHESION_MODEL;
 
@@ -118,6 +122,7 @@ namespace ContactModels {
       }
     }
 
+    inline void endSurfacesIntersect(SurfacesIntersectData &sidata, ForceData&, ForceData&) {}
     void beginPass(SurfacesIntersectData&, ForceData&, ForceData&){}
     void endPass(SurfacesIntersectData&, ForceData&, ForceData&){}
 
@@ -129,6 +134,7 @@ namespace ContactModels {
 
   private:
     double ** cohEnergyDens;
+    bool tangentialReduce_;
   };
 }
 }

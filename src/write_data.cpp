@@ -44,8 +44,8 @@
 ------------------------------------------------------------------------- */
 
 #include "lmptype.h"
-#include "mpi.h"
-#include "string.h"
+#include <mpi.h>
+#include <string.h>
 #include "write_data.h"
 #include "atom.h"
 #include "atom_vec.h"
@@ -146,6 +146,7 @@ void WriteData::command(int narg, char **arg)
   comm->exchange();
   comm->borders();
   if (domain->triclinic) domain->lamda2x(atom->nlocal+atom->nghost);
+  modify->forceMeshExchange(); // call explicit exchange of mesh data
 
   write(file);
 

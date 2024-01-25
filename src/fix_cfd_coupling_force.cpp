@@ -39,8 +39,8 @@
     Copyright 2009-2012 JKU Linz
 ------------------------------------------------------------------------- */
 
-#include "string.h"
-#include "stdlib.h"
+#include <string.h>
+#include <stdlib.h>
 #include "atom.h"
 #include "update.h"
 #include "respa.h"
@@ -48,7 +48,7 @@
 #include "memory.h"
 #include "modify.h"
 #include "comm.h"
-#include "math.h"
+#include <cmath>
 #include "vector_liggghts.h"
 #include "mpi_liggghts.h"
 #include "fix_cfd_coupling_force.h"
@@ -63,18 +63,23 @@ FixCfdCouplingForce::FixCfdCouplingForce(LAMMPS *lmp, int narg, char **arg) : Fi
     fix_coupling_(0),
     fix_dragforce_(0),
     fix_hdtorque_(0),
-    fix_volumeweight_(0),
     fix_dispersionTime_(0),
     fix_dispersionVel_(0),
+    fix_UrelOld_(0),
     use_force_(true),
     use_torque_(true),
     use_dens_(false),
     use_type_(false),
     use_stochastic_(false),
+    use_virtualMass_(false),
+    use_superquadric_(false),
+    use_id_(false),
     use_property_(false),
-    use_superquadric_(false)
+    use_fiber_topo_(false),
+    fix_fiber_axis_(0),
+    fix_fiber_ends_(0)
 {
-    int iarg = 3;
+    iarg = 3;
 
     bool hasargs = true;
     while(iarg < narg && hasargs)
@@ -122,6 +127,20 @@ FixCfdCouplingForce::FixCfdCouplingForce(LAMMPS *lmp, int narg, char **arg) : Fi
             iarg++;
             hasargs = true;
         }
+        else if(strcmp(arg[iarg],"transfer_id") == 0)
+        {
+            if(narg < iarg+2)
+                error->fix_error(FLERR,this,"not enough arguments for 'transfer_type'");
+            iarg++;
+            if(strcmp(arg[iarg],"yes") == 0)
+                use_id_ = true;
+            else if(strcmp(arg[iarg],"no") == 0)
+                use_id_ = false;
+            else
+                error->fix_error(FLERR,this,"expecting 'yes' or 'no' after 'transfer_id'");
+            iarg++;
+            hasargs = true;
+        }
         else if(strcmp(arg[iarg],"transfer_stochastic") == 0)
         {
             if(narg < iarg+2)
@@ -135,6 +154,20 @@ FixCfdCouplingForce::FixCfdCouplingForce(LAMMPS *lmp, int narg, char **arg) : Fi
                 error->fix_error(FLERR,this,"expecting 'yes' or 'no' after 'transfer_stochastic'");
             iarg++;
             hasargs = true;
+        }
+        else if(strcmp(arg[iarg],"transfer_virtualMass") == 0)
+        {
+            if(narg < iarg+2)
+                error->fix_error(FLERR,this,"not enough arguments for 'transfer_virtualMass'");
+            iarg++;
+            if(strcmp(arg[iarg],"yes") == 0)
+                use_virtualMass_ = true;
+            else if(strcmp(arg[iarg],"no") == 0)
+                use_virtualMass_ = false;
+            else
+                error->fix_error(FLERR,this,"expecting 'yes' or 'no' after 'transfer_virtualMass'");
+            iarg++;
+            hasargs = true;
         } else if(strcmp(arg[iarg],"transfer_property") == 0) {
             if(narg < iarg+5)
                 error->fix_error(FLERR,this,"not enough arguments for 'transfer_type'");
@@ -146,6 +179,17 @@ FixCfdCouplingForce::FixCfdCouplingForce(LAMMPS *lmp, int narg, char **arg) : Fi
             if(strcmp(arg[iarg++],"type"))
                 error->fix_error(FLERR,this,"expecting 'type' after property name");
             sprintf(property_type,"%s",arg[iarg++]);
+            iarg++;
+            hasargs = true;
+        } else if(strcmp(arg[iarg],"transfer_fiber_topology") == 0) {
+            if(narg < iarg+2)
+                error->fix_error(FLERR,this,"not enough arguments for 'transfer_fiber_topology'");
+            if(strcmp(arg[iarg],"yes") == 0)
+                use_fiber_topo_ = true;
+            else if(strcmp(arg[iarg],"no") == 0)
+                use_fiber_topo_ = false;
+            else
+                error->fix_error(FLERR,this,"expecting 'yes' or 'no' after 'transfer_fiber_topology'");
             iarg++;
             hasargs = true;
         } else if(strcmp(arg[iarg],"transfer_superquadric") == 0) {
@@ -171,7 +215,7 @@ FixCfdCouplingForce::FixCfdCouplingForce(LAMMPS *lmp, int narg, char **arg) : Fi
 
     // flags for vector output
     vector_flag = 1;
-    size_vector = 3;
+    size_vector = 6;
     global_freq = 1;
     extvector = 1;
 }
@@ -223,23 +267,6 @@ void FixCfdCouplingForce::post_create()
         fix_hdtorque_ = modify->add_fix_property_atom(11,const_cast<char**>(fixarg),style);
     }
 
-    // register volume weight for volume fraction calculation if not present
-    // is 1 per default
-    fix_volumeweight_ = static_cast<FixPropertyAtom*>(modify->find_fix_property("volumeweight","property/atom","scalar",0,0,style,false));
-    if(!fix_volumeweight_)
-    {
-        const char* fixarg[9];
-        fixarg[0]="volumeweight";
-        fixarg[1]="all";
-        fixarg[2]="property/atom";
-        fixarg[3]="volumeweight";
-        fixarg[4]="scalar"; // 1 vector per particle to be registered
-        fixarg[5]="no";    // restart
-        fixarg[6]="no";     // communicate ghost
-        fixarg[7]="no";     // communicate rev
-        fixarg[8]="1.";
-        fix_volumeweight_ = modify->add_fix_property_atom(9,const_cast<char**>(fixarg),style);
-    }
     if(!fix_dispersionTime_ && use_stochastic_)
     {
         const char* fixarg[9];
@@ -267,9 +294,36 @@ void FixCfdCouplingForce::post_create()
         fixarg[6]="no";     // communicate ghost
         fixarg[7]="no";     // communicate rev
         fixarg[8]="0";
-        fixarg[9]="0";        
+        fixarg[9]="0";
         fixarg[10]="0";
         fix_dispersionVel_ = modify->add_fix_property_atom(11,const_cast<char**>(fixarg),style);
+    }
+
+    if(!fix_UrelOld_ && use_virtualMass_)
+    {
+        const char* fixarg[11];
+        fixarg[0]="UrelOld";
+        fixarg[1]="all";
+        fixarg[2]="property/atom";
+        fixarg[3]="UrelOld";
+        fixarg[4]="vector"; // vector per particle to be registered
+        fixarg[5]="yes";    // restart
+        fixarg[6]="no";     // communicate ghost
+        fixarg[7]="no";     // communicate rev
+        fixarg[8]="0";
+        fixarg[9]="0";
+        fixarg[10]="0";
+        fix_dispersionVel_ = modify->add_fix_property_atom(11,const_cast<char**>(fixarg),style);
+    }
+
+    if(use_fiber_topo_)
+    {
+        const char *fixarg[] = {
+              "topo",       // fix id
+              "all",        // fix group
+              "bond/fiber/topology" // fix style
+        };
+        modify->add_fix(3,const_cast<char**>(fixarg));
     }
 }
 
@@ -279,7 +333,6 @@ void FixCfdCouplingForce::pre_delete(bool unfixflag)
 {
     if(unfixflag && fix_dragforce_) modify->delete_fix("dragforce");
     if(unfixflag && fix_hdtorque_) modify->delete_fix("hdtorque");
-    if(unfixflag && fix_volumeweight_) modify->delete_fix("volumeweight");
 }
 
 /* ---------------------------------------------------------------------- */
@@ -313,13 +366,13 @@ void FixCfdCouplingForce::init()
       fix_coupling_->add_push_property("volume","scalar-atom");
       fix_coupling_->add_push_property("area","scalar-atom");
       fix_coupling_->add_push_property("shape","vector-atom");
-      fix_coupling_->add_push_property("roundness","vector2D-atom");
+      fix_coupling_->add_push_property("blockiness","vector2D-atom");
       fix_coupling_->add_push_property("quaternion","quaternion-atom");
     }
     if(use_type_) fix_coupling_->add_push_property("type","scalar-atom");
     if(use_dens_) fix_coupling_->add_push_property("density","scalar-atom");
     if(use_torque_) fix_coupling_->add_push_property("omega","vector-atom");
-    fix_coupling_->add_push_property("volumeweight","scalar-atom");
+    if(use_id_) fix_coupling_->add_push_property("id","scalar-atom");
 
     if(use_property_) fix_coupling_->add_push_property(property_name,property_type);
 
@@ -329,11 +382,18 @@ void FixCfdCouplingForce::init()
 
     if(use_stochastic_)
     {
-	 fix_coupling_->add_pull_property("dispersionTime","scalar-atom");
-         fix_coupling_->add_pull_property("dispersionVel","vector-atom");
+        fix_coupling_->add_pull_property("dispersionTime","scalar-atom");
+        fix_coupling_->add_pull_property("dispersionVel","vector-atom");
+    }
+
+    if(use_fiber_topo_)
+    {
+        fix_coupling_->add_pull_property("fiber_axis","vector-atom");
+        fix_coupling_->add_pull_property("fiber_ends","vector-atom");
     }
 
     vectorZeroize3D(dragforce_total);
+    vectorZeroize3D(hdtorque_total);
 
     if (strcmp(update->integrate_style,"respa") == 0)
        error->fix_error(FLERR,this,"'run_style respa' not supported.");
@@ -341,11 +401,12 @@ void FixCfdCouplingForce::init()
 }
 
 /* ---------------------------------------------------------------------- */
+
 void FixCfdCouplingForce::setup(int vflag)
 {
     if (strstr(update->integrate_style,"verlet"))
         post_force(vflag);
-    else 
+    else
         error->fix_error(FLERR,this,"only 'run_style verlet' supported.");
 }
 
@@ -361,6 +422,7 @@ void FixCfdCouplingForce::post_force(int)
   double **hdtorque = fix_hdtorque_->array_atom;
 
   vectorZeroize3D(dragforce_total);
+  vectorZeroize3D(hdtorque_total);
 
   // add dragforce to force vector
   
@@ -368,9 +430,16 @@ void FixCfdCouplingForce::post_force(int)
   {
     if (mask[i] & groupbit)
     {
-        if(use_force_) vectorAdd3D(f[i],dragforce[i],f[i]);
-        if(use_torque_) vectorAdd3D(torque[i],hdtorque[i],torque[i]);
-        vectorAdd3D(dragforce_total,dragforce[i],dragforce_total);
+        if(use_force_)
+        {
+            vectorAdd3D(f[i],dragforce[i],f[i]);
+            vectorAdd3D(dragforce_total,dragforce[i],dragforce_total);
+        }
+        if(use_torque_)
+        {
+            vectorAdd3D(torque[i],hdtorque[i],torque[i]);
+            vectorAdd3D(hdtorque_total,hdtorque[i],hdtorque_total);
+        }
     }
   }
 }
@@ -381,6 +450,14 @@ void FixCfdCouplingForce::post_force(int)
 
 double FixCfdCouplingForce::compute_vector(int n)
 {
-  MPI_Sum_Vector(dragforce_total,3,world);
-  return dragforce_total[n];
+  if(n < 3)
+  {
+    double dragtotal = dragforce_total[n];
+    MPI_Sum_Scalar(dragtotal,world);
+    return dragtotal;
+  }
+
+  double hdtorque = hdtorque_total[n-3];
+  MPI_Sum_Scalar(hdtorque,world);
+  return hdtorque;
 }

@@ -39,9 +39,10 @@
     Copyright 2009-2015 JKU Linz
 ------------------------------------------------------------------------- */
 
-#include "math.h"
-#include "stdlib.h"
-#include "string.h"
+#include <cmath>
+#include <algorithm>
+#include <stdlib.h>
+#include <string.h>
 #include "atom.h"
 #include "atom_vec.h"
 #include "force.h"
@@ -56,6 +57,7 @@
 #include "fix_particledistribution_discrete.h"
 #include "fix_template_sphere.h"
 #include "fix_property_atom.h"
+#include "irregular.h"
 #include "fix_insert.h"
 #include "math_extra_liggghts.h"
 #include "mpi_liggghts.h"
@@ -63,7 +65,6 @@
 
 #include "probability_distribution.h"
 #include "region_neighbor_list.h"
-#include "superquadric_flag.h"
 
 using namespace LAMMPS_NS;
 using namespace FixConst;
@@ -77,11 +78,9 @@ using namespace FixConst;
 
 FixInsert::FixInsert(LAMMPS *lmp, int narg, char **arg) :
   Fix(lmp, narg, arg),
-  neighList(*new RegionNeighborList(lmp))
+  neighList(*new RegionNeighborList<interpolate_no>(lmp))
 {
   if (narg < 7) error->fix_error(FLERR,this,"not enough arguments");
-
-  time_depend = 1;
 
   restart_global = 1;
 
@@ -91,15 +90,16 @@ FixInsert::FixInsert(LAMMPS *lmp, int narg, char **arg) :
   fix_multisphere = NULL;
   multisphere = NULL;
 
+  compress_flag = false ;
+
   // required args
   iarg = 3;
 
   if(strcmp(arg[iarg++],"seed")) error->fix_error(FLERR,this,"expecting keyword 'seed'");
-  seed = atoi(arg[iarg++]) + comm->me;
-  if (seed <= 0) error->fix_error(FLERR,this,"illegal seed");
-
   // random number generator, seed depends on proc
-  random = new RanPark(lmp,seed);
+  random = new RanPark(lmp, arg[iarg++], true);
+  seed = random->getSeed();
+  if (seed <= 0) error->fix_error(FLERR,this,"illegal seed");
 
   // set defaults
   init_defaults();
@@ -114,6 +114,7 @@ FixInsert::FixInsert(LAMMPS *lmp, int narg, char **arg) :
   while(iarg < narg && hasargs)
   {
     hasargs = false;
+    
     if(strcmp(arg[iarg],"distributiontemplate") == 0) {
       if (iarg+2 > narg) error->fix_error(FLERR,this,"");
       int ifix = modify->find_fix(arg[iarg+1]);
@@ -151,10 +152,17 @@ FixInsert::FixInsert(LAMMPS *lmp, int narg, char **arg) :
       nflowrate = atof(arg[iarg+1]);
       iarg += 2;
       hasargs = true;
-    } else if (strcmp(arg[iarg],"insert_every") == 0 || strcmp(arg[iarg],"every") == 0) {
+    } else if (strcmp(arg[iarg],"insert_every_time") == 0 || strcmp(arg[iarg],"insert_every") == 0 || strcmp(arg[iarg],"every") == 0) {
       if (iarg+2 > narg) error->fix_error(FLERR,this,"");
       if(strcmp(arg[iarg+1],"once") == 0) insert_every = 0;
-      else insert_every = atoi(arg[iarg+1]);
+      else if(strcmp(arg[iarg],"insert_every_time") == 0)
+      {
+          if(!update->timestep_set)
+            error->fix_error(FLERR,this,"need so set 'timestep' before");
+          insert_every = static_cast<int>(atof(arg[iarg+1])/update->dt);
+      }
+      else
+          insert_every = atoi(arg[iarg+1]);
       if(insert_every < 0) error->fix_error(FLERR,this,"insert_every must be >= 0");
       iarg += 2;
       hasargs = true;
@@ -199,6 +207,16 @@ FixInsert::FixInsert(LAMMPS *lmp, int narg, char **arg) :
       if(strcmp(arg[iarg+1],"no")==0) print_stats_during_flag = 0;
       else if(strcmp(arg[iarg+1],"yes")==0) print_stats_during_flag = 1;
       else error->fix_error(FLERR,this,"");
+      iarg += 2;
+      hasargs = true;
+    } else if (strcmp(arg[iarg],"compress_tags") == 0) {
+      if (iarg+2 > narg) error->fix_error(FLERR,this,"not enough arguments for compress_tags");
+      if(0 == strcmp(arg[iarg+1],"yes"))
+        compress_flag = true;
+      else if(0 == strcmp(arg[iarg+1],"no"))
+        compress_flag = false;
+      else
+        error->fix_error(FLERR,this,"expecting 'yes' or 'no' after 'compress_tags'");
       iarg += 2;
       hasargs = true;
     } else if (strcmp(arg[iarg],"vel") == 0) {
@@ -308,14 +326,16 @@ FixInsert::FixInsert(LAMMPS *lmp, int narg, char **arg) :
 
   print_stats_start_flag = 1;
 
+  irregular = new Irregular(lmp);
+
   // calc max insertion radius
   int ntypes = atom->ntypes;
   maxrad = 0.;
   minrad = 1000.;
   for(int i = 1; i <= ntypes; i++)
   {
-     maxrad = MathExtraLiggghts::max(maxrad,max_rad(i));
-     minrad = MathExtraLiggghts::min(minrad,min_rad(i));
+     maxrad = std::max(maxrad,max_rad(i));
+     minrad = std::min(minrad,min_rad(i));
   }
 }
 
@@ -328,6 +348,9 @@ FixInsert::~FixInsert()
   delete [] displs;
   delete &neighList;
   if(property_name) delete []property_name;
+
+  if(irregular) delete irregular;
+  irregular = 0;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -395,7 +418,7 @@ void FixInsert::init_defaults()
   vectorZeroize3D(v_insertFluct);
   vectorZeroize3D(omega_insert);
 
-  quatUnitize4D(quat_insert);
+  quatIdentity4D(quat_insert);
   quat_random_ = false;
 
   print_stats_during_flag = 1;
@@ -423,6 +446,37 @@ void FixInsert::sanity_check()
 
     if(insert_every == 0 && (massflowrate > 0. || nflowrate > 0.))
         error->fix_error(FLERR,this,"must not define 'particlerate' or 'massrate' for 'insert_every' = 0");
+
+    if(0 == comm->me)
+    {
+        
+        std::vector<int> seeds;
+        seeds.push_back(random->state());
+        seeds.push_back(fix_distribution->random_state());
+        for(int itemplate = 0; itemplate < fix_distribution->n_particletemplates(); itemplate++)
+        {
+            
+            seeds.push_back(fix_distribution->particletemplates()[itemplate]->random_insertion_state());
+        }
+
+        std::sort(seeds.begin(),seeds.end());
+
+        if(std::unique(seeds.begin(),seeds.end()) !=seeds.end() )
+        {
+            char errstr[1024];
+            sprintf(errstr,"Fix %s, ID %s: Random number generation: It is required that all the random seeds of this fix insert/*, \n"
+                           "  the random seed of particle distribution fix (id %s) template and all random seeds of the \n"
+                           "  fix particletemplate/* commands used by particle distribution fix (id %s) are different\n"
+                           "  Hint: possible valid (different) seeds would be the following numbers:\n"
+                           "        15485863, 15485867, 32452843, 32452867, 49979687, 49979693, 67867967, 67867979, 86028121, 86028157",
+                           style,id,fix_distribution->id,fix_distribution->id);
+
+            if(input->seed_check_throw_error())
+                error->one(FLERR,errstr);
+            else
+                error->warning(FLERR,errstr);
+        }
+    }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -434,23 +488,23 @@ void FixInsert::print_stats_start()
     if(ninsert_exists)
     {
         if (screen)
-            fprintf(screen ,"INFO: Particle insertion %s: %f particles every %d steps - particle rate %f  (mass rate %f)\n"
-                            "      %d particles (mass %f) within %d steps\n",
+            fprintf(screen ,"INFO: Particle insertion %s: %f particles every %d steps - particle rate %f  (mass rate %e)\n"
+                            "      %d particles (mass %e) within %d steps\n",
                 id,ninsert_per,insert_every,nflowrate,massflowrate,ninsert,massinsert,final_ins_step-first_ins_step);
 
         if (logfile)
-            fprintf(logfile,"INFO: Particle insertion %s: %f particles every %d steps - particle rate %f, (mass rate %f)\n"
-                            "      %d particles (mass %f) within %d steps\n",
+            fprintf(logfile,"INFO: Particle insertion %s: %f particles every %d steps - particle rate %f, (mass rate %e)\n"
+                            "      %d particles (mass %e) within %d steps\n",
                 id,ninsert_per,insert_every,nflowrate,massflowrate,ninsert,massinsert,final_ins_step-first_ins_step);
     }
     else if(massflowrate > 0.)
     {
         if (screen)
-            fprintf(screen ,"INFO: Particle insertion %s: %f particles every %d steps - particle rate %f  (mass rate %f)\n",
+            fprintf(screen ,"INFO: Particle insertion %s: %f particles every %d steps - particle rate %f  (mass rate %e)\n",
                 id,ninsert_per,insert_every,nflowrate,massflowrate);
 
         if (logfile)
-            fprintf(logfile,"INFO: Particle insertion %s: %f particles every %d steps - particle rate %f, (mass rate %f)\n",
+            fprintf(logfile,"INFO: Particle insertion %s: %f particles every %d steps - particle rate %f, (mass rate %e)\n",
                 id,ninsert_per,insert_every,nflowrate,massflowrate);
     }
     else
@@ -473,13 +527,13 @@ void FixInsert::print_stats_during(int ninsert_this, double mass_inserted_this)
   if (me == 0 && print_stats_during_flag)
   {
     if (screen)
-      fprintf(screen ,"INFO: Particle insertion %s: inserted %d particle templates (mass %f) at step " BIGINT_FORMAT "\n"
-                      " - a total of %d particle templates (mass %f) inserted so far.\n",
+      fprintf(screen ,"INFO: Particle insertion %s: inserted %d particle templates (mass %e) at step " BIGINT_FORMAT "\n"
+                      " - a total of %d particle templates (mass %e) inserted so far.\n",
               id,ninsert_this,mass_inserted_this,step,ninserted,massinserted);
 
     if (logfile)
-      fprintf(logfile,"INFO: Particle insertion %s: inserted %d particle templates (mass %f) at step " BIGINT_FORMAT "\n"
-                      " - a total of %d particle templates (mass %f) inserted so far.\n",
+      fprintf(logfile,"INFO: Particle insertion %s: inserted %d particle templates (mass %e) at step " BIGINT_FORMAT "\n"
+                      " - a total of %d particle templates (mass %e) inserted so far.\n",
               id,ninsert_this,mass_inserted_this,step,ninserted,massinserted);
   }
 }
@@ -512,13 +566,24 @@ void FixInsert::init()
 
     // in case of new fix insert in a restarted simulation, have to add current time-step
     if(next_reneighbor > 0 && next_reneighbor < ntimestep)
+    {
+        
         error->fix_error(FLERR,this,"'start' step can not be before current step");
+    }
 
     if(property_name)
     {
          fix_property = static_cast<FixPropertyAtom*>(modify->find_fix_property(property_name,"property/atom","scalar",1,1,this->style,true));
     }
+}
 
+/* ---------------------------------------------------------------------- */
+
+void FixInsert::reset_timestep(bigint newstep,bigint oldstep)
+{
+    
+    next_reneighbor += (newstep-oldstep);
+    
 }
 
 /* ---------------------------------------------------------------------- */
@@ -620,14 +685,14 @@ void FixInsert::pre_exchange()
   
   if(ninsert_this_local > ninsert_this_max_local)
   {
-      fix_distribution->random_init_list(ninsert_this_local);
+      init_list(ninsert_this_local);
       ninsert_this_max_local = ninsert_this_local;
   }
 
   // generate list of insertions
   // number of inserted particles can change if exact_number = 0
   
-  ninsert_this_local = fix_distribution->randomize_list(ninsert_this_local,groupbit,exact_number);
+  ninsert_this_local = generate_list(ninsert_this_local,groupbit,exact_number);
   
   MPI_Sum_Scalar(ninsert_this_local,ninsert_this,world);
 
@@ -640,6 +705,9 @@ void FixInsert::pre_exchange()
       // schedule next insertion
       if (insert_every && (!ninsert_exists || ninserted < ninsert))
         next_reneighbor += insert_every;
+      
+      else if(0 == insert_every)
+        next_reneighbor = -1;
 
       return;
   }
@@ -655,9 +723,9 @@ void FixInsert::pre_exchange()
 
   if(warn_boxentent && min_subbox_extent < 2.2 *max_r_bound())
   {
-      char msg[200];
-      sprintf(msg,"Particle insertion on proc %d: sub-domain too small to insert particles: \nMax. bounding "
-                  "sphere diameter is %f sub-domain extent in %s direction is only %f ",
+      char msg[256];
+      sprintf(msg,"Particle insertion on proc %d: sub-domain is smaller than the bounding radius of insert particles to insert: \nMax. bounding "
+                  "sphere diameter is %f, sub-domain extent in %s direction is only %f ",
                   comm->me,2.*max_r_bound(),0==min_dim?"x":(1==min_dim?"y":"z"),min_subbox_extent);
       error->warning(FLERR,msg);
   }
@@ -671,7 +739,7 @@ void FixInsert::pre_exchange()
   // fill xnear array with particles to check overlap against
   
   // add particles in insertion volume to xnear list
-  neighList.clear();
+  neighList.reset();
 
   if(check_ol_flag)
     load_xnear(ninsert_this_local);
@@ -690,7 +758,7 @@ void FixInsert::pre_exchange()
   // actual particle insertion
 
   fix_distribution->pre_insert(ninserted_this_local,fix_property,fix_property_value);
-
+  
   ninserted_spheres_this_local = fix_distribution->insert(ninserted_this_local);
 
   // warn if max # insertions exceeded by random processes
@@ -702,9 +770,21 @@ void FixInsert::pre_exchange()
   // set tag # of new particles beyond all previous atoms, reset global natoms
   // if global map exists, reset it now instead of waiting for comm
   // since deleting atoms messes up ghosts
+  int step = update->ntimestep;
 
   if (atom->tag_enable)
   {
+
+    //force all tags to be reset by setting them to zero
+    if(compress_flag)
+    {
+        if(comm->me == 0)
+            printf("FixInsertStream: resetting tags @ step %d. \n", step);
+        int *tag = atom->tag;
+        for (int i = 0; i < atom->nlocal; i++)
+            tag[i] = 0;
+    }
+
     atom->tag_extend();
     atom->natoms += static_cast<double>(ninserted_spheres_this);
     if (atom->map_style)
@@ -732,6 +812,9 @@ void FixInsert::pre_exchange()
 
   if(ninserted_this < ninsert_this && comm->me == 0)
       error->warning(FLERR,"Particle insertion: Less insertions than requested");
+
+  if (irregular->migrate_check())
+      irregular->migrate_atoms();
 
   // next timestep to insert
   if (insert_every && (!ninsert_exists || ninserted < ninsert)) next_reneighbor += insert_every;
@@ -827,22 +910,6 @@ int FixInsert::distribute_ninsert_this(int ninsert_this)
 }
 
 /* ----------------------------------------------------------------------
-   count # of particles that could overlap
-   must loop local + ghost particles
-------------------------------------------------------------------------- */
-
-int FixInsert::count_nnear()
-{
-    int nall = atom->nlocal + atom->nghost;
-    int ncount = 0;
-
-    for(int i = 0; i < nall; i++)
-        ncount += is_nearby(i);
-
-    return ncount;
-}
-
-/* ----------------------------------------------------------------------
    fill neighbor list with nearby particles
 ------------------------------------------------------------------------- */
 
@@ -855,20 +922,21 @@ int FixInsert::load_xnear(int ninsert_this_local)
   const int nall = atom->nlocal + atom->nghost;
 
   BoundingBox bb = getBoundingBox();
-  neighList.clear();
+  neighList.reset();
 #ifdef SUPERQUADRIC_ACTIVE_FLAG
   neighList.set_obb_flag(check_obb_flag);
 #endif
 
-  if(neighList.setBoundingBox(bb, maxrad))
+  if(neighList.setBoundingBox(bb, maxrad,true,true))
   {
     for (int i = 0; i < nall; ++i)
     {
-      if (is_nearby(i))
+      
+      if (is_nearby(i) && neighList.isInBoundingBox(x[i]) )
       {
 #ifdef SUPERQUADRIC_ACTIVE_FLAG
         if(atom->superquadric_flag and check_obb_flag)
-          neighList.insert_superquadric(x[i], radius[i], atom->quaternion[i], atom->shape[i]);
+          neighList.insert_superquadric(x[i], radius[i], atom->quaternion[i], atom->shape[i], atom->blockiness[i]);
         else
           neighList.insert(x[i], radius[i]);
 #else
@@ -877,34 +945,6 @@ int FixInsert::load_xnear(int ninsert_this_local)
       }
     }
   }
-
-#ifdef SUPERQUADRIC_ACTIVE_FLAG
-    error->one(FLERR,"Sascha, please re-work this section; there were changes in the overlap detection algorithm"
-    //Sascha, your previous code is here:
-
-    /*#ifdef SUPERQUADRIC_ACTIVE_FLAG
-      double **shape = atom->shape;
-      double **quat = atom->quaternion;
-      if(atom->superquadric_flag)
-        memory->create(xnear,nspheres_near_local + ninsert_this_local*fix_distribution->max_nspheres(), 11, "FixInsert::xnear");
-      else
-        memory->create(xnear,nspheres_near_local + ninsert_this_local*fix_distribution->max_nspheres(), 4, "FixInsert::xnear");
-    #else*/
-
-    //in the xnear loop, the code was:
-    /*
-    #ifdef SUPERQUADRIC_ACTIVE_FLAG
-          if(atom->superquadric_flag) {
-            xnear[ncount][4] = quat[i][0];
-            xnear[ncount][5] = quat[i][1];
-            xnear[ncount][6] = quat[i][2];
-            xnear[ncount][7] = quat[i][3];
-            xnear[ncount][8] = shape[i][0];
-            xnear[ncount][9] = shape[i][1];
-            xnear[ncount][10] = shape[i][2];
-          }
-    #endif*/
-#endif
 
   return neighList.count();
 }

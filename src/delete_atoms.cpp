@@ -49,8 +49,8 @@
     the GNU General Public License.
 ------------------------------------------------------------------------- */
 
-#include "stdlib.h"
-#include "string.h"
+#include <stdlib.h>
+#include <string.h>
 #include "delete_atoms.h"
 #include "atom.h"
 #include "atom_vec.h"
@@ -84,6 +84,10 @@ void DeleteAtoms::command(int narg, char **arg)
 {
   if (domain->box_exist == 0)
     error->all(FLERR,"Delete_atoms command before simulation box is defined");
+  
+  if(modify->fix_restart_in_progress())
+    error->all(FLERR,"If restart file is read, delete_atoms command must come after first 'run' command");
+
   if (narg < 1) error->all(FLERR,"Illegal delete_atoms command");
   if (atom->tag_enable == 0)
     error->all(FLERR,"Cannot use delete_atoms unless atoms have IDs");
@@ -418,10 +422,8 @@ void DeleteAtoms::delete_porosity(int narg, char **arg)
   if (iregion == -1) error->all(FLERR,"Could not find delete_atoms region ID");
 
   double porosity_fraction = force->numeric(FLERR,arg[2]);
-  int seed = force->inumeric(FLERR,arg[3]);
+  RanMars *random = new RanMars(lmp, arg[3], true);
   options(narg-4,&arg[4]);
-
-  RanMars *random = new RanMars(lmp,seed + comm->me);
 
   // allocate and initialize deletion list
 

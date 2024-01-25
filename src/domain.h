@@ -52,13 +52,14 @@
 #ifndef LMP_DOMAIN_H
 #define LMP_DOMAIN_H
 
-#include "math.h"
+#include <cmath>
 #include "pointers.h"
 #include "error.h" 
 #include "comm.h" 
 #include "vector_liggghts.h" 
 #include "neighbor.h" 
 #include "atom.h" 
+#include "math_extra_liggghts.h"
 
 #define SMALL_DMBRDR 1.0e-8 
 
@@ -136,6 +137,8 @@ class Domain : protected Pointers {
   int maxregion;                           // max # list can hold
   class Region **regions;                  // list of defined Regions
 
+  bool is_wedge;
+
   Domain(class LAMMPS *);
   virtual ~Domain();
   virtual void init();
@@ -161,7 +164,7 @@ class Domain : protected Pointers {
   void set_lattice(int, char **);
   void add_region(int, char **);
   void delete_region(int, char **);
-  int find_region(char *);
+  int find_region(const char *);
   virtual void set_boundary(int, char **, int); 
   void set_box(int, char **);
   virtual void print_box(const char *); 
@@ -199,8 +202,6 @@ class Domain : protected Pointers {
   virtual int is_in_extended_subdomain_wedge(double* pos) { UNUSED(pos); return 0; } 
   virtual double dist_subbox_borders_wedge(double* pos) { UNUSED(pos); return 0.; } 
   virtual int is_periodic_ghost_wedge(int i) { UNUSED(i); return 0;} 
-
-  bool is_wedge; 
 
  private:
   double small[3];                  // fractions of box lengths

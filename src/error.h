@@ -59,6 +59,7 @@ namespace LAMMPS_NS {
 class Error : protected Pointers {
  public:
   Error(class LAMMPS *);
+  virtual ~Error();
 
   void universe_all(const char *, int, const char *);
   void universe_one(const char *, int, const char *);
@@ -66,12 +67,17 @@ class Error : protected Pointers {
 
   void all(const char *, int, const char *);
   void fix_error(const char *, int, class Fix*,const char *); 
+  void fix_error(const char *, int, class Fix*,const char *,const char *); 
   void compute_error(const char *, int, class Compute*,const char *); 
   void cg(const char *, int, const char *); 
   void one(const char *, int, const char *);
   void warning(const char *, int, const char *, int = 1);
+  void warningAll(const char *, int, const char *, int = 1);
   void message(const char *, int, const char *, int = 1);
   void done();
+
+ private:
+  class SpecialMessages &specialMessages_;
 };
 
 }

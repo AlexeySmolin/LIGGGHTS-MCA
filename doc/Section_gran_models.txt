@@ -1,4 +1,4 @@
-"Previous Section"_Section_commands.html - "LIGGGHTS(R)-PUBLIC WWW Site"_lws - "LIGGGHTS(R)-PUBLIC Documentation"_ld - "LIGGGHTS(R)-PUBLIC Commands"_lc - "Next Section"_Section_packages.html :c
+"Previous Section"_Section_commands.html - "LIGGGHTS(R)-PUBLIC WWW Site"_liws - "LIGGGHTS(R)-PUBLIC Documentation"_ld - "LIGGGHTS(R)-PUBLIC Commands"_lc - "Next Section"_Section_mesh_modules.html :c
 
 :link(liws,http://www.cfdem.com)
 :link(ld,Manual.html)
@@ -44,7 +44,8 @@ surface commands :h4
 
 Click on the style itself for a full description:
 
-"sphere"_gran_surface_sphere.html :tb(c=4,ea=c)
+"sphere"_gran_surface_sphere.html,
+"superquadric"_gran_surface_superquadric.html :tb(c=4,ea=c)
 
 tangential commands :h4
 

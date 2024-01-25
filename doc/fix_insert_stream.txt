@@ -14,7 +14,7 @@ fix ID group-ID insert/stream seed seed_value distributiontemplate dist-ID gener
 ID, group-ID are documented in "fix"_fix.html command :ulb,l
 insert/stream = style name of this fix command :l
 seed = obligatory keyword :l
-seed_value = random # seed (positive integer) :l
+seed_value = random # seed (prime number greater 1000) :l
 distributiontemplate = obligatory keyword :l
 dist-ID = ID of a "fix_particledistribution_discrete"_fix_particledistribution_discrete.html to be used for particle insertion :l
 one or more general keyword/value pairs can be appended :l
@@ -29,9 +29,9 @@ general_keywords = {verbose} or {maxattampt} or {nparticles} or {mass} or {parti
     mp = mass of particles to be inserted (positive float)
     INF =  insert as many particles as possible
   {particlerate} values = pr
-    pr = particle inseration rate (particles/time units)
+    pr = particle insertion rate (particles/time units)
   {massrate} values = mr
-    mr = mass inseration rate (mass/time units)
+    mr = mass insertion rate (mass/time units)
   {insert_every} value = ie
     ie = every how many time-steps particles are inserted - insertion happens periodically (positive integer)
   {start} value = ts
@@ -39,6 +39,7 @@ general_keywords = {verbose} or {maxattampt} or {nparticles} or {mass} or {parti
   {overlapcheck} value = yes or no
   {all_in} value = yes or no
   {random_distribute} value = exact or uncorrelated
+  {compress_tags} value = yes or no
   {vel constant} values = vx vy vz
     vx = x-velocity at insertion (velocity units)
     vy = y-velocity at insertion (velocity units)
@@ -57,16 +58,18 @@ general_keywords = {verbose} or {maxattampt} or {nparticles} or {mass} or {parti
     vFluctx = standard deviation of Gaussian x-velocity fluctuation at insertion (velocity units)
     vFlucty = standard deviation of Gaussian y-velocity fluctuation at insertion (velocity units)
     vFluctz = standard deviation of Gaussian z-velocity fluctuation at insertion (velocity units)
-  {orientation} values = random or template
+  {orientation} values = random or template or constant q1 q2 q3 q4
     random = randomize rotational orientation
     template = use orientation from particle template
+    constant = use constant quaternion for orientation
+    q1 q2 q3 q4 = quaternion values for constant orientation
   {omega} values = constant omegax omegay omegaz
     constant = obligatory word
-    omegax = x-comonent of angular velocity (1/time units)
-    omegay = y-comonent of angular velocity (1/time units)
-    omegaz = z-comonent of angular velocity (1/time units)
-  {set_property} values = property-ID val
-    property-ID = ID of a "fix property/atom"_fix_property.html holding a scalar value for each particle
+    omegax = x-component of angular velocity (1/time units)
+    omegay = y-component of angular velocity (1/time units)
+    omegaz = z-component of angular velocity (1/time units)
+  {set_property} values = property-varname val
+    property-varname = variable name of a "fix property/atom"_fix_property.html holding a scalar value for each particle
     val = value to initialize the property with upon insertion  :pre
 
 following the general keyword/value section, one or more stream keyword/value pairs can be appended for the fix insert/stream command :l
@@ -83,7 +86,7 @@ stream_keywords = {duration} or {parallel} or {insertion_face} or {extrude_lengt
 
 [Examples:]
 
-fix ins all insert/stream seed 1001 distributiontemplate pdd1 nparticles 5000 vel constant 0. -0.5 -2. particlerate 1000 overlapcheck yes insertion_face ins_mesh extrude_length 0.6
+fix ins all insert/stream seed 123457 distributiontemplate pdd1 nparticles 5000 vel constant 0. -0.5 -2. particlerate 1000 overlapcheck yes insertion_face ins_mesh extrude_length 0.6
 
 [Description:]
 
@@ -91,7 +94,7 @@ Insert particles into a granular run either once or every few timesteps
 within a specified region until either np particles have been inserted
 or the desired particle mass (mp) has been reached.
 
-The {verbose} keyword controlls whether statistics about particle
+The {verbose} keyword controls whether statistics about particle
 insertion is output to the screen each time particles are inserted.
 
 Each timestep particles are inserted, they are placed randomly inside
@@ -166,7 +169,7 @@ and "fix_particletemplate_sphere"_fix_particletemplate_sphere.html
 command (all of which can also be "all").
 
 The keyword {overlapcheck} controls if overlap is checked for at insertion,
-both within the inserted particle package and with other existig particles.
+both within the inserted particle package and with other existing particles.
 If this option is turned off, insertion will scale very well in parallel,
 otherwise not. Be aware that in case of no overlap check, highly overlapping
 configurations will be produced, so you will have to relax these configurations.
@@ -213,6 +216,15 @@ processes, this can lead to a speed-up of insertion as random number generation
 is more efficient. For cases where the extrusion volume is divided
 among few processes this will impose a small computation overhead.
 
+If keyword {compress_tags} is set to 'yes', then atom IDs are re-assigned
+after each insertion procedure. The default is 'no'. This is typically
+only recommended if some models internally store arrays which have the
+length defined via the max ID of any atom. 
+
+IMPORTANT NOTE: Setting {compress_tags} to 'yes' will result in all contact
+history to be lost at that point in time. External post-processing tools
+will give wrong results because they typically track atoms via their IDs.
+
 The initial velocity and rotational velocity can be controlled via the
 {vel} and {omega} keywords. {vel constant} simply patches a constant
 velocity to the inserted particles, {vel uniform} sets uniformly distributed
@@ -223,6 +235,14 @@ The insertion velocity must be non-zero.
 The {set_property} option can be used to initialize scalar per-particle
 properties such as temperatures, which are stored in a 
 a "fix property/atom"_fix_property.html.
+
+The setting of {compress_tags} will trigger a periodic re-tagging of
+atom ids. This is usefull in case the simulation domain is used to
+model a periodic in and outflow of particles. If this switch is set,
+the global ids of the particles will remain in a certain range,
+and no "holes" in the arrays holding the global atom ids exist.
+IMPORTANT NOTE: This functionality may confuse external tools which 
+perform post-processing based on atom IDs!
 
 [Restart, fix_modify, output, run start/stop, minimize info:]
 
@@ -253,4 +273,5 @@ The insertion face cannot move.
 
 The defaults are maxattempt = 50, all_in = no, overlapcheck = yes
 vel = 0.0 0.0 0.0, omega = 0.0 0.0 0.0, start = next time-step,
-duration = insert_every, random_distribute = exact, parallel = no
+duration = insert_every, random_distribute = exact, parallel = no,
+{compress_tags} = no

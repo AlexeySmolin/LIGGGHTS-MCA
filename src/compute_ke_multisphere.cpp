@@ -38,8 +38,8 @@
     Copyright 2014-     DCS Computing GmbH, Linz
 ------------------------------------------------------------------------- */
 
-#include "mpi.h"
-#include "string.h"
+#include <mpi.h>
+#include <string.h>
 #include "compute_ke_multisphere.h"
 #include "update.h"
 #include "modify.h"
@@ -51,11 +51,11 @@ using namespace LAMMPS_NS;
 
 /* ---------------------------------------------------------------------- */
 
-ComputeKEMultisphere::ComputeKEMultisphere(LAMMPS *lmp, int narg, char **arg) :
-  Compute(lmp, narg, arg),
+ComputeKEMultisphere::ComputeKEMultisphere(LAMMPS *lmp, int &iarg, int narg, char **arg) :
+  Compute(lmp, iarg, narg, arg),
   fix_ms_(0)
 {
-  if (narg != 3) error->compute_error(FLERR,this,"");
+  if (narg != iarg) error->compute_error(FLERR,this,"");
 
   scalar_flag = 1;
   extscalar = 1;
@@ -82,6 +82,5 @@ double ComputeKEMultisphere::compute_scalar()
 {
   invoked_scalar = update->ntimestep;
   scalar = fix_ms_->extract_ke();
-  
   return scalar;
 }

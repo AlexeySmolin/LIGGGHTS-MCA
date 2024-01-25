@@ -49,7 +49,7 @@
 #include "math_extra.h"
 #include "modify.h"
 #include "pair_gran.h"
-#include "stdlib.h"
+#include <stdlib.h>
 
 using namespace LAMMPS_NS;
 using namespace FixConst;
@@ -128,12 +128,20 @@ void FixHeatGran::post_create()
     newarg[14] = "thermalCapacity";
     modify->add_fix(15,(char**)newarg);
   }
+
+  fix_temp = static_cast<FixPropertyAtom*>(modify->find_fix_property("Temp","property/atom","scalar",0,0,style));
+  fix_heatFlux = static_cast<FixPropertyAtom*>(modify->find_fix_property("heatFlux","property/atom","scalar",0,0,style));
+  fix_heatSource = static_cast<FixPropertyAtom*>(modify->find_fix_property("heatSource","property/atom","scalar",0,0,style));
+  fix_directionalHeatFlux = static_cast<FixPropertyAtom*>(modify->find_fix_property("directionalHeatFlux","property/atom","vector",0,0,style));
+
+  if(!fix_temp || !fix_heatFlux || !fix_heatSource || !fix_directionalHeatFlux)
+    error->one(FLERR,"internal error");
 }
 
 /* ---------------------------------------------------------------------- */
 
-void FixHeatGran::updatePtrs(){
-
+void FixHeatGran::updatePtrs()
+{
   Temp = fix_temp->vector_atom;
   vector_atom = Temp; 
 
@@ -147,10 +155,6 @@ void FixHeatGran::updatePtrs(){
 void FixHeatGran::init()
 {
   
-  int n_ms = modify->n_fixes_style("multisphere");
-  if(n_ms > 0)
-    error->fix_error(FLERR,this,"may not be used together with fix multisphere");
-
   if (!atom->radius_flag || !atom->rmass_flag)
     error->fix_error(FLERR,this,"must use a granular atom style ");
 
@@ -172,6 +176,9 @@ void FixHeatGran::init()
   fix_heatSource = static_cast<FixPropertyAtom*>(modify->find_fix_property("heatSource","property/atom","scalar",0,0,style));
   fix_directionalHeatFlux = static_cast<FixPropertyAtom*>(modify->find_fix_property("directionalHeatFlux","property/atom","vector",0,0,style));
 
+  if(!fix_temp || !fix_heatFlux || !fix_heatSource || !fix_directionalHeatFlux)
+    error->one(FLERR,"internal error");
+
   updatePtrs();
 }
 
@@ -192,12 +199,13 @@ void FixHeatGran::initial_integrate(int vflag)
 
   //reset heat flux
   //sources are not reset
-  int *mask = atom->mask;
+  //int *mask = atom->mask;
   int nlocal = atom->nlocal;
 
   for (int i = 0; i < nlocal; i++)
   {
-     if (mask[i] & groupbit)
+
+     //if (mask[i] & groupbit)
      {
         directionalHeatFlux[i][0] = 0.;
         directionalHeatFlux[i][1] = 0.;

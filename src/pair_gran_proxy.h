@@ -70,11 +70,12 @@ public:
   virtual void settings(int nargs, char ** args);
   virtual void init_granular();
   virtual void write_restart_settings(FILE * fp);
-  virtual void read_restart_settings(FILE * fp);
+  virtual void read_restart_settings(FILE * fp, const int major, const int minor);
   virtual void compute_force(int eflag, int vflag, int addflag);
 
-  virtual int bond_history_offset();
+  virtual int get_history_offset(const std::string hname);
   virtual double stressStrainExponent();
+  virtual bool contact_match(const std::string mtype, const std::string model);
 
   virtual int64_t hashcode();
 };

@@ -39,24 +39,26 @@
     Copyright 2009-2012 JKU Linz
 ------------------------------------------------------------------------- */
 
-#include "stdlib.h"
-#include "string.h"
+#include <stdlib.h>
+#include <string.h>
+#include <cmath>
+#include <algorithm>
 #include "region_mesh_tet.h"
 #include "lammps.h"
 #include "bounding_box.h"
-#include "region_neighbor_list.h"
 #include "tri_mesh.h"
 #include "memory.h"
 #include "error.h"
 #include "domain.h"
 #include "vector_liggghts.h"
 #include "mpi_liggghts.h"
-#include "math.h"
 #include "math_extra_liggghts.h"
 #include "input_mesh_tet.h"
 
+// include last to ensure correct macros
+#include "domain_definitions.h"
+
 #define DELTA_TET 1000
-#define BIG 1.e20
 
 using namespace LAMMPS_NS;
 
@@ -65,7 +67,7 @@ using namespace LAMMPS_NS;
 RegTetMesh::RegTetMesh(LAMMPS *lmp, int narg, char **arg) :
   Region(lmp, narg, arg),
   bounding_box_mesh(*new BoundingBox(BIG,-BIG,BIG,-BIG,BIG,-BIG)),
-  neighList(*new RegionNeighborList(lmp)),
+  neighList(*new RegionNeighborList<interpolate_no>(lmp)),
   tri_mesh(*new TriMesh(lmp))
 {
   if(narg < 14) error->all(FLERR,"Illegal region mesh/tet command");
@@ -130,7 +132,7 @@ RegTetMesh::RegTetMesh(LAMMPS *lmp, int narg, char **arg) :
     tri_mesh.useAsInsertionMesh(false);
     build_neighs();
     build_surface();
-    tri_mesh.initalSetup();
+    tri_mesh.initialSetup();
   } else bboxflag = 0;
 
   cmax = 1;
@@ -230,6 +232,7 @@ void RegTetMesh::generate_random_shrinkby_cut(double *pos,double cut,bool subdom
 {
     int ntry = 0;
     bool is_near_surface = false;
+    int barysign = -1;
 
     for(int i = 0; i < nTet; i++)
     {
@@ -249,7 +252,7 @@ void RegTetMesh::generate_random_shrinkby_cut(double *pos,double cut,bool subdom
        {
          int iSurf = surfaces[iTetChosen][is];
          
-         if(tri_mesh.resolveTriSphereContact(-1,iSurf,cut,pos,delta) < 0)
+         if(tri_mesh.resolveTriSphereContact(-1,iSurf,cut,pos,delta,barysign) < 0)
          {
             is_near_surface = true;
             break; 
@@ -267,7 +270,7 @@ void RegTetMesh::generate_random_shrinkby_cut(double *pos,double cut,bool subdom
            {
              int iSurf = surfaces[face_neighs[iTetChosen][iFaceNeigh]][is];
              
-             if(tri_mesh.resolveTriSphereContact(-1,iSurf,cut,pos,delta) < 0)
+             if(tri_mesh.resolveTriSphereContact(-1,iSurf,cut,pos,delta,barysign) < 0)
              {
                 is_near_surface = true;
                 break; 
@@ -286,7 +289,7 @@ void RegTetMesh::generate_random_shrinkby_cut(double *pos,double cut,bool subdom
            {
              int iSurf = surfaces[node_neighs[iTetChosen][iNodeNeigh]][is];
                 
-             if(tri_mesh.resolveTriSphereContact(-1,iSurf,cut,pos,delta) < 0)
+             if(tri_mesh.resolveTriSphereContact(-1,iSurf,cut,pos,delta,barysign) < 0)
              {
                 is_near_surface = true;
                 break; 
@@ -345,7 +348,7 @@ void RegTetMesh::add_tet(double **n)
 
 void RegTetMesh::build_neighs()
 {
-    neighList.clear();
+    neighList.reset();
 
     for(int i = 0; i < nTet; i++)
     {
@@ -359,7 +362,7 @@ void RegTetMesh::build_neighs()
         for(int j = 0; j < 4; j++)
         {
             vectorSubtract3D(center[i],node[i][j],vec);
-            rb = MathExtraLiggghts::max(rb,vectorMag3D(vec));
+            rb = std::max(rb,vectorMag3D(vec));
         }
         rbound[i] = rb;
         if(rb > rbound_max)
@@ -376,6 +379,7 @@ void RegTetMesh::build_neighs()
         vectorZeroizeN(n_face_neighs_node[i],4);
     }
 
+    bool badMesh = false;
     for(int i = 0; i < nTet; i++)
     {
         std::vector<int> overlaps;
@@ -411,7 +415,7 @@ void RegTetMesh::build_neighs()
             {
                 
                 if(100 == n_node_neighs[i])
-                    error->warning(FLERR,"Region mesh/tet: too many node neighbors, mesh is of bad quality; 'all_in' yes might not work correctly");
+                    badMesh = true;
                 else
                 {
                     node_neighs[i][n_node_neighs[i]] = iOverlap;
@@ -419,7 +423,7 @@ void RegTetMesh::build_neighs()
                 }
 
                 if(100 == n_node_neighs[iOverlap])
-                    error->warning(FLERR,"Region mesh/tet: too many node neighbors, mesh is of bad quality; 'all_in yes' might not work correctly");
+                    badMesh = true;
                 else
                 {
                     node_neighs[iOverlap][n_node_neighs[iOverlap]] = i;
@@ -444,11 +448,19 @@ void RegTetMesh::build_neighs()
                 //TODO: worst case: broad phase (wie auf zettel skizziert)
             }
             else
-                error->one(FLERR,"internal error");
+            {
+                
+                char errstr[256];
+
+                sprintf(errstr,"duplicate elements %d and %d in tet for region %s",i,iOverlap,id);
+                error->one(FLERR,errstr);
+            }
         }
 
         neighList.insert(center[i], rbound[i],i);
     }
+    if (badMesh)
+        error->warningAll(FLERR,"Region mesh/tet: too many node neighbors, mesh is of bad quality; 'all_in yes' might not work correctly");
 
     for(int i = 0; i < nTet; i++)
     {

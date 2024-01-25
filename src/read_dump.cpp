@@ -48,9 +48,10 @@
 ------------------------------------------------------------------------- */
 
 #include "lmptype.h"
-#include "mpi.h"
-#include "string.h"
-#include "stdlib.h"
+#include <mpi.h>
+#include <string.h>
+#include <stdlib.h>
+#include "dirent.h"
 #include "read_dump.h"
 #include "reader.h"
 #include "style_reader.h"
@@ -72,7 +73,7 @@ using namespace LAMMPS_NS;
 
 // also in reader_native.cpp
 
-enum{ID,TYPE,X,Y,Z,VX,VY,VZ,Q,IX,IY,IZ};
+enum{ID,TYPE,X,Y,Z,VX,VY,VZ,OMEGAX,OMEGAY,OMEGAZ,Q,IX,IY,IZ,RADIUS,MASS,DENSITY,FX,FY,FZ};
 enum{UNSET,NOSCALE_NOWRAP,NOSCALE_WRAP,SCALE_NOWRAP,SCALE_WRAP};
 
 /* ---------------------------------------------------------------------- */
@@ -201,6 +202,13 @@ void ReadDump::command(int narg, char **arg)
 
 void ReadDump::store_files(int nstr, char **str)
 {
+  
+  if(strrchr(str[0],'*'))
+  {
+    file_search(str[0]);
+    return;
+  }
+
   nfile = nstr;
   files = new char*[nfile];
 
@@ -209,6 +217,117 @@ void ReadDump::store_files(int nstr, char **str)
     files[i] = new char[n];
     strcpy(files[i],str[i]);
   }
+}
+
+/* ----------------------------------------------------------------------
+   infile contains a "*"
+   search for all files which match the infile pattern
+   replace "*" with any timestep value
+   search dir referenced by initial pathname of file
+------------------------------------------------------------------------- */
+
+void ReadDump::file_search(char *infile)
+{
+  char *ptr;
+
+  files = new char*[10000];
+  int *middle_index = new int[10000];
+
+  // separate infile into dir + filename
+
+  char *dirname = new char[strlen(infile) + 1];
+  char *filename = new char[strlen(infile) + 1];
+
+  if (strchr(infile,'/')) {
+    ptr = strrchr(infile,'/');
+    *ptr = '\0';
+    strcpy(dirname,infile);
+    strcpy(filename,ptr+1);
+    *ptr = '/';
+  } else {
+    strcpy(dirname,"./");
+    strcpy(filename,infile);
+  }
+
+  char *pattern = new char[strlen(filename) + 1];
+  strcpy(pattern,filename);
+
+  // scan all files in directory, searching for files that match pattern
+  // maxnum = largest int that matches "*"
+
+  size_t n = strlen(pattern) + 16; 
+  char *begin = new char[n];
+  char *middle = new char[n];
+  char *end = new char[n];
+
+  ptr = strchr(pattern,'*');
+  *ptr = '\0';
+  strcpy(begin,pattern);
+  strcpy(end,ptr+1);
+  int nbegin = strlen(begin);
+  nfile = 0;
+
+  struct dirent *ep;
+  DIR *dp = opendir(dirname);
+  if (dp == NULL)
+    error->one(FLERR,"Cannot open dir to search for dump file");
+
+  while ((ep = readdir(dp))) { 
+    if (strstr(ep->d_name,begin) != ep->d_name) continue;
+    if ((ptr = strstr(&ep->d_name[nbegin],end)) == NULL) continue;
+    if (strlen(end) == 0) ptr = ep->d_name + strlen(ep->d_name);
+    *ptr = '\0';
+    if (strlen(&ep->d_name[nbegin]) < n) {
+      strcpy(middle,&ep->d_name[nbegin]);
+
+      nfile++;
+
+      if(nfile >= 10000)
+        error->one(FLERR,"Currently max. 10000 dump files matching pattern can be read");
+
+      files[nfile-1] = new char[strlen(filename) + 16];
+      middle_index[nfile-1] = atoi(middle);
+      sprintf(files[nfile-1],"%s/%s%s%s",dirname,begin,middle,end);
+      
+    }
+  }
+  closedir(dp);
+  if (nfile <= 0) error->one(FLERR,"Found no dump file matching pattern");
+
+  bool swaped;
+  int nswaps_left = nfile;
+  do
+  {
+      swaped = false;
+      for(int i = 0; i < nfile-1; i++)
+      {
+          if(middle_index[i] > middle_index[i+1])
+          {
+            //swap
+            char swapper[512];
+            strcpy(swapper,files[i+1]);
+            strcpy(files[i+1],files[i]);
+            strcpy(files[i],swapper);
+
+            int swapper_i = middle_index[i+1];
+            middle_index[i+1] = middle_index[i];
+            middle_index[i] = swapper_i;
+
+            swaped = true;
+          }
+      }
+      nswaps_left--;
+  } while(swaped && nswaps_left > 0);
+
+  // clean up
+
+  delete [] dirname;
+  delete [] filename;
+  delete [] pattern;
+  delete [] begin;
+  delete [] middle;
+  delete [] end;
+  delete [] middle_index;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -609,7 +728,9 @@ int ReadDump::fields_and_keywords(int narg, char **arg)
 
   nfield = 0;
   fieldtype[nfield++] = ID;
-  if (iarg < narg) fieldtype[nfield++] = TYPE;
+  /*if (iarg < narg)*/ fieldtype[nfield++] = TYPE; 
+
+  bool radius_present = false;
 
   // parse fields
 
@@ -621,17 +742,53 @@ int ReadDump::fields_and_keywords(int narg, char **arg)
     else if (strcmp(arg[iarg],"vx") == 0) fieldtype[nfield++] = VX;
     else if (strcmp(arg[iarg],"vy") == 0) fieldtype[nfield++] = VY;
     else if (strcmp(arg[iarg],"vz") == 0) fieldtype[nfield++] = VZ;
+    else if (strcmp(arg[iarg],"omegax") == 0) {
+      if (!atom->omega_flag)
+        error->all(FLERR,"Read dump of atom property omegax that isn't allocated");
+      fieldtype[nfield++] = OMEGAX;
+    }
+    else if (strcmp(arg[iarg],"omegay") == 0) {
+      if (!atom->omega_flag)
+        error->all(FLERR,"Read dump of atom property omegay that isn't allocated");
+      fieldtype[nfield++] = OMEGAY;
+    }
+    else if (strcmp(arg[iarg],"omegaz") == 0) {
+      if (!atom->omega_flag)
+        error->all(FLERR,"Read dump of atom property omegaz that isn't allocated");
+      fieldtype[nfield++] = OMEGAZ;
+    }
     else if (strcmp(arg[iarg],"q") == 0) {
       if (!atom->q_flag)
         error->all(FLERR,"Read dump of atom property that isn't allocated");
       fieldtype[nfield++] = Q;
     }
+    else if (strcmp(arg[iarg],"radius") == 0) {
+      if (!atom->radius_flag)
+        error->all(FLERR,"Read dump of atom property that isn't allocated");
+      fieldtype[nfield++] = RADIUS;
+      radius_present = true;
+    }
+    else if (strcmp(arg[iarg],"mass") == 0) {
+      if (!atom->rmass_flag)
+        error->all(FLERR,"Read dump of atom property that isn't allocated");
+      fieldtype[nfield++] = MASS;
+    }
+    else if (strcmp(arg[iarg],"density") == 0) {
+      if (!atom->density_flag)
+        error->all(FLERR,"Read dump of atom property that isn't allocated");
+      fieldtype[nfield++] = DENSITY;
+    }
     else if (strcmp(arg[iarg],"ix") == 0) fieldtype[nfield++] = IX;
     else if (strcmp(arg[iarg],"iy") == 0) fieldtype[nfield++] = IY;
     else if (strcmp(arg[iarg],"iz") == 0) fieldtype[nfield++] = IZ;
+    else if (strcmp(arg[iarg],"fx") == 0) fieldtype[nfield++] = FX;
+    else if (strcmp(arg[iarg],"fy") == 0) fieldtype[nfield++] = FY;
+    else if (strcmp(arg[iarg],"fz") == 0) fieldtype[nfield++] = FZ;
     else break;
     iarg++;
   }
+
+  if (!radius_present) error->all(FLERR,"read_dump: the radius field is required to be read");
 
   // check for no fields
 
@@ -721,7 +878,10 @@ int ReadDump::fields_and_keywords(int narg, char **arg)
       strcpy(readerstyle,arg[iarg+1]);
       iarg += 2;
       break;
-    } else error->all(FLERR,"Illegal read_dump command");
+    } else {
+      
+      error->all(FLERR,"Illegal read_dump command");
+    }
   }
 
   if (purgeflag && (replaceflag || trimflag))
@@ -747,7 +907,12 @@ void ReadDump::process_atoms(int n)
 
   double **x = atom->x;
   double **v = atom->v;
+  double **f = atom->f;
+  double **omega = atom->omega;
   double *q = atom->q;
+  double *radius = atom->radius;
+  double *rmass= atom->rmass;
+  double *density= atom->density;
   tagint *image = atom->image;
   int nlocal = atom->nlocal;
   int map_tag_max = atom->map_tag_max;
@@ -792,14 +957,32 @@ void ReadDump::process_atoms(int n)
         case VX:
           v[m][0] = fields[i][ifield];
           break;
-        case Q:
-          q[m] = fields[i][ifield];
-          break;
         case VY:
           v[m][1] = fields[i][ifield];
           break;
         case VZ:
           v[m][2] = fields[i][ifield];
+          break;
+        case OMEGAX:
+          omega[m][0] = fields[i][ifield];
+          break;
+        case OMEGAY:
+          omega[m][1] = fields[i][ifield];
+          break;
+        case OMEGAZ:
+          omega[m][2] = fields[i][ifield];
+          break;
+        case Q:
+          q[m] = fields[i][ifield];
+          break;
+        case RADIUS:
+          radius[m] = fields[i][ifield];
+          break;
+        case MASS:
+          rmass[m] = fields[i][ifield];
+          break;
+        case DENSITY:
+          density[m] = fields[i][ifield];
           break;
         case IX:
           xbox = static_cast<int> (fields[i][ifield]);
@@ -809,6 +992,15 @@ void ReadDump::process_atoms(int n)
           break;
         case IZ:
           zbox = static_cast<int> (fields[i][ifield]);
+          break;
+        case FX:
+          f[m][0] = fields[i][ifield];
+          break;
+        case FY:
+          f[m][1] = fields[i][ifield];
+          break;
+        case FZ:
+          f[m][2] = fields[i][ifield];
           break;
         }
       }
@@ -872,7 +1064,12 @@ void ReadDump::process_atoms(int n)
     nadd++;
 
     v = atom->v;
+    f = atom->f;
+    omega = atom->omega;
     q = atom->q;
+    radius = atom->radius;
+    rmass = atom->rmass;
+    density = atom->density;
     image = atom->image;
 
     // set atom attributes from other dump file fields
@@ -890,8 +1087,26 @@ void ReadDump::process_atoms(int n)
       case VZ:
         v[m][2] = fields[i][ifield];
         break;
+      case OMEGAX:
+        omega[m][0] = fields[i][ifield];
+        break;
+      case OMEGAY:
+        omega[m][1] = fields[i][ifield];
+        break;
+      case OMEGAZ:
+        omega[m][2] = fields[i][ifield];
+        break;
       case Q:
         q[m] = fields[i][ifield];
+        break;
+      case RADIUS:
+        radius[m] = fields[i][ifield];
+        break;
+      case MASS:
+        rmass[m] = fields[i][ifield];
+        break;
+      case DENSITY:
+        density[m] = fields[i][ifield];
         break;
       case IX:
         xbox = static_cast<int> (fields[i][ifield]);
@@ -901,6 +1116,15 @@ void ReadDump::process_atoms(int n)
         break;
       case IZ:
         zbox = static_cast<int> (fields[i][ifield]);
+        break;
+      case FX:
+        f[m][0] = fields[i][ifield];
+        break;
+      case FY:
+        f[m][1] = fields[i][ifield];
+        break;
+      case FZ:
+        f[m][2] = fields[i][ifield];
         break;
       }
 

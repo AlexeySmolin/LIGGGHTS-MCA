@@ -36,6 +36,7 @@
     Christoph Kloss (DCS Computing GmbH, Linz)
     Christoph Kloss (JKU Linz)
     Philippe Seil (JKU Linz)
+    Tóth János (MATE, Gödöllő)
 
     Copyright 2012-     DCS Computing GmbH, Linz
     Copyright 2009-2012 JKU Linz
@@ -48,12 +49,16 @@
 #ifndef LMP_FIX_MESH_H
 #define LMP_FIX_MESH_H
 
-#include "fix.h"
+#include "fix_base_liggghts.h"
+#include "fix_move_mesh.h"
+#include "abstract_mesh.h"
+#include <list>
+#include "input_mesh_tri.h"
 
 namespace LAMMPS_NS
 {
-  class FixMesh : public Fix
-  {
+    class FixMesh : public FixBaseLiggghts
+    {
       public:
 
         FixMesh(LAMMPS *lmp, int narg, char **arg);
@@ -63,7 +68,7 @@ namespace LAMMPS_NS
         virtual void pre_delete(bool unfixflag);
 
         virtual void init();
-        virtual void setup(int vflag) {}
+        virtual void setup(int vflag);
 
         virtual int setmask();
         void setup_pre_force(int);
@@ -80,11 +85,18 @@ namespace LAMMPS_NS
         int min_type();
         int max_type();
 
+        void resetNodePosOrig(const FixMoveMesh * const caller);
+        void move(const double * const dx, const FixMoveMesh * const caller);
+        void rotate(const double dphi, const double * const axis, const double * const center, const FixMoveMesh * const caller);
+
         class AbstractMesh* mesh()
         { return mesh_; }
 
         virtual bool surfaceVel()
         { return false; }
+
+        inline bool trackPerElementTemp()
+        { return trackPerElementTemp_; }
 
         bool manipulated()
         { return manipulated_; }
@@ -92,21 +104,42 @@ namespace LAMMPS_NS
         bool verbose()
         { return verbose_; }
 
+        void register_move(FixMoveMesh * toInsert)
+        { fixMoveMeshes_.push_back(toInsert); }
+
+        void unregister_move(const FixMoveMesh * const toDelete)
+        {
+            std::list<FixMoveMesh *>::iterator it;
+            for (it = fixMoveMeshes_.begin(); it != fixMoveMeshes_.end(); it++)
+            {
+                if (*it == toDelete)
+                {
+                    fixMoveMeshes_.erase(it);
+                    return;
+                }
+            }
+        }
+
       protected:
 
         // mesh manipulation upon creation
         virtual void moveMesh(double const dx, double const dy, double const dz);
+
         virtual void rotateMesh(double const axisX, double const axisY, double const axisZ, double const phi);
         virtual void scaleMesh(double const factor);
 
-        void create_mesh(char *mesh_fname);
-        void create_mesh_restart();
+        void create_mesh(const char *mesh_file_or_generator_type, bool is_fix);
+        void create_mesh_restart(const char *mesh_file_or_generator_type);
+        InputMeshTri::GeneratedType generator_type(const char * type);
 
         int iarg_;
 
         int atom_type_mesh_;
 
+        double temperature_mesh_;
         double mass_temperature_;
+
+        bool trackPerElementTemp_;
 
       private:
 
@@ -132,6 +165,9 @@ namespace LAMMPS_NS
         // mesh precision
         double precision_;
 
+        // ignore features smaller than this size
+        double min_feature_length_;
+
         // mesh correction
         FILE *element_exclusion_list_;
         bool read_exclusion_list_;
@@ -139,7 +175,18 @@ namespace LAMMPS_NS
         int size_exclusion_list_;
 
         class FixPropertyGlobal *fix_capacity_;
-  };
+
+        std::list<FixMoveMesh *> fixMoveMeshes_;
+
+        // this friend class needs access to the moveMesh function
+        friend class MeshModuleStress6DOF;
+        friend class MeshModuleStress6DOFexternal;
+
+        void parse_and_consume_generator_args(int *start_arg, int narg, char **args);
+        bool is_valid_generator_type(const char * type);
+
+        InputMeshTri::GeneratorParameters gen_params_;
+    };
 
 } /* namespace LAMMPS_NS */
 

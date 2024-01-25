@@ -44,10 +44,10 @@ Thanks to Chris Stoltz (P&G) for providing
 a Fortran version of the MC integrator
 ------------------------------------------------------------------------- */
 
-#include "math.h"
-#include "stdio.h"
-#include "stdlib.h"
-#include "string.h"
+#include <cmath>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "fix_template_multisphere.h"
 #include "math_extra.h"
 #include "math_extra_liggghts.h"
@@ -75,12 +75,8 @@ using namespace LAMMPS_NS;
 using namespace LMP_PROBABILITY_NS;
 using namespace FixConst;
 
-#define LARGE 1e8
 #define EPSILON 1.0e-7
 #define TOLERANCE 1.0e-6
-
-#define MAXJACOBI 50
-#define BIG 1.e20
 
 /* ---------------------------------------------------------------------- */
 
@@ -144,23 +140,24 @@ FixTemplateMultisphere::FixTemplateMultisphere(LAMMPS *lmp, int narg, char **arg
         } else if(strcmp(arg[iarg],"fflag") == 0) {
             if (iarg+4 > narg)
                 error->fix_error(FLERR,this,"not enough arguments for 'fflag'");
-            if(strcmp(arg[iarg],"on"))
+            iarg++;
+            if(strcmp(arg[iarg],"on") == 0)
                 fflag_[0] = true;
-            else if(strcmp(arg[iarg],"off"))
+            else if(strcmp(arg[iarg],"off") == 0)
                 fflag_[0] = false;
             else
                 error->fix_error(FLERR,this,"expecting 'on or 'off' after 'fflag'");
             iarg++;
-            if(strcmp(arg[iarg],"on"))
+            if(strcmp(arg[iarg],"on") == 0)
                 fflag_[1] = true;
-            else if(strcmp(arg[iarg],"off"))
+            else if(strcmp(arg[iarg],"off") == 0)
                 fflag_[1] = false;
             else
                 error->fix_error(FLERR,this,"expecting 'on or 'off' after 'fflag'");
             iarg++;
-            if(strcmp(arg[iarg],"on"))
+            if(strcmp(arg[iarg],"on") == 0)
                 fflag_[2] = true;
-            else if(strcmp(arg[iarg],"off"))
+            else if(strcmp(arg[iarg],"off") == 0)
                 fflag_[2] = false;
             else
                 error->fix_error(FLERR,this,"expecting 'on or 'off' after 'fflag'");
@@ -168,27 +165,28 @@ FixTemplateMultisphere::FixTemplateMultisphere(LAMMPS *lmp, int narg, char **arg
             hasargs = true;
         } else if(strcmp(arg[iarg],"tflag") == 0) {
             if (iarg+4 > narg)
-                error->fix_error(FLERR,this,"not enough arguments for 'fflag'");
-            if(strcmp(arg[iarg],"on"))
+                error->fix_error(FLERR,this,"not enough arguments for 'tflag'");
+            iarg++;
+            if(strcmp(arg[iarg],"on") == 0)
                 tflag_[0] = true;
-            else if(strcmp(arg[iarg],"off"))
+            else if(strcmp(arg[iarg],"off") == 0)
                 tflag_[0] = false;
             else
-                error->fix_error(FLERR,this,"expecting 'on or 'off' after 'fflag'");
+                error->fix_error(FLERR,this,"expecting 'on or 'off' after 'tflag'");
             iarg++;
-            if(strcmp(arg[iarg],"on"))
+            if(strcmp(arg[iarg],"on") == 0)
                 tflag_[1] = true;
-            else if(strcmp(arg[iarg],"off"))
+            else if(strcmp(arg[iarg],"off") == 0)
                 tflag_[1] = false;
             else
-                error->fix_error(FLERR,this,"expecting 'on or 'off' after 'fflag'");
+                error->fix_error(FLERR,this,"expecting 'on or 'off' after 'tflag'");
             iarg++;
-            if(strcmp(arg[iarg],"on"))
+            if(strcmp(arg[iarg],"on") == 0)
                 tflag_[2] = true;
-            else if(strcmp(arg[iarg],"off"))
+            else if(strcmp(arg[iarg],"off") == 0)
                 tflag_[2] = false;
             else
-                error->fix_error(FLERR,this,"expecting 'on or 'off' after 'fflag'");
+                error->fix_error(FLERR,this,"expecting 'on or 'off' after 'tflag'");
             iarg++;
             hasargs = true;
         } else if(strcmp(arg[iarg],"inertia_tensor") == 0) {
@@ -212,7 +210,7 @@ FixTemplateMultisphere::FixTemplateMultisphere(LAMMPS *lmp, int narg, char **arg
     }
 
     // check if type has been defined
-    if(type_ < 1)
+    if(!lmp->wb && type_ < 1)
         error->fix_error(FLERR,this,"have to provide a type >=1");
 
     if((mass_set_ && !moi_set_) || (!mass_set_ && moi_set_))
@@ -229,7 +227,7 @@ void FixTemplateMultisphere::post_create()
   // bounding sphere, center of mass calculations in mother class
   // calculate inertia_ tensor and its eigensystem
 
-  // use density and volume from MC; mass calculated
+  // use density from input script and volume from MC; mass calculated
   if(!mass_set_)
   {
       // bounding sphere and center of mass
@@ -259,7 +257,7 @@ void FixTemplateMultisphere::post_create()
       calc_eigensystem();
       calc_displace_xcm_x_body();
   }
-  // use density specified and mass specified; volume calculated
+  // use density specified in input script  and mass specified in input script ; volume calculated
   else
   {
       calc_bounding_sphere();
@@ -274,6 +272,8 @@ void FixTemplateMultisphere::post_create()
       r_equiv = pow(6.*mass_expect/(8.*expectancy(pdf_density)*M_PI),1./3.);
       
   }
+
+  calc_volumeweight();
 
   print_info();
 }
@@ -304,18 +304,18 @@ void FixTemplateMultisphere::init()
         for(int j = i+1; j < n_fixes; j++)
         {
             ftms_j = static_cast<FixTemplateMultisphere*>(modify->find_fix_style_strict(style,j));
-            if(ftms_j != ftms_i && type_i == ftms_j->type())
+            if(!lmp->wb && ftms_j != ftms_i && type_i == ftms_j->type())
                 error->fix_error(FLERR,this,"multisphere template types have to be unique");
         }
     }
 
     // types are consecutive if no double usage and min/max is met
-    if(type_min != 1 || type_max != n_fixes)
+    if(!lmp->wb &&  (type_min != 1 || type_max != n_fixes))
         error->fix_error(FLERR,this,"multisphere template types have to be consecutive starting from 1");
 
     FixMultisphere *fix_multisphere = static_cast<FixMultisphere*>(modify->find_fix_style("multisphere", 0));
-    if(fix_multisphere && fix_multisphere->igroup != igroup)
-        error->fix_error(FLERR,this,"Fix particletemplate/multisphere command and fix multisphere command are not compatible, must be same group");
+    if(fix_multisphere && (fix_multisphere->groupbit & groupbit) == 0)
+        error->fix_error(FLERR,this,"Fix particletemplate/multisphere command and fix multisphere command are not compatible, must be member of the same group");
 }
 
 /* ----------------------------------------------------------------------
@@ -327,53 +327,51 @@ void FixTemplateMultisphere::calc_volumeweight()
 {
     double x_try[3],distSqr,n_hits;
 
-    int *hits_j = new int[nspheres];
-    int *hits_only_j = new int[nspheres];
+    bool *hits_j = new bool[nspheres];
 
-    vectorZeroizeN(hits_j,nspheres);
-    vectorZeroizeN(hits_only_j,nspheres);
+    vectorZeroizeN(volumeweight_,nspheres);
 
     // volumeweight_ = 0.5 + 0.5 * hits only in j / hits in j
 
+    int hits_tot = 0;
     for(int i = 0; i < ntry; i++)
     {
         generate_xtry(x_try);
         n_hits = 0;
+        vectorInitializeN(hits_j,nspheres,false);
 
         for(int j = 0; j < nspheres; j++)
         {
             distSqr = dist_sqr(j,x_try);
             if(distSqr < r_sphere[j]*r_sphere[j])
             {
-                hits_j[j]++;
+                hits_j[j] = true;
                 n_hits++;
             }
         }
 
-        if(n_hits == 1)
+        for(int j = 0; j < nspheres; j++)
         {
-            for(int j = 0; j < nspheres; j++)
-            {
-                distSqr = dist_sqr(j,x_try);
-                if(distSqr < r_sphere[j]*r_sphere[j])
-                {
-                    hits_only_j[j]++;
-                    n_hits++;
-                }
-            }
+            if(hits_j[j])
+                volumeweight_[j] += 1./static_cast<double>(n_hits);
         }
+
+        if (n_hits > 0)
+            hits_tot++;
     }
 
     // calculate volume weight
-    for(int j = 0; j < nspheres; j++)
-        volumeweight_[j] = 0.5 + 0.5 * hits_only_j[j]/hits_j[j];
+    if (hits_tot > 0) {
+        const double hits_tot_inv = 1./static_cast<double>(hits_tot);
+        for(int j = 0; j < nspheres; j++)
+            volumeweight_[j] *= hits_tot_inv;
+    }
 
     delete []hits_j;
-    delete []hits_only_j;
 }
 
 /* ----------------------------------------------------------------------
-   calc inertia_ tensor
+   calc inertia tensor
 ------------------------------------------------------------------------- */
 
 void FixTemplateMultisphere::calc_inertia()
@@ -427,9 +425,8 @@ void FixTemplateMultisphere::calc_inertia()
   moi_[1][0] = moi_[0][1];
   moi_[0][2] = (moi_[0][2]+moi_[2][0])/2.;
   moi_[2][0] = moi_[0][2];
-  moi_[2][1] = (moi_[2][1]+moi_[2][0])/2.;
+  moi_[2][1] = (moi_[2][1]+moi_[1][2])/2.;
   moi_[1][2] = moi_[2][1];
-
 }
 
 /* ----------------------------------------------------------------------
@@ -536,7 +533,7 @@ FixTemplateMultisphere::~FixTemplateMultisphere()
 void FixTemplateMultisphere::randomize_single()
 {
   
-  pti->nspheres = nspheres;
+  pti->nparticles = nspheres;
   pti->density_ins = expectancy(pdf_density);;
   pti->volume_ins = volume_expect;
   pti->mass_ins = mass_expect;
@@ -551,6 +548,7 @@ void FixTemplateMultisphere::randomize_single()
   for(int j = 0; j < nspheres; j++)
   {
       pti_m->radius_ins[j] = r_sphere[j];
+      pti_m->volumeweight[j] = volumeweight_[j];
       vectorCopy3D(x_sphere[j],pti_m->x_ins[j]);
       vectorCopy3D(displace_[j],pti_m->displace[j]);
   }
@@ -564,7 +562,7 @@ void FixTemplateMultisphere::randomize_single()
   vectorCopy3D(xcm_to_xb_body_,pti_m->xcm_to_xbound);
 
   vectorZeroize3D(pti_m->xcm_ins);
-  quatUnitize4D(pti_m->quat_ins);
+  quatIdentity4D(pti_m->quat_ins);
   vectorZeroize3D(pti_m->v_ins);
   vectorZeroize3D(pti_m->omega_ins);
 
@@ -575,7 +573,7 @@ void FixTemplateMultisphere::randomize_single()
 
 /* ----------------------------------------------------------------------*/
 
-void FixTemplateMultisphere::init_ptilist(int n_random_max)
+void FixTemplateMultisphere::init_ptilist(int n_random_max, const bool enforce_single, FixPropertyAtom * const fix_release)
 {
     n_pti_max = n_random_max;
     pti_list = (ParticleToInsert**) memory->smalloc(n_pti_max*sizeof(ParticleToInsert*),"pti_list");
@@ -610,7 +608,7 @@ void FixTemplateMultisphere::randomize_ptilist(int n_random,int distribution_gro
           
           ParticleToInsertMultisphere *pti_m = static_cast<ParticleToInsertMultisphere*>(pti_list[i]);
 
-          pti_m->nspheres = nspheres;
+          pti_m->nparticles = nspheres;
           pti_m->density_ins = expectancy(pdf_density);
           pti_m->type_ms = type_;
           pti_m->volume_ins = volume_expect;
@@ -622,6 +620,7 @@ void FixTemplateMultisphere::randomize_ptilist(int n_random,int distribution_gro
           for(int j = 0; j < nspheres; j++)
           {
               pti_m->radius_ins[j] = r_sphere[j];
+              pti_m->volumeweight[j] = volumeweight_[j];
               vectorCopy3D(x_sphere[j],pti_m->x_ins[j]);
               vectorCopy3D(displace_[j],pti_m->displace[j]);
           }
@@ -635,7 +634,7 @@ void FixTemplateMultisphere::randomize_ptilist(int n_random,int distribution_gro
           vectorCopy3D(xcm_to_xb_body_,pti_m->xcm_to_xbound);
 
           vectorZeroize3D(pti_m->xcm_ins);
-          quatUnitize4D(pti_m->quat_ins);
+          quatIdentity4D(pti_m->quat_ins);
           vectorZeroize3D(pti_m->v_ins);
           vectorZeroize3D(pti_m->omega_ins);
 

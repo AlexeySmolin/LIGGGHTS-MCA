@@ -45,7 +45,7 @@
 
 // Park/Miller RNG
 
-#include "math.h"
+#include <cmath>
 #include "random_park.h"
 #include "error.h"
 
@@ -59,11 +59,11 @@ using namespace LAMMPS_NS;
 
 /* ---------------------------------------------------------------------- */
 
-RanPark::RanPark(LAMMPS *lmp, int seed_init) : Pointers(lmp)
+RanPark::RanPark(LAMMPS *lmp, const char * seed_char, bool proc_shift, int multiplier) :
+    Random(lmp, seed_char, proc_shift, multiplier)
 {
-  if (seed_init <= 0)
+  if (seed <= 0)
     error->one(FLERR,"Invalid seed for Park random # generator");
-  seed = seed_init;
   save = 0;
 }
 
@@ -73,11 +73,10 @@ RanPark::RanPark(LAMMPS *lmp, int seed_init) : Pointers(lmp)
 
 double RanPark::uniform()
 {
-  int k = seed/IQ;
+  const int k = seed/IQ;
   seed = IA*(seed-k*IQ) - IR*k;
   if (seed < 0) seed += IM;
-  double ans = AM*seed;
-  return ans;
+  return AM*seed;
 }
 
 /* ----------------------------------------------------------------------
@@ -125,13 +124,11 @@ void RanPark::reset(int seed_init)
 
 void RanPark::reset(int ibase, double *coord)
 {
-  int i;
-
   char *str = (char *) &ibase;
   int n = sizeof(int);
 
   unsigned int hash = 0;
-  for (i = 0; i < n; i++) {
+  for (int i = 0; i < n; i++) {
     hash += str[i];
     hash += (hash << 10);
     hash ^= (hash >> 6);
@@ -139,7 +136,7 @@ void RanPark::reset(int ibase, double *coord)
 
   str = (char *) coord;
   n = 3 * sizeof(double);
-  for (i = 0; i < n; i++) {
+  for (int i = 0; i < n; i++) {
     hash += str[i];
     hash += (hash << 10);
     hash ^= (hash >> 6);
@@ -157,7 +154,7 @@ void RanPark::reset(int ibase, double *coord)
 
   // warm up the RNG
 
-  for (i = 0; i < 5; i++) uniform();
+  for (int i = 0; i < 5; i++) uniform();
   save = 0;
 }
 

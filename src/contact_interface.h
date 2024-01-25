@@ -46,7 +46,13 @@
 #define CONTACT_INTERFACE_H_
 
 #include <string>
-#include "superquadric_flag.h"
+
+// forward declaration
+namespace LAMMPS_NS
+{
+class TriMesh;
+class FixMeshSurface;
+}
 
 namespace LIGGGHTS {
 namespace ContactModels {
@@ -58,63 +64,78 @@ struct SurfacesCloseData {
   double radj;
   double radsum;
   double rsq;
-  double delta[3];
+  double delta[3];  
 
   double area_ratio;
 
   int *contact_flags;
   double *contact_history;
+  LAMMPS_NS::TriMesh *mesh;
+  LAMMPS_NS::FixMeshSurface *fix_mesh;
 
   int i;
   int j;
+  int itype;
+  int jtype;
 
   bool is_wall;
   bool has_force_update;
 
-#ifdef SUPERQUADRIC_ACTIVE_FLAG
-  double *quat_i; //quaternion of i-th particle
-  double *quat_j; //quaternion of j-th particle
-  double *shape_i; //shape parameters of i-th particle (a,b,c)
-  double *shape_j; //shape parameters of j-th particle (a,b,c)
-  double *roundness_i; //roundness parameters of i-th particle (eps1, eps2)
-  double *roundness_j; //roundness parameters of j-th particle (eps1, eps2)
-  double contact_point[3];
-  double *pos_i;
-  double *pos_j;
-  double *inertia_i;
-  double *inertia_j;
+  double * v_i;
+  double * v_j;
+
+  double * omega_i;
+  double * omega_j;
+
   bool is_non_spherical;
-  double koefi;
-  double koefj;
-  SurfacesCloseData() : area_ratio(1.0),
-                        quat_i(NULL),
-                        quat_j(NULL),
-                        shape_i(NULL),
-                        shape_j(NULL),
-                        roundness_i(NULL),
-                        roundness_j(NULL),
-                        pos_i(NULL),
-                        pos_j(NULL),
-                        inertia_i(NULL),
-                        inertia_j(NULL),
-                        is_non_spherical(false),
-                        koefi(0.0),
-                        koefj(0.0) {}
-#else
-  SurfacesCloseData() : area_ratio(1.0) {}
+
+#ifdef NONSPHERICAL_ACTIVE_FLAG
+  double contact_point[3];
 #endif
+
+#ifdef SUPERQUADRIC_ACTIVE_FLAG
+  double reff;
+#endif
+
+  int computeflag;
+  int shearupdate;
+
+  SurfacesCloseData() :
+    radi(0.0),
+    radj(0.0),
+    radsum(0.0),
+    rsq(0.0),
+    area_ratio(1.0),
+    contact_flags(NULL),
+    contact_history(NULL),
+    mesh(NULL),
+    fix_mesh(NULL),
+    i(0),
+    j(0),
+    itype(0),
+    jtype(0),
+    is_wall(false),
+    has_force_update(false),
+    v_i(NULL),
+    v_j(NULL),
+    omega_i(NULL),
+    omega_j(NULL),
+    is_non_spherical(false),
+#ifdef SUPERQUADRIC_ACTIVE_FLAG
+    reff(0.0),
+#endif
+    computeflag(0),
+    shearupdate(0)
+  {}
 };
 
 // data available in collision() only
 
 struct SurfacesIntersectData : SurfacesCloseData {
-  double r;
-  double rinv;
-  double en[3];
-  double * v_i;
-  double * v_j;
-  double * omega_i;
-  double * omega_j;
+
+  double r;         
+  double rinv;      
+  double en[3];     
 
   double kt;
   double kn;
@@ -126,26 +147,21 @@ struct SurfacesIntersectData : SurfacesCloseData {
 
   double vn;
   double deltan;
-  double cri;
-  double crj;
-  double wr1;
+  double cri;   
+  double crj;   
+  double wr1;   
   double wr2;
   double wr3;
 
-  double vtr1;
+  double vtr1;  
   double vtr2;
   double vtr3;
 
-  double mi;
+  double mi;    
   double mj;
-  double meff;
+  double meff;  
 
   mutable double P_diss; 
-
-  int computeflag;
-  int shearupdate;
-  int itype;
-  int jtype;
 
   SurfacesIntersectData() : Fn(0.0), Ft(0.0) {}
 };

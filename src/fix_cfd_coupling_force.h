@@ -68,25 +68,37 @@ class FixCfdCouplingForce : public Fix  {
 
  protected:
 
+  int iarg;
+
   void dont_use_force()
   { use_force_ = false; }
 
   double dragforce_total[3];
+  double hdtorque_total[3];
   class FixCfdCoupling* fix_coupling_;
   class FixPropertyAtom* fix_dragforce_;
   class FixPropertyAtom* fix_hdtorque_; // hdtorque = hydrodynamic torque
-  class FixPropertyAtom* fix_volumeweight_;
 
   class FixPropertyAtom* fix_dispersionTime_;
   class FixPropertyAtom* fix_dispersionVel_;
+
+  class FixPropertyAtom* fix_UrelOld_;
+
   bool use_force_, use_torque_, use_dens_, use_type_;
   bool use_stochastic_;
+  bool use_virtualMass_;
   bool use_superquadric_;
+  bool use_id_;
 
  private:
   bool use_property_;
   char property_name[200];
   char property_type[200];
+
+  bool use_fiber_topo_;
+  class FixPropertyAtom* fix_fiber_axis_;
+  class FixPropertyAtom* fix_fiber_ends_;
+
 };
 
 }

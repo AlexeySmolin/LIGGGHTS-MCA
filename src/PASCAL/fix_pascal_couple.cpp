@@ -24,11 +24,11 @@
    by the European Commission through FP7 Grant agreement no. 604656.
 ------------------------------------------------------------------------- */
 
-#include "mpi.h"
-#include "math.h"
-#include "stdio.h"
-#include "string.h"
-#include "stdlib.h"
+#include <mpi.h>
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 #include "pascal.h"          // these are PASCAL include files
 #include "fix_pascal_couple.h"
 #include "atom.h"
@@ -61,8 +61,8 @@ FixParScaleCouple::FixParScaleCouple(LAMMPS *lmp, int narg, char **arg) :
   couple_this_step_(false),
   pascal_setup_(false),
   prePostRun_(false),
-  pasc_(0),
-  time_(0.)
+  time_(0.),
+  pasc_(0)
 {
 
   iarg_ = 3;
@@ -173,6 +173,7 @@ FixParScaleCouple::FixParScaleCouple(LAMMPS *lmp, int narg, char **arg) :
 FixParScaleCouple::~FixParScaleCouple()
 {
   delete pasc_;
+  delete dc_;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -267,8 +268,9 @@ int* FixParScaleCouple::get_liggghts_map(int &length)
 
         for(int iGlobal=0; iGlobal < length; iGlobal++)
         {
-            printf("[%d/%d]:original_map[%d]: %d, _ext_map[%d]: %d, particle r: %g\n",
-                    comm->me, comm->nprocs, iGlobal, atom->get_map_array()[iGlobal+1], //offset by one in LIGGGHTS
+            printf("[%d/%d]:original_map[%d]: %d, map_copy[%d]: %d, particle r: %g\n",
+                    comm->me, comm->nprocs, 
+                    iGlobal, atom->get_map_array()[iGlobal+1], //offset by one in LIGGGHTS
                     iGlobal, map_copy[iGlobal],
                     atom->radius[map_copy[iGlobal]]);
         }
@@ -347,7 +349,6 @@ void FixParScaleCouple::end_of_step()
              torque[currAtom][0],torque[currAtom][1],torque[currAtom][2],
              fcm[currAtom][0],fcm[currAtom][1],fcm[currAtom][2]);
 #endif
-
 }
 
 //////////////////////////////////////////////////////////////

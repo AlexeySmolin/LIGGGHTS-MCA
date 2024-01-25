@@ -36,6 +36,7 @@
     Christoph Kloss (DCS Computing GmbH, Linz)
     Christoph Kloss (JKU Linz)
     Philippe Seil (JKU Linz)
+    Andreas Aigner (DCS Computing GmbH, Linz)
 
     Copyright 2012-     DCS Computing GmbH, Linz
     Copyright 2009-2012 JKU Linz
@@ -47,9 +48,13 @@
 #include "container_base.h"
 #include "memory_ns.h"
 #include "math_extra_liggghts.h"
-#include <string.h>
+#include "domain.h"
+#include <limits>
+#include <cmath>
+#include <algorithm>
 
-#define GROW 100
+inline int GROW_CONTAINER()
+{ return 10000; }
 
 using namespace LAMMPS_MEMORY_NS;
 
@@ -63,6 +68,9 @@ namespace LAMMPS_NS
 
           bool isDoubleData();
           bool isIntData();
+
+          bool subtract (GeneralContainer<T,NUM_VEC,LEN_VEC> const &A,
+                         GeneralContainer<T,NUM_VEC,LEN_VEC> const &minusB);
 
           void add(T** elem);
           void addZero();
@@ -87,8 +95,9 @@ namespace LAMMPS_NS
 
           bool setFromContainer(ContainerBase *cont);
 
-          bool calcAveFromContainer(double weighting_factor);
-          bool calcVarFromContainer(double weighting_factor);
+          bool calcAvgFromContainer();
+          bool calcMeanSquareFromContainer();
+          bool calcSumFromContainer();
 
           T max_scalar();
           T min_scalar();
@@ -99,9 +108,9 @@ namespace LAMMPS_NS
           virtual void* begin_slow_dirty();
 
           inline void scale(double factor);
-          inline void move(double *dx);
-          inline void moveElement(int i,double *dx);
-          inline void rotate(double *dQ);
+          inline void move(const double * const dx);
+          inline void moveElement(const int i, const double * const dx);
+          inline void rotate(const double * const dQ);
 
           // all push and pop functions return number of bytes taken from / added to buf
           // all push and pop functions expect buf to point to first element with usable data
@@ -119,7 +128,7 @@ namespace LAMMPS_NS
           
           inline int elemListBufSize(int n, int operation = OPERATION_UNDEFINED,
                             bool scale=false,bool translate=false, bool rotate=false);
-          inline int pushElemListToBuffer(int n, int *list, double *buf, int operation,
+          inline int pushElemListToBuffer(int n, int *list, int *wraplist, double *buf, int operation, double *dlo, double *dhi,
                            bool scale=false,bool translate=false, bool rotate=false);
           inline int popElemListFromBuffer(int first, int n, double *buf, int operation,
                            bool scale=false,bool translate=false, bool rotate=false);

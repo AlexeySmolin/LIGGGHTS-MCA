@@ -43,8 +43,8 @@
     the GNU General Public License.
 ------------------------------------------------------------------------- */
 
-#include "mpi.h"
-#include "string.h"
+#include <mpi.h>
+#include <string.h>
 #include "compute_temp.h"
 #include "atom.h"
 #include "update.h"
@@ -59,10 +59,10 @@ using namespace LAMMPS_NS;
 
 /* ---------------------------------------------------------------------- */
 
-ComputeTemp::ComputeTemp(LAMMPS *lmp, int narg, char **arg) :
-  Compute(lmp, narg, arg)
+ComputeTemp::ComputeTemp(LAMMPS *lmp, int &iarg, int narg, char **arg) :
+  Compute(lmp, iarg, narg, arg)
 {
-  if (narg != 3) error->all(FLERR,"Illegal compute temp command");
+  if (narg != iarg) error->all(FLERR,"Illegal compute temp command");
 
   scalar_flag = vector_flag = 1;
   size_vector = 6;

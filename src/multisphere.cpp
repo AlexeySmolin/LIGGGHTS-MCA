@@ -47,6 +47,9 @@
 #include "atom.h"
 #include "atom_vec.h"
 #include "vector_liggghts.h"
+#include "fix_heat_gran.h"
+#include <cmath>
+#include <algorithm>
 
 /* ----------------------------------------------------------------------
    constructor / destructor
@@ -68,6 +71,7 @@ Multisphere::Multisphere(LAMMPS *lmp) :
   fcm_          (*customValues_.addElementProperty< VectorContainer<double,3> >("fcm","comm_none","frame_invariant", "restart_no")),
   torquecm_     (*customValues_.addElementProperty< VectorContainer<double,3> >("torque","comm_none","frame_invariant", "restart_no")),
   dragforce_cm_ (*customValues_.addElementProperty< VectorContainer<double,3> >("dragforce_cm","comm_none","frame_invariant", "restart_no")),
+  hdtorque_cm_  (*customValues_.addElementProperty< VectorContainer<double,3> >("hdtorque_cm","comm_none","frame_invariant", "restart_no")),
 
   angmom_ (*customValues_.addElementProperty< VectorContainer<double,3> >("angmom","comm_exchange_borders","frame_invariant", "restart_yes")),
   omega_  (*customValues_.addElementProperty< VectorContainer<double,3> >("omega","comm_exchange_borders","frame_invariant", "restart_yes")),
@@ -94,7 +98,10 @@ Multisphere::Multisphere(LAMMPS *lmp) :
   v_integrate_(*customValues_.addElementProperty< VectorContainer<double,3> >("v_integrate","comm_exchange_borders","frame_invariant", "restart_yes")),
 
   r_bound_       (*customValues_.addElementProperty< ScalarContainer<double> >("r_bound","comm_exchange_borders","frame_invariant", "restart_yes")),
-  xcm_to_xbound_ (*customValues_.addElementProperty< VectorContainer<double,3> >("xcm_to_xbound","comm_exchange_borders","frame_invariant", "restart_yes"))
+  xcm_to_xbound_ (*customValues_.addElementProperty< VectorContainer<double,3> >("xcm_to_xbound","comm_exchange_borders","frame_invariant", "restart_yes")),
+
+  temp_(*customValues_.addElementProperty< ScalarContainer<double> >("temp","comm_exchange_borders","frame_invariant","restart_yes")),
+  temp_old_(*customValues_.addElementProperty< ScalarContainer<double> >("temp_old","comm_exchange_borders","frame_invariant","restart_yes"))
 {
 
 }
@@ -117,6 +124,7 @@ void Multisphere::add_body(int nspheres, double *xcm_ins, double *xcm_to_xbound_
                double *ex_space_ins, double *ey_space_ins, double *ez_space_ins,
                double **displace_ins, bool *fflag, bool *tflag, int start_step_ins,double *v_integrate_ins)
 {
+    
     int n = nbody_;
 
     customValues_.addUninitializedElement();
@@ -126,7 +134,6 @@ void Multisphere::add_body(int nspheres, double *xcm_ins, double *xcm_to_xbound_
     
     id_.set(n,-1);
 
-    bool flags[3] = {true,true,true};
     double zerovec[3] = {0.,0.,0.};
     double zerovec4[4] = {0.,0.,0.,0.};
     int zerovec4int[4] = {0,0,0,0};
@@ -136,6 +143,7 @@ void Multisphere::add_body(int nspheres, double *xcm_ins, double *xcm_to_xbound_
     fcm_.set(n,zerovec);
     torquecm_.set(n,zerovec);
     dragforce_cm_.set(n,zerovec);
+    hdtorque_cm_.set(n,zerovec);
 
     angmom_.set(n,zerovec);
     omega_.set(n,omega_ins);
@@ -154,8 +162,8 @@ void Multisphere::add_body(int nspheres, double *xcm_ins, double *xcm_to_xbound_
     imagebody_.set(n,(IMGMAX << IMG2BITS) | (IMGMAX << IMGBITS) | IMGMAX);
     remapflag_.set(n,zerovec4int);
 
-    fflag_.set(n,flags);
-    tflag_.set(n,flags);
+    fflag_.set(n,fflag);
+    tflag_.set(n,tflag);
 
     start_step_.set(n,start_step_ins);
     if(v_integrate_ins)
@@ -166,6 +174,19 @@ void Multisphere::add_body(int nspheres, double *xcm_ins, double *xcm_to_xbound_
     r_bound_.set(n,r_bound_ins);
     xcm_to_xbound_.set(n,xcm_to_xbound_ins);
 
+    // initialize the temperature with the initial value
+    
+    FixHeatGran *fix_heat = static_cast<FixHeatGran*>(modify->find_fix_style("heat/gran",0));
+    if (fix_heat) {
+        temp_.set(n,fix_heat->T0);
+        temp_old_.set(n,fix_heat->T0);
+    }
+    else
+    {
+        temp_.set(n,0.);
+        temp_old_.set(n,0.);
+    }
+
     // calculate q and ang momentum
 
     MathExtra::exyz_to_q
@@ -173,7 +194,7 @@ void Multisphere::add_body(int nspheres, double *xcm_ins, double *xcm_to_xbound_
         ex_space_(n),ey_space_(n),ez_space_(n),
         quat_(n)
     );
-
+    
     MathExtraLiggghts::angmom_from_omega
     (
         omega_(n),
@@ -302,7 +323,7 @@ void Multisphere::id_extend_body_extend(int *body)
 
   // mapTagMax_ cannot get smaller - so ensure IDs are given only once
   
-  mapTagMax_ = MathExtraLiggghts::max(mapTagMax_,idmax_all);
+  mapTagMax_ = std::max(mapTagMax_,idmax_all);
 
   // noid = # of bodies I own with no id (id = -1)
   // noid_sum = # of total bodies on procs <= me with no tag
@@ -332,7 +353,10 @@ void Multisphere::id_extend_body_extend(int *body)
   }
 
   if(nobody != nobody_check)
+  {
+    if(screen) fprintf(screen,"nobody: %d nobody_check: %d, nobody_first: %d. \n", nobody, nobody_check, nobody_first);
     error->one(FLERR,"Internal error: # of atoms with no associated body inconsistent");
+  }
 
   int noid_sum;
   MPI_Scan(&noid,&noid_sum,1,MPI_INT,MPI_SUM,world);
@@ -347,8 +371,8 @@ void Multisphere::id_extend_body_extend(int *body)
     {
         id_(ibody) = itag;
         
-        if(nobody_first == nlocal-1)
-            error->one(FLERR,"Internal error: atom body id inconsistent");
+        if((nobody_first == nlocal-1) && ( nrigid_(ibody)>1 )) //allow body with a single atom
+            error->one(FLERR,"Internal error: atom body id inconsistent: (nobody_first == nlocal-1) && ( nrigid_(ibody)>1 )");
 
         for(int iatom = nobody_first; iatom < nobody_first+nrigid_(ibody); iatom++)
         {
@@ -392,7 +416,7 @@ void Multisphere::generate_map()
     // get max ID of all proc
     idmax = id_.max();
     MPI_Max_Scalar(idmax,idmax_all,world);
-    mapTagMax_ = MathExtraLiggghts::max(mapTagMax_,idmax_all);
+    mapTagMax_ = std::max(mapTagMax_,idmax_all);
 
     // alocate and initialize new array
     // IDs start at 1, have to go up to (inclusive) mapTagMax_
@@ -413,7 +437,7 @@ void Multisphere::generate_map()
    check for lost atoms and bodies
 ------------------------------------------------------------------------- */
 
-bool Multisphere::check_lost_atoms(int *body, double *atom_delflag, double *body_existflag)
+bool Multisphere::check_lost_atoms(int *body, double *atom_delflag, double *body_existflag, double *volumeweight)
 {
     int body_tag,ibody,i;
     int nall = atom->nlocal + atom->nghost;
@@ -423,6 +447,8 @@ bool Multisphere::check_lost_atoms(int *body, double *atom_delflag, double *body
     int *delflag = new int[nbody_];
     vectorZeroizeN(nrigid_current,nbody_);
     vectorZeroizeN(delflag,nbody_);
+
+    //double _4pi_over_3 = 4.*M_PI/3.;
 
     for(i = 0; i < nall; i++)
     {
@@ -434,7 +460,7 @@ bool Multisphere::check_lost_atoms(int *body, double *atom_delflag, double *body
             
             body_existflag[i] = 1.;
         }
-        else if (-1 == body_tag)
+        else if (body_tag == -1)
             body_existflag[i] = 1.;
     }
 
@@ -467,6 +493,8 @@ bool Multisphere::check_lost_atoms(int *body, double *atom_delflag, double *body
            atom_delflag[i] = 1.;
            body[i] = -1;
            deleted = 1;
+           
+           atom->rmass[i] *= volumeweight[i];
         }
     }
 
@@ -590,6 +618,16 @@ double Multisphere::extract_ke()
   return 0.5*mvv2e*ke;
 }
 
+double Multisphere::extract_vave()
+{
+  double vave = 0.0;
+  for (int i = 0; i < nbody_; i++)
+    vave += vectorMag3D(vcm_(i));
+
+  MPI_Sum_Scalar(vave,world);
+  return vave/nbody_all_;
+}
+
 /* ----------------------------------------------------------------------
    return rotational KE for all rigid bodies
    Erotational = 1/2 I wbody^2
@@ -620,4 +658,14 @@ double Multisphere::extract_rke()
   MPI_Sum_Scalar(rke,world);
 
   return 0.5*rke;
+}
+
+double Multisphere::extract_omega_ave()
+{
+  double omega_ave = 0.0;
+  for (int i = 0; i < nbody_; i++)
+    omega_ave += vectorMag3D(omega_(i));
+
+  MPI_Sum_Scalar(omega_ave,world);
+  return omega_ave/nbody_all_;
 }

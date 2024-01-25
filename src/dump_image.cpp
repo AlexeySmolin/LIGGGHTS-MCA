@@ -43,10 +43,10 @@
     the GNU General Public License.
 ------------------------------------------------------------------------- */
 
-#include "math.h"
+#include <cmath>
 #include "ctype.h"
-#include "stdlib.h"
-#include "string.h"
+#include <stdlib.h>
+#include <string.h>
 #include "dump_image.h"
 #include "image.h"
 #include "atom.h"
@@ -328,9 +328,7 @@ DumpImage::DumpImage(LAMMPS *lmp, int narg, char **arg) :
       if (strcmp(arg[iarg+1],"yes") == 0) image->ssao = YES;
       else if (strcmp(arg[iarg+1],"no") == 0) image->ssao = NO;
       else error->all(FLERR,"Illegal dump image command");
-      int seed = force->inumeric(FLERR,arg[iarg+2]);
-      if (seed <= 0) error->all(FLERR,"Illegal dump image command");
-      image->seed = seed;
+      image->setSeed(arg[iarg+2]);
       double ssaoint = force->numeric(FLERR,arg[iarg+3]);
       if (ssaoint < 0.0 || ssaoint > 1.0)
         error->all(FLERR,"Illegal dump image command");
@@ -424,7 +422,7 @@ void DumpImage::init_style()
 {
   if (multifile == 0 && !multifile_override)
     error->all(FLERR,"Dump image requires one snapshot per file");
-  if (sort_flag) error->all(FLERR,"Dump image cannot perform sorting");
+  if (sortBuffer && sortBuffer->sort_set()) error->all(FLERR,"Dump image cannot perform sorting");
 
   DumpCustom::init_style();
 

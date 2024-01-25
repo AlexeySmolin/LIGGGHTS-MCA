@@ -1,4 +1,4 @@
-"Previous Section"_Section_python.html - "LIGGGHTS(R)-PUBLIC WWW Site"_lws - "LIGGGHTS(R)-PUBLIC Documentation"_ld - "LIGGGHTS(R)-PUBLIC Commands"_lc - "Next Section"_Manual.html :c
+"Previous Section"_Section_python.html - "LIGGGHTS(R)-PUBLIC WWW Site"_liws - "LIGGGHTS(R)-PUBLIC Documentation"_ld - "LIGGGHTS(R)-PUBLIC Commands"_lc - "Next Section"_Manual.html :c
 
 :link(liws,http://www.cfdem.com)
 :link(ld,Manual.html)
@@ -6,19 +6,29 @@
 
 :line
 
-10. Errors :h3
+11. Errors :h3
 
 This section describes the errors you can encounter when using LIGGGHTS(R)-PUBLIC,
 either conceptually, or as printed out by the program.
 
-10.1 "Common problems"_#err_1
-10.2 "Reporting bugs"_#err_2
-10.3 "Error & warning messages"_#err_3 :all(b)
+<!-- RST
+
+.. contents:: 
+		:local:
+		:depth: 1
+   
+END_RST -->
+
+<!-- HTML_ONLY -->
+11.1 "Common problems"_#err_1
+11.2 "Reporting bugs"_#err_2
+11.3 "Error & warning messages"_#err_3 :all(b)
+<!-- END_HTML_ONLY -->
 
 :line
 :line
 
-10.1 Common problems :link(err_1),h4
+11.1 Common problems :link(err_1),h4
 
 If two LIGGGHTS(R)-PUBLIC runs do not produce the same answer on different
 machines or different numbers of processors, this is typically not a
@@ -108,37 +118,40 @@ buffering or boost the sizes of messages that can be buffered.
 
 :line
 
-10.2 Reporting bugs :link(err_2),h4
+11.2 Reporting bugs :link(err_2),h4
 
 If you are confident that you have found a bug in LIGGGHTS(R)-PUBLIC, follow these
 steps.
 
 Check the "New features and bug
-fixes"_http://lammps.sandia.gov/bug.html section of the "LIGGGHTS(R)-PUBLIC WWW
-site"_lws to see if the bug has already been reported or fixed or the
-"Unfixed bug"_http://lammps.sandia.gov/unbug.html to see if a fix is
-pending.
+fixes"_http://www.cfdem.com/liggghtsr-version-historyhttp://www.cfdem.com/liggghtsr-version-historyhttp://www.cfdem.com/liggghtsr-version-history section of the "LIGGGHTS(R)-PUBLIC WWW
+site"_liws to see if the bug has already been reported or fixed or the
+"Unfixed bug"_http://www.cfdem.com/forums/bug-reports-cfdemrcoupling-liggghtsr-and-parscale
+to see if a fix is pending.
 
-Check the "mailing list"_http://lammps.sandia.gov/mail.html
+Check the "forums"_http://www.cfdem.com/forum
 to see if it has been discussed before.
 
-If not, send an email to the mailing list describing the problem with
+If not, please post a bug report describing the problem with
 any ideas you have as to what is causing it or where in the code the
 problem might be.  The developers will ask for more info if needed,
 such as an input script or data files.
 
 The most useful thing you can do to help us fix the bug is to isolate
-the problem.  Run it on the smallest number of atoms and fewest number
+the problem.  Run it on the smallest number of particles and fewest number
 of processors and with the simplest input script that reproduces the
 bug and try to identify what command or combination of commands is
 causing the problem.
 
-As a last resort, you can send an email directly to the
-"developers"_http://lammps.sandia.gov/authors.html.
+Respectively the LAMMPS bug sections
+"bug"_http://lammps.sandia.gov/bug.html,
+"unfixed bug"_http://lammps.sandia.gov/unbug.html
+and the "mailing list"_http://lammps.sandia.gov/mail.html
+ can be checked.
 
 :line
 
-10.3 Error & warning messages :h4,link(err_3)
+11.3 Error & warning messages :h4,link(err_3)
 
 These are two alphabetic lists of the "ERROR"_#error and
 "WARNING"_#warn messages LIGGGHTS(R)-PUBLIC prints out and the reason why.  If the
@@ -5041,11 +5054,11 @@ Radius must be >= 0.0. :dd
 
 {Invalid random number seed in fix ttm command} :dt
 
-Random number seed must be > 0. :dd
+Random number seed must be a prime number greater 10000. :dd
 
 {Invalid random number seed in set command} :dt
 
-Random number seed must be > 0. :dd
+Random number seed must be a prime number greater 10000. :dd
 
 {Invalid region style} :dt
 
@@ -5075,13 +5088,13 @@ Self-explanatory. :dd
 
 {Invalid seed for Marsaglia random # generator} :dt
 
-The initial seed for this random number generator must be a positive
-integer less than or equal to 900 million. :dd
+The initial seed for this random number generator must be a prime
+number greater 10000 and smaller than 900 million. :dd
 
 {Invalid seed for Park random # generator} :dt
 
-The initial seed for this random number generator must be a positive
-integer. :dd
+The initial seed for this random number generator must be a prime
+number greater 10000. :dd
 
 {Invalid shape in Ellipsoids section of data file} :dt
 

@@ -39,8 +39,10 @@
     Copyright 2009-2012 JKU Linz
 ------------------------------------------------------------------------- */
 
-#include "stdio.h"
-#include "string.h"
+#include <stdio.h>
+#include <string.h>
+#include <cmath>
+#include <algorithm>
 #include "modify.h"
 #include "style_compute.h"
 #include "style_fix.h"
@@ -230,6 +232,71 @@ int Modify::n_fixes_style_strict(const char *style)
 }
 
 /* ----------------------------------------------------------------------
+   find a fix property/atom for output
+------------------------------------------------------------------------- */
+
+int Modify::n_fixes_property_atom()
+{
+    int n_fixes = 0;
+
+    for(int ifix = 0; ifix < nfix; ifix++)
+      if(dynamic_cast<FixPropertyAtom*>(fix[ifix]))
+          n_fixes++;
+
+    return n_fixes;
+}
+
+FixPropertyAtom* Modify::find_fix_property_atom(int rank)
+{
+    for(int ifix = 0; ifix < nfix; ifix++)
+      if(dynamic_cast<FixPropertyAtom*>(fix[ifix]))
+      {
+          if(rank > 0) rank --;
+          else return dynamic_cast<FixPropertyAtom*>(fix[ifix]);
+      }
+    return NULL;
+}
+
+/* ----------------------------------------------------------------------
+   find a fix property/atom for output
+------------------------------------------------------------------------- */
+
+int Modify::n_fixes_property_atom_not_internal()
+{
+    int n_fixes = 0;
+
+    for(int ifix = 0; ifix < nfix; ifix++)
+      if(dynamic_cast<FixPropertyAtom*>(fix[ifix]) && !dynamic_cast<FixPropertyAtom*>(fix[ifix])->get_internal())
+          n_fixes++;
+
+    return n_fixes;
+}
+
+int Modify::dump_size_fixes_property_atom_not_internal()
+{
+    int n_dump = 0;
+
+    for(int ifix = 0; ifix < nfix; ifix++)
+      if(dynamic_cast<FixPropertyAtom*>(fix[ifix]) && !dynamic_cast<FixPropertyAtom*>(fix[ifix])->get_internal())
+      {
+          n_dump += dynamic_cast<FixPropertyAtom*>(fix[ifix])->get_nvalues();
+      }
+
+    return n_dump;
+}
+
+FixPropertyAtom* Modify::find_fix_property_atom_not_internal(int rank)
+{
+    for(int ifix = 0; ifix < nfix; ifix++)
+      if(dynamic_cast<FixPropertyAtom*>(fix[ifix]) && !dynamic_cast<FixPropertyAtom*>(fix[ifix])->get_internal())
+      {
+          if(rank > 0) rank --;
+          else return dynamic_cast<FixPropertyAtom*>(fix[ifix]);
+      }
+    return NULL;
+}
+
+/* ----------------------------------------------------------------------
    
    checks if I am the first fix of a specified style
 ------------------------------------------------------------------------- */
@@ -379,6 +446,53 @@ bool Modify::have_restart_data(Fix *f)
   return false;
 }
 
+bool Modify::have_restart_data_style(const char* _style)
+{
+  
+  // check if Fix is in restart_global list
+
+  for (int i = 0; i < nfix_restart_global; i++)
+    if (strncmp(style_restart_global[i],_style,strlen(_style)) == 0)
+      return true;
+
+  // check if Fix is in restart_peratom list
+
+  for (int i = 0; i < nfix_restart_peratom; i++)
+    if (strncmp(style_restart_peratom[i],_style,strlen(_style)) == 0)
+      return true;
+
+  return false;
+}
+
+int Modify::n_restart_data_global_style(const char* _style)
+{
+  
+  int nhave = 0;
+
+  // check if Fix is in restart_global list
+
+  for (int i = 0; i < nfix_restart_global; i++)
+    if (strncmp(style_restart_global[i],_style,strlen(_style)) == 0)
+      nhave++;
+
+  return nhave;
+}
+
+char* Modify::id_restart_data_global_style(const char* _style,int _rank)
+{
+  
+  // check if Fix is in restart_global list
+
+  for (int i = 0; i < nfix_restart_global; i++)
+    if (strncmp(style_restart_global[i],_style,strlen(_style)) == 0)
+    {
+          if(_rank > 0) _rank --;
+          else return id_restart_global[i];
+    }
+
+  return 0;
+}
+
 /* ----------------------------------------------------------------------
    let fixes extend bounding box
 ------------------------------------------------------------------------- */
@@ -407,19 +521,33 @@ void Modify::max_min_rad(double &maxrad,double &minrad)
     for (int i = 0; i < nfix; i++) {
       for (int j = 1; j <= ntypes; j++) {
         
-        maxrad = MathExtraLiggghts::max(maxrad,fix[i]->max_rad(j));
+        maxrad = std::max(maxrad,fix[i]->max_rad(j));
         if(modify->fix[i]->min_rad(j) > 0.)
-            minrad = MathExtraLiggghts::min(minrad,fix[i]->min_rad(j));
+            minrad = std::min(minrad,fix[i]->min_rad(j));
       }
     }
 
     if (radius) {
       for (int i = 0; i < nlocal; i++) {
-        maxrad = MathExtraLiggghts::max(maxrad,radius[i]);
-        minrad = MathExtraLiggghts::min(minrad,radius[i]);
+        maxrad = std::max(maxrad,radius[i]);
+        minrad = std::min(minrad,radius[i]);
       }
     }
 
     MPI_Min_Scalar(minrad,world);
     MPI_Max_Scalar(maxrad,world);
+}
+
+/* ----------------------------------------------------------------------
+   calls the exchange routine for fix mesh/...
+   This is a kind of workaround.
+------------------------------------------------------------------------- */
+
+void Modify::forceMeshExchange()
+{
+    for (int i = 0; i < n_pre_force; ++i) {
+        Fix *cfix = fix[list_pre_force[i]];
+        if( strncmp(cfix->style,"mesh/surface",12) == 0 && dynamic_cast<FixMesh*>(cfix) )
+            static_cast<FixMesh*>(cfix)->setup_pre_force(0);
+    }
 }

@@ -43,6 +43,7 @@
 
 FixStyle(multisphere,FixMultisphere)
 FixStyle(multisphere/nointegration,FixMultisphere)
+FixStyle(concave,FixMultisphere)
 
 #else
 
@@ -54,10 +55,9 @@ FixStyle(multisphere/nointegration,FixMultisphere)
 #include "multisphere_parallel.h"
 #include "fix_property_atom.h"
 #include "fix_remove.h"
+#include "fix_heat_gran.h"
 #include "atom.h"
 #include "comm.h"
-
-using namespace std;
 
 namespace LAMMPS_NS {
 
@@ -68,13 +68,19 @@ enum
     MS_COMM_FW_IMAGE_DISPLACE,
     MS_COMM_FW_V_OMEGA,
     MS_COMM_FW_F_TORQUE,
+    MS_COMM_FW_TEMP,
     MS_COMM_REV_X_V_OMEGA,
     MS_COMM_REV_V_OMEGA,
-    MS_COMM_REV_IMAGE
+    MS_COMM_REV_IMAGE,
+    MS_COMM_REV_DISPLACE,
+    MS_COMM_REV_TEMP
 };
 
 class FixMultisphere : public Fix
 {
+    friend class SetMultisphere;
+
+     friend class FixMoveMultisphere;
      public:
 
       FixMultisphere(class LAMMPS *, int, char **);
@@ -94,8 +100,10 @@ class FixMultisphere : public Fix
 
       void initial_integrate(int);
       virtual void pre_force(int);
+      virtual void pre_final_integrate();
       void final_integrate();
-      void calc_force();
+      void comm_correct_force(bool setupflag);
+      virtual void calc_force(bool setupflag);
 
       void add_body_finalize();
 
@@ -112,6 +120,8 @@ class FixMultisphere : public Fix
 
       void write_restart(FILE *fp);
       void restart(char *buf);
+
+      int modify_param(int narg, char **arg);
 
       // *************************************
       #include "fix_multisphere_comm_I.h"
@@ -166,14 +176,24 @@ class FixMultisphere : public Fix
       inline double extract_rke()
       { return data().extract_rke(); }
 
+      inline double extract_vave()
+      { return data().extract_vave(); }
+
+      inline double extract_omega_ave()
+      { return data().extract_omega_ave(); }
+
       inline void set_v_body_from_atom_index(int iatom,double *vel)
       {if(body_[iatom] >= 0) multisphere_.set_v_body(body_[iatom],vel); }
 
       inline void set_omega_body_from_atom_index(int iatom,double *omega)
       {if(body_[iatom] >= 0) multisphere_.set_omega_body(body_[iatom],omega); }
 
-      inline void set_body_displace(int i,double *_displace,int body_id)
-      { body_[i] = body_id; vectorCopy3D(_displace,displace_[i]); }
+      inline void set_body_displace(int i,double *_displace,int body_id,double volume_weight)
+      {
+        body_[i] = body_id; vectorCopy3D(_displace,displace_[i]);
+        if(fix_volumeweight_ms_)
+            fix_volumeweight_ms_->vector_atom[i] = volume_weight;
+      }
 
       int calc_n_steps(int iatom,double *p_ref,double *normalvec,double *v_normal)
       { return multisphere_.calc_n_steps(iatom,body_[iatom],p_ref,normalvec,v_normal); }
@@ -184,7 +204,31 @@ class FixMultisphere : public Fix
       bool allow_group_and_set()
       { return allow_group_and_set_; }
 
+      bool use_volumeweight()
+      { return use_volumeweight_ms_; }
+
+      const FixPropertyAtom *get_volumeweight() const
+      { return fix_volumeweight_ms_; }
+
+      void scale_displace(int i, double factor)
+      { vectorScalarMult3D(displace_[i],factor); }
+
+      void set_v_communicate();
+
+      inline void rev_comm_displace()
+      {
+        rev_comm_flag_ = MS_COMM_REV_DISPLACE;
+        reverse_comm();
+      }
+
+      void set_add_dragforce(bool value)
+      {
+        add_dragforce_ = value;
+      }
+
      protected:
+
+      void ms_error(const char * file, int line,char const *errmsg);
 
       inline int map(int i)
       { return data().map(i); }
@@ -204,7 +248,10 @@ class FixMultisphere : public Fix
       class FixPropertyAtom *fix_corner_ghost_;
       class FixPropertyAtom *fix_delflag_;
       class FixPropertyAtom *fix_existflag_;
+      class FixPropertyAtom *fix_volumeweight_ms_; 
+      bool use_volumeweight_ms_;
       class FixGravity *fix_gravity_;
+      FixHeatGran *fix_heat_;
 
       //int comm_di_;
       int fw_comm_flag_;
@@ -223,6 +270,18 @@ class FixMultisphere : public Fix
       double *Vclump_;
 
       bool allow_group_and_set_;
+      bool allow_heatsource_;
+
+      double CAdd_;                 //Added mass coefficient
+      double fluidDensity_;         //fluid density
+
+      bool concave_;    
+
+      bool add_dragforce_; 
+
+      inline int getMask(int ibody)
+      { return 1; }
+
 };
 
 }

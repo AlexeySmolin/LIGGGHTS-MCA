@@ -38,10 +38,10 @@
     Copyright 2009-2012 JKU Linz
 ------------------------------------------------------------------------- */
 
-#include "math.h"
-#include "stdio.h"
-#include "stdlib.h"
-#include "string.h"
+#include <cmath>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "pair_sph_artvisc_tenscorr.h"
 #include "fix_property_global.h"
 #include "fix_property_atom.h"
@@ -224,9 +224,9 @@ void PairSphArtviscTenscorr::init_substyle()
 
     etaPPG=static_cast<FixPropertyGlobal*>(modify->find_fix_property("artViscEta","property/global","scalar",0,0,force->pair_style));
     if(!etaPPG) error->all(FLERR, "Pairstyle sph/artVisc/tensCorr only works with a fix property/global that defines artViscEta");
-    eta = etaPPG->compute_scalar(); // NP const for all type
+    eta = etaPPG->compute_scalar(); 
 
-    viscosity_ = 1; // NP dummy
+    viscosity_ = 1; 
     //viscosity_ = alpha;
 
     //pre-calculate parameters for possible contact material combinations
@@ -288,9 +288,9 @@ void PairSphArtviscTenscorr::write_restart(FILE *fp)
    proc 0 reads from restart file, bcasts
 ------------------------------------------------------------------------- */
 
-void PairSphArtviscTenscorr::read_restart(FILE *fp)
+void PairSphArtviscTenscorr::read_restart(FILE *fp, const int major, const int minor)
 {
-  read_restart_settings(fp);
+  read_restart_settings(fp, major, minor);
   allocate();
 
   int i,j;
@@ -316,7 +316,7 @@ void PairSphArtviscTenscorr::write_restart_settings(FILE *fp)
    proc 0 reads from restart file, bcasts
 ------------------------------------------------------------------------- */
 
-void PairSphArtviscTenscorr::read_restart_settings(FILE *fp)
+void PairSphArtviscTenscorr::read_restart_settings(FILE *fp, const int major, const int minor)
 {
   if (comm->me == 0) {
     fread(&artVisc_flag,sizeof(int),1,fp);

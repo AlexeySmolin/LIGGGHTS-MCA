@@ -43,9 +43,9 @@
     the GNU General Public License.
 ------------------------------------------------------------------------- */
 
-#include "math.h"
-#include "stdlib.h"
-#include "string.h"
+#include <cmath>
+#include <stdlib.h>
+#include <string.h>
 #include "ctype.h"
 #include "unistd.h"
 #include "variable.h"
@@ -104,11 +104,6 @@ enum{DONE,ADD,SUBTRACT,MULTIPLY,DIVIDE,CARAT,MODULO,UNARY,
 // customize by adding a special function
 
 enum{SUM,XMIN,XMAX,AVE,TRAP,NEXT};
-
-#define INVOKED_SCALAR 1
-#define INVOKED_VECTOR 2
-#define INVOKED_ARRAY 4
-#define INVOKED_PERATOM 8
 
 #define BIG 1.0e20
 
@@ -975,7 +970,7 @@ double Variable::evaluate(char *str, Tree **tree)
           if (update->whichflag == 0) {
             if (compute->invoked_scalar != update->ntimestep)
               error->all(FLERR,"Compute used in variable between runs "
-                         "is not current");
+                         "is not current. Use the update_on_run_end option for computes to avoid this.");
           } else if (!(compute->invoked_flag & INVOKED_SCALAR)) {
             compute->compute_scalar();
             compute->invoked_flag |= INVOKED_SCALAR;
@@ -1000,7 +995,7 @@ double Variable::evaluate(char *str, Tree **tree)
           if (update->whichflag == 0) {
             if (compute->invoked_vector != update->ntimestep)
               error->all(FLERR,"Compute used in variable between runs "
-                         "is not current");
+                         "is not current. Use the update_on_run_end option for computes to avoid this.");
           } else if (!(compute->invoked_flag & INVOKED_VECTOR)) {
             compute->compute_vector();
             compute->invoked_flag |= INVOKED_VECTOR;
@@ -1028,7 +1023,7 @@ double Variable::evaluate(char *str, Tree **tree)
           if (update->whichflag == 0) {
             if (compute->invoked_array != update->ntimestep)
               error->all(FLERR,"Compute used in variable between runs "
-                         "is not current");
+                         "is not current. Use the update_on_run_end option for computes to avoid this.");
           } else if (!(compute->invoked_flag & INVOKED_ARRAY)) {
             compute->compute_array();
             compute->invoked_flag |= INVOKED_ARRAY;
@@ -1051,7 +1046,7 @@ double Variable::evaluate(char *str, Tree **tree)
           if (update->whichflag == 0) {
             if (compute->invoked_peratom != update->ntimestep)
               error->all(FLERR,"Compute used in variable between runs "
-                         "is not current");
+                         "is not current. Use the update_on_run_end option for computes to avoid this.");
           } else if (!(compute->invoked_flag & INVOKED_PERATOM)) {
             compute->compute_peratom();
             compute->invoked_flag |= INVOKED_PERATOM;
@@ -1071,7 +1066,7 @@ double Variable::evaluate(char *str, Tree **tree)
           if (update->whichflag == 0) {
             if (compute->invoked_peratom != update->ntimestep)
               error->all(FLERR,"Compute used in variable between runs "
-                         "is not current");
+                         "is not current. Use the update_on_run_end option for computes to avoid this.");
           } else if (!(compute->invoked_flag & INVOKED_PERATOM)) {
             compute->compute_peratom();
             compute->invoked_flag |= INVOKED_PERATOM;
@@ -1097,7 +1092,7 @@ double Variable::evaluate(char *str, Tree **tree)
           if (update->whichflag == 0) {
             if (compute->invoked_peratom != update->ntimestep)
               error->all(FLERR,"Compute used in variable between runs "
-                         "is not current");
+                         "is not current. Use the update_on_run_end option for computes to avoid this.");
           } else if (!(compute->invoked_flag & INVOKED_PERATOM)) {
             compute->compute_peratom();
             compute->invoked_flag |= INVOKED_PERATOM;
@@ -1125,7 +1120,7 @@ double Variable::evaluate(char *str, Tree **tree)
           if (update->whichflag == 0) {
             if (compute->invoked_peratom != update->ntimestep)
               error->all(FLERR,"Compute used in variable between runs "
-                         "is not current");
+                         "is not current. Use the update_on_run_end option for computes to avoid this.");
           } else if (!(compute->invoked_flag & INVOKED_PERATOM)) {
             compute->compute_peratom();
             compute->invoked_flag |= INVOKED_PERATOM;
@@ -1491,8 +1486,10 @@ double Variable::evaluate(char *str, Tree **tree)
                        "Variable evaluation before simulation box is defined");
 
           int flag = output->thermo->evaluate_keyword(word,&value1);
-          if (flag)
+          if (flag) {
+            fprintf(screen, "word = %s\n", word);
             error->all(FLERR,"Invalid thermo keyword in variable formula");
+          }
           if (tree) {
             Tree *newtree = new Tree();
             newtree->type = VALUE;
@@ -1958,7 +1955,10 @@ double Variable::collapse_tree(Tree *tree)
       int seed = static_cast<int> (collapse_tree(tree->right));
       if (seed <= 0)
         error->one(FLERR,"Invalid math function in variable formula");
-      randomatom = new RanMars(lmp,seed+me);
+      char * seed_char = new char[50];
+      sprintf(seed_char, "%d", seed);
+      randomatom = new RanMars(lmp, seed_char, true);
+      delete [] seed_char;
     }
     return 0.0;
   }
@@ -1972,7 +1972,10 @@ double Variable::collapse_tree(Tree *tree)
       int seed = static_cast<int> (collapse_tree(tree->right));
       if (seed <= 0)
         error->one(FLERR,"Invalid math function in variable formula");
-      randomatom = new RanMars(lmp,seed+me);
+      char * seed_char = new char[50];
+      sprintf(seed_char, "%d", seed);
+      randomatom = new RanMars(lmp, seed_char, true);
+      delete [] seed_char;
     }
     return 0.0;
   }
@@ -2249,7 +2252,10 @@ double Variable::eval_tree(Tree *tree, int i)
       int seed = static_cast<int> (eval_tree(tree->right,i));
       if (seed <= 0)
         error->one(FLERR,"Invalid math function in variable formula");
-      randomatom = new RanMars(lmp,seed+me);
+      char * seed_char = new char[50];
+      sprintf(seed_char, "%d", seed);
+      randomatom = new RanMars(lmp, seed_char, true);
+      delete [] seed_char;
     }
     return randomatom->uniform()*(upper-lower)+lower;
   }
@@ -2262,7 +2268,10 @@ double Variable::eval_tree(Tree *tree, int i)
       int seed = static_cast<int> (eval_tree(tree->right,i));
       if (seed <= 0)
         error->one(FLERR,"Invalid math function in variable formula");
-      randomatom = new RanMars(lmp,seed+me);
+      char * seed_char = new char[50];
+      sprintf(seed_char, "%d", seed);
+      randomatom = new RanMars(lmp, seed_char, true);
+      delete [] seed_char;
     }
     return mu + sigma*randomatom->gaussian();
   }
@@ -2653,7 +2662,10 @@ int Variable::math_function(char *word, char *contents, Tree **tree,
         int seed = static_cast<int> (value3);
         if (seed <= 0)
           error->all(FLERR,"Invalid math function in variable formula");
-        randomequal = new RanMars(lmp,seed);
+        char * seed_char = new char[50];
+        sprintf(seed_char, "%d", seed);
+        randomequal = new RanMars(lmp, seed_char);
+        delete [] seed_char;
       }
       argstack[nargstack++] = randomequal->uniform()*(value2-value1) + value1;
     }
@@ -2668,7 +2680,10 @@ int Variable::math_function(char *word, char *contents, Tree **tree,
         int seed = static_cast<int> (value3);
         if (seed <= 0)
           error->all(FLERR,"Invalid math function in variable formula");
-        randomequal = new RanMars(lmp,seed);
+        char * seed_char = new char[50];
+        sprintf(seed_char, "%d", seed);
+        randomequal = new RanMars(lmp, seed_char);
+        delete [] seed_char;
       }
       argstack[nargstack++] = value1 + value2*randomequal->gaussian();
     }
@@ -2823,7 +2838,7 @@ int Variable::math_function(char *word, char *contents, Tree **tree,
      count(group),mass(group),charge(group),
      xcm(group,dim),vcm(group,dim),fcm(group,dim),
      bound(group,xmin),gyration(group),ke(group),angmom(group,dim),
-     torque(group,dim),inertia(group,dim),omega(group,dim)
+     torque(group,dim),inertia(group,dim),omega(group,dim), countMS(group)
 ------------------------------------------------------------------------- */
 
 int Variable::group_function(char *word, char *contents, Tree **tree,
@@ -2833,7 +2848,8 @@ int Variable::group_function(char *word, char *contents, Tree **tree,
 
   int n_ms = modify->n_fixes_style("multisphere");
   if(n_ms > 0 && !static_cast<FixMultisphere*>(modify->find_fix_style("multisphere",0))->allow_group_and_set())
-    error->all(FLERR,"Variable command 'group' may not be used together with fix multisphere");
+    error->all(FLERR, "By default variable command 'group' may not be used together with fix multisphere\n"
+                      "Use 'allow_group_and_set yes' with fix multisphere.");
 
   // word not a match to any group function
 
@@ -2843,7 +2859,7 @@ int Variable::group_function(char *word, char *contents, Tree **tree,
       strcmp(word,"bound") && strcmp(word,"gyration") &&
       strcmp(word,"ke") && strcmp(word,"angmom") &&
       strcmp(word,"torque") && strcmp(word,"inertia") &&
-      strcmp(word,"omega"))
+      strcmp(word,"omega") && strcmp(word,"countMS"))
     return 0;
 
   // parse contents for arg1,arg2,arg3 separated by commas
@@ -2889,6 +2905,11 @@ int Variable::group_function(char *word, char *contents, Tree **tree,
   if (strcmp(word,"count") == 0) {
     if (narg == 1) value = group->count(igroup);
     else if (narg == 2) value = group->count(igroup,region_function(arg2));
+    else error->all(FLERR,"Invalid group function in variable formula");
+
+  } else if (strcmp(word,"countMS") == 0) {
+    if (narg == 1) value = group->count_ms(igroup);
+    else if (narg == 2) value = group->count_ms(igroup,region_function(arg2));
     else error->all(FLERR,"Invalid group function in variable formula");
 
   } else if (strcmp(word,"mass") == 0) {
@@ -3082,7 +3103,8 @@ int Variable::region_function(char *id)
 
   int n_ms = modify->n_fixes_style("multisphere");
   if(n_ms > 0 && !static_cast<FixMultisphere*>(modify->find_fix_style("multisphere",0))->allow_group_and_set())
-    error->all(FLERR,"Variable command 'region' may not be used together with fix multisphere");
+    error->all(FLERR,"By default variable command 'region' may not be used together with fix multisphere.\n"
+                     "Use 'allow_group_and_set yes' with fix multisphere.");
 
   // init region in case sub-regions have been deleted
 
@@ -3178,7 +3200,7 @@ int Variable::special_function(char *word, char *contents, Tree **tree,
         if (update->whichflag == 0) {
           if (compute->invoked_vector != update->ntimestep)
             error->all(FLERR,
-                       "Compute used in variable between runs is not current");
+                       "Compute used in variable between runs is not current. Use the update_on_run_end option for computes to avoid this.");
         } else if (!(compute->invoked_flag & INVOKED_VECTOR)) {
           compute->compute_vector();
           compute->invoked_flag |= INVOKED_VECTOR;
@@ -3192,7 +3214,7 @@ int Variable::special_function(char *word, char *contents, Tree **tree,
         if (update->whichflag == 0) {
           if (compute->invoked_array != update->ntimestep)
             error->all(FLERR,
-                       "Compute used in variable between runs is not current");
+                       "Compute used in variable between runs is not current. Use the update_on_run_end option for computes to avoid this.");
         } else if (!(compute->invoked_flag & INVOKED_ARRAY)) {
           compute->compute_array();
           compute->invoked_flag |= INVOKED_ARRAY;
@@ -3438,7 +3460,10 @@ void Variable::peratom2global(int flag, char *word,
       else if ((strcmp(word,"tqy") == 0) && atom->torque_flag) mine = atom->torque[index][1];
       else if ((strcmp(word,"tqz") == 0) && atom->torque_flag) mine = atom->torque[index][2]; 
       else if ((strcmp(word,"r") == 0) && atom->radius_flag) mine = atom->radius[index];
-
+      else if ((strcmp(word,"quat1") == 0) && atom->superquadric_flag) mine = atom->quaternion[index][0];
+      else if ((strcmp(word,"quat2") == 0) && atom->superquadric_flag) mine = atom->quaternion[index][1];
+      else if ((strcmp(word,"quat3") == 0) && atom->superquadric_flag) mine = atom->quaternion[index][2];
+      else if ((strcmp(word,"quat4") == 0) && atom->superquadric_flag) mine = atom->quaternion[index][3];
       else error->one(FLERR,"Invalid atom vector in variable formula");
 
     } else mine = vector[index*nstride];
@@ -3486,6 +3511,10 @@ int Variable::is_atom_vector(char *word)
   if ((strcmp(word,"tqz") == 0) && atom->torque_flag) return 1; 
   if ((strcmp(word,"r") == 0) && atom->radius_flag) return 1;
   if ((strcmp(word,"density") == 0) && atom->density_flag) return 1;
+  if ((strcmp(word,"quat1") == 0) && atom->superquadric_flag) return 1;
+  if ((strcmp(word,"quat2") == 0) && atom->superquadric_flag) return 1;
+  if ((strcmp(word,"quat3") == 0) && atom->superquadric_flag) return 1;
+  if ((strcmp(word,"quat4") == 0) && atom->superquadric_flag) return 1;
   return 0;
 }
 
@@ -3542,6 +3571,10 @@ void Variable::atom_vector(char *word, Tree **tree,
   else if ((strcmp(word,"tqx") == 0) && atom->torque_flag) newtree->array = &atom->torque[0][0];
   else if ((strcmp(word,"tqy") == 0) && atom->torque_flag) newtree->array = &atom->torque[0][1];
   else if ((strcmp(word,"tqz") == 0) && atom->torque_flag) newtree->array = &atom->torque[0][2]; 
+  else if ((strcmp(word,"quat1") == 0) && atom->superquadric_flag) newtree->array = &atom->quaternion[0][0];
+  else if ((strcmp(word,"quat2") == 0) && atom->superquadric_flag) newtree->array = &atom->quaternion[0][1];
+  else if ((strcmp(word,"quat3") == 0) && atom->superquadric_flag) newtree->array = &atom->quaternion[0][2];
+  else if ((strcmp(word,"quat4") == 0) && atom->superquadric_flag) newtree->array = &atom->quaternion[0][3];
   else if ((strcmp(word,"density") == 0) && atom->density_flag) {
     newtree->nstride = 1;
     newtree->array = atom->density;

@@ -52,14 +52,14 @@ ComputeStyle(rdf,ComputeRDF)
 #ifndef LMP_COMPUTE_RDF_H
 #define LMP_COMPUTE_RDF_H
 
-#include "stdio.h"
+#include <stdio.h>
 #include "compute.h"
 
 namespace LAMMPS_NS {
 
 class ComputeRDF : public Compute {
  public:
-  ComputeRDF(class LAMMPS *, int, char **);
+  ComputeRDF(class LAMMPS *, int &iarg, int, char **);
   ~ComputeRDF();
   void init();
   void init_list(int, class NeighList *);

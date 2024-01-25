@@ -47,14 +47,14 @@
    Contributing author: Paul Crozier (SNL)
 ------------------------------------------------------------------------- */
 
-#include "mpi.h"
+#include <mpi.h>
 #include "ctype.h"
 #include "float.h"
 #include "limits.h"
-#include "math.h"
-#include "stdio.h"
-#include "stdlib.h"
-#include "string.h"
+#include <cmath>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "pair.h"
 #include "atom.h"
 #include "neighbor.h"
@@ -319,7 +319,7 @@ void Pair::init_tables(double cut_coul, double *cut_respa)
   double qqrd2e = force->qqrd2e;
 
   if (force->kspace == NULL)
-    error->all(FLERR,"Pair style requres a KSpace style");
+    error->all(FLERR,"Pair style requires a KSpace style");
   double g_ewald = force->kspace->g_ewald;
 
   double cut_coulsq = cut_coul * cut_coul;
@@ -566,7 +566,7 @@ void Pair::init_tables_disp(double cut_lj_global)
     }
     
     rsq = rsq_lookup.f;
-    register double x2 = g2*rsq, a2 = 1.0/x2;
+    double x2 = g2*rsq, a2 = 1.0/x2;
     x2 = a2*exp(-x2);
 
     rdisptable[i] = rsq_lookup.f;
@@ -612,7 +612,7 @@ void Pair::init_tables_disp(double cut_lj_global)
   if (rsq_lookup.f < (cut_lj_globalsq = cut_lj_global * cut_lj_global)) {
     rsq_lookup.f = cut_lj_globalsq;
     
-    register double x2 = g2*rsq, a2 = 1.0/x2;
+    double x2 = g2*rsq, a2 = 1.0/x2;
     x2 = a2*exp(-x2);
     f_tmp = g8*(((6.0*a2+6.0)*a2+3.0)*a2+1.0)*x2*rsq;
     e_tmp = g6*((a2+1.0)*a2+0.5)*x2;
@@ -662,15 +662,14 @@ void Pair::free_disp_tables()
 
 double Pair::mix_energy(double eps1, double eps2, double sig1, double sig2)
 {
-  double value = 0.0;
   if (mix_flag == GEOMETRIC)
-    value = sqrt(eps1*eps2);
+    return sqrt(eps1*eps2);
   else if (mix_flag == ARITHMETIC)
-    value = sqrt(eps1*eps2);
+    return sqrt(eps1*eps2);
   else if (mix_flag == SIXTHPOWER)
-    value = 2.0 * sqrt(eps1*eps2) *
-      pow(sig1,3.0) * pow(sig2,3.0) / (pow(sig1,6.0) + pow(sig2,6.0));
-  return value;
+    return (2.0 * sqrt(eps1*eps2) *
+      pow(sig1,3.0) * pow(sig2,3.0) / (pow(sig1,6.0) + pow(sig2,6.0)));
+  else return 0.0;
 }
 
 /* ----------------------------------------------------------------------
@@ -679,14 +678,13 @@ double Pair::mix_energy(double eps1, double eps2, double sig1, double sig2)
 
 double Pair::mix_distance(double sig1, double sig2)
 {
-  double value = 0.0;
   if (mix_flag == GEOMETRIC)
-    value = sqrt(sig1*sig2);
+    return sqrt(sig1*sig2);
   else if (mix_flag == ARITHMETIC)
-    value = 0.5 * (sig1+sig2);
+    return (0.5 * (sig1+sig2));
   else if (mix_flag == SIXTHPOWER)
-    value = pow((0.5 * (pow(sig1,6.0) + pow(sig2,6.0))),1.0/6.0);
-  return value;
+    return pow((0.5 * (pow(sig1,6.0) + pow(sig2,6.0))),1.0/6.0);
+  else return 0.0;
 }
 
 /* ---------------------------------------------------------------------- */

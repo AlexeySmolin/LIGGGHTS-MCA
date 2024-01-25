@@ -49,7 +49,7 @@
     the GNU General Public License.
 ------------------------------------------------------------------------- */
 
-#include "string.h"
+#include <string.h>
 #include "ctype.h"
 #include "fix.h"
 #include "atom.h"
@@ -57,13 +57,20 @@
 #include "atom_masks.h"
 #include "memory.h"
 #include "error.h"
+#include "comm.h"
 
 using namespace LAMMPS_NS;
 using namespace FixConst;
 
 /* ---------------------------------------------------------------------- */
 
-Fix::Fix(LAMMPS *lmp, int narg, char **arg) : Pointers(lmp)
+Fix::Fix(LAMMPS *lmp, int narg, char **arg) :
+    Pointers(lmp),
+    size_vector(0),
+    size_array_rows(0),
+    size_array_cols(0),
+    global_freq(0),
+    can_create_mesh_(false)
 {
   // fix ID, group, and style
   // ID must be all alphanumeric chars or underscores
@@ -96,10 +103,12 @@ Fix::Fix(LAMMPS *lmp, int narg, char **arg) : Pointers(lmp)
   create_attribute = 0;
   restart_pbc = 0;
   wd_header = wd_section = 0;
+  dynamic_group_allow = 0;
   cudable_comm = 0;
   rad_mass_vary_flag = 0; 
   just_created = 1; 
   recent_restart = 0; 
+  accepts_restart_data_from_style = 0; 
   vflag_global = vflag_atom = 0; 
 
   scalar_flag = vector_flag = array_flag = 0;
@@ -234,4 +243,12 @@ void Fix::v_tally(int n, int *list, double total, double *v)
       vatom[m][5] += fraction*v[5];
     }
   }
+}
+
+// write out a buffer of size 0
+void Fix::write_restart(FILE *fp)
+{
+    int n = 0;
+    if (comm->me == 0)
+        fwrite(&n, sizeof(int), 1, fp);
 }

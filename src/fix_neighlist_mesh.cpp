@@ -141,6 +141,7 @@ void FixNeighlistMesh::post_create()
         fix_nneighs_ = modify->add_fix_property_atom(9,const_cast<char**>(fixarg),style);
 
         fix_nneighs_->just_created = false;
+        fix_nneighs_->set_internal();
     }
     //check for aspherical
     avec = (AtomVecEllipsoid *) atom->style_match("ellipsoid");
@@ -194,9 +195,7 @@ void FixNeighlistMesh::min_setup_pre_force(int foo)
 void FixNeighlistMesh::pre_delete(bool unfixflag)
 {
     if(unfixflag)
-    {
         modify->delete_fix(fix_nneighs_->id);
-    }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -239,7 +238,7 @@ void FixNeighlistMesh::pre_force(int)
     numAllContacts_ = 0;
 
     // set num_neigh = 0
-    memset(fix_nneighs_->vector_atom, 0, atom->nlocal*sizeof(double));
+    memset(fix_nneighs_->vector_atom, 0, atom->nmax*sizeof(double));
 
     x = atom->x;
     r = atom->radius;
@@ -295,8 +294,62 @@ void FixNeighlistMesh::pre_force(int)
       numAllContacts_ += triangle.contacts.size();
     }
 
-    if(globalNumAllContacts_) {
-      MPI_Sum_Scalar(numAllContacts_,world);
+    if(globalNumAllContacts_)
+        MPI_Sum_Scalar(numAllContacts_,world);
+
+    fix_nneighs_->do_forward_comm();
+}
+
+/* ---------------------------------------------------------------------- */
+
+void FixNeighlistMesh::checkBin(AtomVecEllipsoid::Bonus *bonus, std::vector<int>& neighbors, int& nchecked, double contactDistanceFactor, int *mask, int nlocal, int iBin, int iTri, bool haveNonSpherical, int *ellipsoid, double *shape)
+{
+    int iAtom = binhead[iBin];
+
+    // only handle local atoms and periodic ghosts
+    while(iAtom != -1)
+    {
+      if((iAtom > nlocal) && (!domain->is_periodic_ghost(iAtom)))
+      {
+          if(bins) iAtom = bins[iAtom];
+          else iAtom = -1;
+
+          continue;
+      }
+
+      if(! (mask[iAtom] & groupbit_wall_mesh))
+      {
+          if(bins) iAtom = bins[iAtom];
+          else iAtom = -1;
+          continue;
+      }
+      nchecked++;
+
+      if(0) {}
+      #ifdef TRI_LINE_ACTIVE_FLAG
+      else if(haveNonSpherical) //if non-spherical, check line interaction as well
+      {
+          double length;
+          double cylRadius;
+          shape     = bonus[ellipsoid[iAtom]].shape;
+          length    = 2.*MathExtraLiggghts::max(shape[0],shape[1],shape[2]);
+          cylRadius =    MathExtraLiggghts::min(shape[0],shape[1],shape[2]);
+          if( mesh_->resolveTriSegmentNeighbuild(iTri, x[iAtom], length*contactDistanceFactor, cylRadius, skin ) )
+          {
+            neighbors.push_back(iAtom);
+            fix_nneighs_->set_vector_atom_int(iAtom, fix_nneighs_->get_vector_atom_int(iAtom)+1); // num_neigh++
+          }
+      }
+      #endif
+      else if(mesh_->resolveTriSphereNeighbuild(iTri,r ? r[iAtom]*contactDistanceFactor : 0. ,x[iAtom],r ? skin : (distmax+skin) ))
+      {
+        // include iAtom in neighbor list
+        neighbors.push_back(iAtom);
+        fix_nneighs_->set_vector_atom_int(iAtom, fix_nneighs_->get_vector_atom_int(iAtom)+1); // num_neigh++
+        
+      }
+      if(bins) iAtom = bins[iAtom];
+      else iAtom = -1;
     }
 }
 
@@ -313,8 +366,8 @@ void FixNeighlistMesh::handleTriangle(int iTri)
     double contactDistanceFactor = neighbor->contactDistanceFactor;
 
     int                     *ellipsoid  = atom->ellipsoid;
-    AtomVecEllipsoid::Bonus *bonus;
-    double *shape;
+    AtomVecEllipsoid::Bonus *bonus = 0;
+    double *shape = 0;
     bool    haveNonSpherical = false;
     if(ellipsoid)
     {
@@ -335,48 +388,9 @@ void FixNeighlistMesh::handleTriangle(int iTri)
         for(int ix=ixMin;ix<=ixMax;ix++) {
           for(int iy=iyMin;iy<=iyMax;iy++) {
             for(int iz=izMin;iz<=izMax;iz++) {
-              int iBin = iz*mbiny*mbinx + iy*mbinx + ix;
+              const int iBin = iz*mbiny*mbinx + iy*mbinx + ix;
               if(iBin < 0 || iBin >= maxhead) continue;
-
-              int iAtom = binhead[iBin];
-              
-              while(iAtom != -1 && iAtom < nlocal)
-              {
-                if(! (mask[iAtom] & groupbit_wall_mesh))
-                {
-                    if(bins) iAtom = bins[iAtom];
-                    else iAtom = -1;
-                    continue;
-                }
-                nchecked++;
-
-                if(0) {}
-                #ifdef TRI_LINE_ACTIVE_FLAG
-                else if(haveNonSpherical) //if non-spherical, check line interaction as well
-                {
-                    double *lineOrientation; //keep empty, not needed
-                    double length;
-                    double cylRadius;
-                    shape     = bonus[ellipsoid[iAtom]].shape;
-                    length    = 2.*MathExtraLiggghts::max(shape[0],shape[1],shape[2]);
-                    cylRadius =    MathExtraLiggghts::min(shape[0],shape[1],shape[2]);
-                    if( mesh_->resolveTriSegmentNeighbuild(iTri, lineOrientation ,x[iAtom], length*contactDistanceFactor, cylRadius, skin ) )
-                    {
-                      neighbors.push_back(iAtom);
-                      fix_nneighs_->set_vector_atom_int(iAtom, fix_nneighs_->get_vector_atom_int(iAtom)+1); // num_neigh++
-                    }
-                }
-                #endif
-                else if(mesh_->resolveTriSphereNeighbuild(iTri,r ? r[iAtom]*contactDistanceFactor : 0. ,x[iAtom],r ? skin : (distmax+skin) ))
-                {
-                  
-                  neighbors.push_back(iAtom);
-                  fix_nneighs_->set_vector_atom_int(iAtom, fix_nneighs_->get_vector_atom_int(iAtom)+1); // num_neigh++
-                  
-                }
-                if(bins) iAtom = bins[iAtom];
-                else iAtom = -1;
-              }
+              checkBin(bonus, neighbors, nchecked, contactDistanceFactor, mask, nlocal, iBin, iTri, haveNonSpherical, ellipsoid, shape);
             }
           }
         }
@@ -385,44 +399,7 @@ void FixNeighlistMesh::handleTriangle(int iTri)
         const int bincount = triangleBins.size();
         for(int i = 0; i < bincount; i++) {
           const int iBin = triangleBins[i];
-          
-          int iAtom = binhead[iBin];
-          while(iAtom != -1 && iAtom < nlocal)
-          {
-            if(! (mask[iAtom] & groupbit_wall_mesh))
-            {
-                if(bins) iAtom = bins[iAtom];
-                else iAtom = -1;
-                continue;
-            }
-            nchecked++;
-
-            if(0) {}
-            #ifdef TRI_LINE_ACTIVE_FLAG
-            else if(haveNonSpherical) //if non-spherical, check line interaction as well
-            {
-                    double *lineOrientation; //keep empty, not needed
-                    double length;
-                    double cylRadius;
-                    shape     = bonus[ellipsoid[iAtom]].shape;
-                    length    = 2.*MathExtraLiggghts::max(shape[0],shape[1],shape[2]);
-                    cylRadius =    MathExtraLiggghts::min(shape[0],shape[1],shape[2]);
-                    if( mesh_->resolveTriSegmentNeighbuild(iTri, lineOrientation ,x[iAtom], length*contactDistanceFactor, cylRadius, skin ) )
-                    {
-                      neighbors.push_back(iAtom);
-                      fix_nneighs_->set_vector_atom_int(iAtom, fix_nneighs_->get_vector_atom_int(iAtom)+1); // num_neigh++
-                    }
-            }
-            #endif
-			else if(mesh_->resolveTriSphereNeighbuild(iTri,r ? r[iAtom]*contactDistanceFactor : 0. ,x[iAtom],r ? skin : (distmax+skin) ))
-            {
-              
-              neighbors.push_back(iAtom);
-              fix_nneighs_->set_vector_atom_int(iAtom, fix_nneighs_->get_vector_atom_int(iAtom)+1); // num_neigh++
-            }
-            if(bins) iAtom = bins[iAtom];
-            else iAtom = -1;
-          }
+          checkBin(bonus, neighbors, nchecked, contactDistanceFactor, mask, nlocal, iBin, iTri, haveNonSpherical, ellipsoid, shape);
         }
       }
     }

@@ -49,10 +49,10 @@
     the GNU General Public License.
 ------------------------------------------------------------------------- */
 
-#include "mpi.h"
-#include "stdio.h"
-#include "stdlib.h"
-#include "string.h"
+#include <mpi.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "ctype.h"
 #include "unistd.h"
 #include "sys/stat.h"
@@ -83,6 +83,7 @@
 #include "accelerator_cuda.h"
 #include "error.h"
 #include "memory.h"
+#include "signal_handling.h"
 
 #ifdef _OPENMP
 #include "omp.h"
@@ -152,6 +153,8 @@ Input::Input(LAMMPS *lmp, int argc, char **argv) : Pointers(lmp)
       iarg += 2;
     } else iarg++;
   }
+
+  seed_check_error = true;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -255,6 +258,9 @@ void Input::file()
       sprintf(str,"Unknown command: %s",line);
       error->all(FLERR,str);
     }
+
+    if (SignalHandler::request_quit)
+        return;
   }
 }
 
@@ -439,7 +445,8 @@ void Input::substitute(char *&str, char *&str2, int &max, int &max2, int flag)
   int i,n,paren_count;
   char immediate[256];
   char *var,*value,*beyond;
-  char quote = '\0';
+  bool in_double_quote = false;
+  bool in_single_quote = false;
   char *ptr = str;
 
   n = strlen(str) + 1;
@@ -449,7 +456,7 @@ void Input::substitute(char *&str, char *&str2, int &max, int &max2, int flag)
 
   while (*ptr) {
     // variable substitution
-    if (*ptr == '$' && !quote) {
+    if (*ptr == '$' && !in_double_quote && !in_single_quote) {
 
       // value = ptr to expanded variable
       // variable name between curly braces, e.g. ${a}
@@ -514,8 +521,10 @@ void Input::substitute(char *&str, char *&str2, int &max, int &max2, int flag)
       }
       continue;
     }
-    if (*ptr == quote) quote = '\0';
-    else if (*ptr == '"' || *ptr == '\'') quote = *ptr;
+    if (*ptr == '"')
+        in_double_quote = !in_double_quote;
+    else if (*ptr == '\'')
+        in_single_quote = !in_single_quote;
     // copy current character into str2
 
     *ptr2++ = *ptr++;
@@ -585,6 +594,7 @@ int Input::execute_command()
   else if (!strcmp(command,"dump_modify")) dump_modify();
   else if (!strcmp(command,"fix")) fix();
   else if (!strcmp(command,"fix_modify")) fix_modify();
+  else if (!strcmp(command,"force_dt_reset")) force_dt_reset();
   else if (!strcmp(command,"group")) group_command();
   else if (!strcmp(command,"improper_coeff")) improper_coeff();
   else if (!strcmp(command,"improper_style")) improper_style();
@@ -594,7 +604,6 @@ int Input::execute_command()
   else if (!strcmp(command,"mass")) mass();
   else if (!strcmp(command,"min_modify")) min_modify();
   else if (!strcmp(command,"min_style")) min_style();
-  else if (!strcmp(command,"neigh_modify")) neigh_modify();
   else if (!strcmp(command,"neighbor")) neighbor_command();
   else if (!strcmp(command,"newton")) newton();
   else if (!strcmp(command,"package")) package();
@@ -607,6 +616,9 @@ int Input::execute_command()
   else if (!strcmp(command,"reset_timestep")) reset_timestep();
   else if (!strcmp(command,"restart")) restart();
   else if (!strcmp(command,"run_style")) run_style();
+  else if (!strcmp(command,"soft_particles")) soft_particles(); 
+  else if (!strcmp(command,"hard_particles")) hard_particles();
+  else if (!strcmp(command,"write_restart_on_signal")) write_restart_on_signal();
   else if (!strcmp(command,"special_bonds")) special_bonds();
   else if (!strcmp(command,"suffix")) suffix();
   else if (!strcmp(command,"thermo")) thermo();
@@ -747,7 +759,12 @@ void Input::ifthenelse()
     }
 
     ifthenelse_flag = 1;
-    for (int i = 0; i < ncommands; i++) one(commands[i]);
+    for (int i = 0; i < ncommands; i++)
+    {
+        one(commands[i]);
+        if (SignalHandler::request_quit)
+            break;
+    }
     ifthenelse_flag = 0;
 
     for (int i = 0; i < ncommands; i++) delete [] commands[i];
@@ -857,7 +874,12 @@ void Input::jump()
   }
 
   if (me == 0) {
-    if (strcmp(arg[0],"SELF") == 0) rewind(infile);
+    if (strcmp(arg[0],"SELF") == 0)
+    {
+        if (infile == stdin)
+            error->one(FLERR, "jump SELF is not allowed when using stdin, use -in instead");
+        rewind(infile);
+    }
     else {
       if (infile != stdin) fclose(infile);
       infile = fopen(arg[0],"r");
@@ -987,53 +1009,100 @@ void Input::partition()
 
 void Input::print()
 {
-  if (narg < 1) error->all(FLERR,"Illegal print command");
+    if (narg < 1)
+        error->all(FLERR,"Illegal print command");
 
-  // copy 1st arg back into line (copy is being used)
-  // check maxline since arg[0] could have been exanded by variables
-  // substitute for $ variables (no printing) and print arg
+    // copy 1st arg back into line (copy is being used)
+    // check maxline since arg[0] could have been exanded by variables
+    // substitute for $ variables (no printing) and print arg
 
-  int n = strlen(arg[0]) + 1;
-  if (n > maxline) reallocate(line,maxline,n);
-  strcpy(line,arg[0]);
-  substitute(line,work,maxline,maxwork,0);
+    int n = strlen(arg[0]) + 1;
+    if (n > maxline)
+        reallocate(line,maxline,n);
+    strcpy(line,arg[0]);
+    substitute(line,work,maxline,maxwork,0);
 
-  // parse optional args
+    // parse optional args
 
-  FILE *fp = NULL;
-  int screenflag = 1;
+    FILE *fp = NULL;
+    int screenflag = 1;
+    bool newline = true;
 
-  int iarg = 1;
-  while (iarg < narg) {
-    if (strcmp(arg[iarg],"file") == 0 || strcmp(arg[iarg],"append") == 0) {
-      if (iarg+2 > narg) error->all(FLERR,"Illegal print command");
-  if (me == 0) {
-        if (strcmp(arg[iarg],"file") == 0) fp = fopen(arg[iarg+1],"w");
-        else fp = fopen(arg[iarg+1],"a");
-        if (fp == NULL) {
-          char str[512];
-          sprintf(str,"Cannot open print file %s",arg[iarg+1]);
-          error->one(FLERR,str);
+    int iarg = 1;
+    while (iarg < narg)
+    {
+        if (strcmp(arg[iarg],"file") == 0 || strcmp(arg[iarg],"append") == 0)
+        {
+            if (iarg+2 > narg)
+                error->all(FLERR,"Illegal print command");
+                if (me == 0)
+                {
+                    if (strcmp(arg[iarg],"file") == 0)
+                        fp = fopen(arg[iarg+1],"w");
+                    else
+                        fp = fopen(arg[iarg+1],"a");
+                    if (fp == NULL)
+                    {
+                        char str[512];
+                        sprintf(str,"Cannot open print file %s",arg[iarg+1]);
+                        error->one(FLERR,str);
+                    }
+                }
+                iarg += 2;
         }
-      }
-      iarg += 2;
-    } else if (strcmp(arg[iarg],"screen") == 0) {
-      if (iarg+2 > narg) error->all(FLERR,"Illegal print command");
-      if (strcmp(arg[iarg+1],"yes") == 0) screenflag = 1;
-      else if (strcmp(arg[iarg+1],"no") == 0) screenflag = 0;
-      else error->all(FLERR,"Illegal print command");
-      iarg += 2;
-    } else error->all(FLERR,"Illegal print command");
-  }
-
-  if (me == 0) {
-    if (screenflag && screen) fprintf(screen,"%s\n",line);
-    if (screenflag && logfile) fprintf(logfile,"%s\n",line);
-    if (fp) {
-      fprintf(fp,"%s\n",line);
-      fclose(fp);
+        else if (strcmp(arg[iarg],"screen") == 0)
+        {
+            if (iarg+2 > narg)
+                error->all(FLERR,"Illegal print command");
+            if (strcmp(arg[iarg+1],"yes") == 0)
+                screenflag = 1;
+            else if (strcmp(arg[iarg+1],"no") == 0)
+                screenflag = 0;
+            else
+                error->all(FLERR,"Illegal print command");
+            iarg += 2;
+        }
+        else if (strcmp(arg[iarg], "newline") == 0)
+        {
+            if (iarg+2 > narg)
+                error->all(FLERR,"Illegal print command");
+            if (strcmp(arg[iarg+1],"yes") == 0)
+                newline = true;
+            else if (strcmp(arg[iarg+1],"no") == 0)
+                newline = false;
+            else
+                error->all(FLERR,"Illegal print command");
+            iarg += 2;
+        }
+        else
+            error->all(FLERR,"Illegal print command");
     }
-  }
+
+    if (me == 0)
+    {
+        if (screenflag && screen)
+        {
+            if (newline)
+                fprintf(screen, "%s\n", line);
+            else
+                fprintf(screen, "%s", line);
+        }
+        if (screenflag && logfile)
+        {
+            if (newline)
+                fprintf(logfile, "%s\n", line);
+            else
+                fprintf(logfile, "%s", line);
+        }
+        if (fp)
+        {
+            if (newline)
+                fprintf(fp, "%s\n", line);
+            else
+                fprintf(fp, "%s", line);
+            fclose(fp);
+        }
+    }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1300,6 +1369,20 @@ void Input::fix_modify()
 
 /* ---------------------------------------------------------------------- */
 
+void Input::force_dt_reset()
+{
+   if(narg != 1)
+      error->all(FLERR,"force_dt_reset expects 'yes' or 'no'");
+   if(0 == strcmp(arg[0],"yes"))
+      update->set_force_dt_reset(true);
+   else if(0 == strcmp(arg[0],"no"))
+      update->set_force_dt_reset(false);
+   else
+      error->all(FLERR,"force_dt_reset expects 'yes' or 'no'");
+}
+
+/* ---------------------------------------------------------------------- */
+
 void Input::group_command()
 {
   group->assign(narg,arg);
@@ -1380,16 +1463,9 @@ void Input::min_style()
 
 /* ---------------------------------------------------------------------- */
 
-void Input::neigh_modify()
-{
-  neighbor->modify_params(narg,arg);
-}
-
-/* ---------------------------------------------------------------------- */
-
 void Input::neighbor_command()
 {
-  neighbor->set(narg,arg);
+  neighbor->set(narg, arg);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1567,6 +1643,46 @@ void Input::run_style()
 }
 
 /* ---------------------------------------------------------------------- */
+void Input::write_restart_on_signal()
+{
+   if(narg != 1)
+      error->all(FLERR,"write_restart_on_signal expects 'yes' or 'no'");
+   if(0 == strcmp(arg[0],"yes"))
+      SignalHandler::enable_restart_writing = true;
+   else if(0 == strcmp(arg[0],"no"))
+      SignalHandler::enable_restart_writing = false;
+   else
+      error->all(FLERR,"write_restart_on_signal expects 'yes' or 'no'");
+}
+
+/* ---------------------------------------------------------------------- */
+void Input::hard_particles()
+{
+   if(narg != 1)
+      error->all(FLERR,"hard_particles expects 'yes' or 'no'");
+   if(0 == strcmp(arg[0],"yes"))
+      atom->get_properties()->do_allow_hard_particles();
+   else if(0 == strcmp(arg[0],"no"))
+      atom->get_properties()->do_not_allow_hard_particles();
+   else
+      error->all(FLERR,"hard_particles expects 'yes' or 'no'");
+}
+
+/* ---------------------------------------------------------------------- */
+
+void Input::soft_particles()
+{
+   if(narg != 1)
+      error->all(FLERR,"soft_particles expects 'yes' or 'no'");
+   if(0 == strcmp(arg[0],"yes"))
+      atom->get_properties()->do_allow_soft_particles();
+   else if(0 == strcmp(arg[0],"no"))
+      atom->get_properties()->do_not_allow_soft_particles();
+   else
+      error->all(FLERR,"soft_particles expects 'yes' or 'no'");
+}
+
+/* ---------------------------------------------------------------------- */
 
 void Input::special_bonds()
 {
@@ -1641,6 +1757,7 @@ void Input::timestep()
 {
   if (narg != 1) error->all(FLERR,"Illegal timestep command");
   update->dt = force->numeric(FLERR,arg[0]);
+  update->timestep_set = true;
   
 }
 

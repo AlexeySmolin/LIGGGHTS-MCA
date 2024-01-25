@@ -50,10 +50,10 @@
 ------------------------------------------------------------------------- */
 
 #include "lmptype.h"
-#include "mpi.h"
-#include "math.h"
-#include "stdlib.h"
-#include "string.h"
+#include <mpi.h>
+#include <cmath>
+#include <stdlib.h>
+#include <string.h>
 #include "thermo.h"
 #include "atom.h"
 #include "update.h"
@@ -102,10 +102,6 @@ enum{IGNORE,WARN,ERROR};           // same as write_restart.cpp
 enum{ONELINE,MULTILINE};
 enum{INT,FLOAT,BIGINT};
 enum{SCALAR,VECTOR,ARRAY};
-
-#define INVOKED_SCALAR 1
-#define INVOKED_VECTOR 2
-#define INVOKED_ARRAY 4
 
 #define DELTA 8
 
@@ -163,11 +159,14 @@ Thermo::Thermo(LAMMPS *lmp, int narg, char **arg) : Pointers(lmp)
 
   // ptrs, flags, IDs for compute objects thermo may use or create
 
-  temperature = NULL;
+  kin_eng = NULL;
+  erot = NULL;
 
-  index_temp = -1;
+  index_kin_eng = -1;
+  index_erot = -1;
 
-  id_temp = (char *) "thermo_temp";
+  id_kin_eng = (char *) "thermo_kin_eng";
+  id_erot = (char *) "thermo_erot";
 
   // count fields in line
   // allocate per-field memory
@@ -184,7 +183,7 @@ Thermo::Thermo(LAMMPS *lmp, int narg, char **arg) : Pointers(lmp)
     "CPU = %%11.4f (sec) ----------------";
 
   sprintf(format_multi,fformat_multi,&bigint_format[1]);
-  format_float_one_def = (char *) "%12.8g";
+  format_float_one_def = (char *) "%14.8g";
   format_float_multi_def = (char *) "%14.4f";
   format_int_one_def = (char *) "%8d";
   format_int_multi_def = (char *) "%14d";
@@ -301,7 +300,8 @@ void Thermo::init()
 
   // set ptrs to keyword-specific Compute objects
 
-  if (index_temp >= 0) temperature = computes[index_temp];
+  if (index_kin_eng >= 0) kin_eng = computes[index_kin_eng];
+  if (index_erot >= 0) erot = computes[index_erot];
 
   last_natoms = 0; 
 }
@@ -314,13 +314,18 @@ void Thermo::header()
 
   int loc = 0;
   for (int i = 0; i < nfield; i++)
-    loc += sprintf(&line[loc],"%s ",keyword[i]);
+  {
+    if (vtype[i] == FLOAT)
+        loc += sprintf(&line[loc],"%14s ",keyword[i]);
+    else if (vtype[i] == INT || vtype[i] == BIGINT)
+        loc += sprintf(&line[loc],"%8s ",keyword[i]);
+  }
   sprintf(&line[loc],"\n");
 
   if (me == 0) {
     if (screen) fprintf(screen,"%s",line);
     if (logfile) fprintf(logfile,"%s",line);
-    if (thermofile) fprintf(thermofile,"%s",line); 
+    if (thermofile) fprintf(thermofile,"%s",line);
   }
 }
 
@@ -652,7 +657,16 @@ void Thermo::parse_fields(char *str)
       addfield("Atoms",&Thermo::compute_atoms,BIGINT);
     } else if (strcmp(word,"ke") == 0) {
       addfield("KinEng",&Thermo::compute_ke,FLOAT);
-      index_temp = add_compute(id_temp,SCALAR);
+      index_kin_eng = add_compute(id_kin_eng,SCALAR);
+    } else if (strcmp(word,"erotate") == 0) {
+      addfield("RotEng",&Thermo::compute_erot,FLOAT);
+      char **carg = new char * [3];
+      carg[0] = id_erot;
+      carg[1] = (char *) "all";
+      carg[2] = (char *) "erotate";
+      modify->add_compute(3, carg);
+      delete [] carg;
+      index_erot = add_compute(id_erot,SCALAR);
     } else if (strcmp(word,"vol") == 0) {
       addfield("Volume",&Thermo::compute_vol,FLOAT);
     } else if (strcmp(word,"density") == 0) {
@@ -956,20 +970,37 @@ int Thermo::evaluate_keyword(char *word, double *answer)
     dvalue = bivalue;
 
   } else if (strcmp(word,"ke") == 0) {
-    if (!temperature)
+    if (!kin_eng)
       error->all(FLERR,"Thermo keyword in variable requires "
-                 "thermo to use/init temp");
+                 "thermo to use/init ke");
     if (update->whichflag == 0) {
-      if (temperature->invoked_scalar != update->ntimestep)
+      if (kin_eng->invoked_scalar != update->ntimestep)
         error->all(FLERR,"Compute used in variable thermo keyword between runs "
                    "is not current");
-    } else if (!(temperature->invoked_flag & INVOKED_SCALAR)) {
-      temperature->compute_scalar();
-      temperature->invoked_flag |= INVOKED_SCALAR;
+    } else if (!(kin_eng->invoked_flag & INVOKED_SCALAR)) {
+      kin_eng->compute_scalar();
+      kin_eng->invoked_flag |= INVOKED_SCALAR;
     }
     compute_ke();
 
-  } else if (strcmp(word,"vol") == 0) compute_vol();
+  }
+  else if (strcmp(word,"erotate") == 0)
+  {
+    if (!erot)
+      error->all(FLERR,"Thermo keyword in variable requires "
+                 "thermo to use/init erotate");
+    if (update->whichflag == 0) {
+      if (erot->invoked_scalar != update->ntimestep)
+        error->all(FLERR,"Compute used in variable thermo keyword between runs "
+                   "is not current");
+    } else if (!(erot->invoked_flag & INVOKED_SCALAR)) {
+      erot->compute_scalar();
+      erot->invoked_flag |= INVOKED_SCALAR;
+    }
+    compute_erot();
+
+  }
+  else if (strcmp(word,"vol") == 0) compute_vol();
   else if (strcmp(word,"density") == 0) compute_density();
   else if (strcmp(word,"lx") == 0) compute_lx();
   else if (strcmp(word,"ly") == 0) compute_ly();
@@ -1106,7 +1137,7 @@ void Thermo::compute_dt()
 
 void Thermo::compute_time()
 {
-  dvalue = update->atime + (update->ntimestep-update->atimestep)*update->dt;
+  dvalue = update->get_cur_time();
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1215,17 +1246,17 @@ void Thermo::compute_atoms()
 
 /* ---------------------------------------------------------------------- */
 
-void Thermo::compute_temp()
+void Thermo::compute_ke()
 {
-  dvalue = temperature->scalar;
+  dvalue = kin_eng->scalar;
+  if (normflag) dvalue /= natoms;
 }
 
 /* ---------------------------------------------------------------------- */
 
-void Thermo::compute_ke()
+void Thermo::compute_erot()
 {
-  dvalue = temperature->scalar;
-  dvalue *= 0.5 * temperature->dof * force->boltz;
+  dvalue = erot->scalar;
   if (normflag) dvalue /= natoms;
 }
 

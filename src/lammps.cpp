@@ -49,8 +49,8 @@
     the GNU General Public License.
 ------------------------------------------------------------------------- */
 
-#include "mpi.h"
-#include "string.h"
+#include <mpi.h>
+#include <string.h>
 #include "ctype.h"
 #include "lammps.h"
 #include "style_angle.h"
@@ -84,6 +84,7 @@
 #include "timer.h"
 #include "memory.h"
 #include "error.h"
+#include "granular_styles.h"
 
 using namespace LAMMPS_NS;
 
@@ -97,6 +98,7 @@ using namespace LAMMPS_NS;
 
 LAMMPS::LAMMPS(int narg, char **arg, MPI_Comm communicator)
 {
+  regGranStyles = new RegisterGranularStyles();
   memory = new Memory(this);
   error = new Error(this);
   universe = new Universe(this,communicator);
@@ -104,7 +106,10 @@ LAMMPS::LAMMPS(int narg, char **arg, MPI_Comm communicator)
 
   screen = NULL;
   logfile = NULL;
+  infile = NULL;
   thermofile = NULL; 
+
+  initclock = MPI_Wtime();
 
   // parse input switches
 
@@ -126,6 +131,8 @@ LAMMPS::LAMMPS(int narg, char **arg, MPI_Comm communicator)
   int tag_offset = 0; 
 
   wedgeflag = false; 
+  wb = false; 
+  bool seed_check_error = true;
 
   int iarg = 1;
   while (iarg < narg) {
@@ -149,6 +156,13 @@ LAMMPS::LAMMPS(int narg, char **arg, MPI_Comm communicator)
         error->universe_all(FLERR,"Invalid command-line argument");
       thermoflag = iarg+1;
       iarg += 2;
+    } else if (strcmp(arg[iarg],"-seedtolerant") == 0 ||
+               strcmp(arg[iarg],"-st") == 0) { 
+      seed_check_error = false;
+      iarg ++;
+    } else if (strcmp(arg[iarg],"-wb") == 0 ) { 
+      wb = true;
+      iarg ++;
     } else if (strcmp(arg[iarg],"-in") == 0 ||
                strcmp(arg[iarg],"-i") == 0) {
       if (iarg+2 > narg)
@@ -247,7 +261,11 @@ LAMMPS::LAMMPS(int narg, char **arg, MPI_Comm communicator)
     } else if (strcmp(arg[iarg],"-help") == 0 ||
                strcmp(arg[iarg],"-h") == 0) {
       if (iarg+1 > narg)
+      {
+        if(screen) fprintf(screen,"argument is %s\n",arg[iarg]);
+        if(logfile) fprintf(logfile,"argument is %s\n",arg[iarg]);
         error->universe_all(FLERR,"Invalid command-line argument");
+      }
       helpflag = 1;
       iarg += 1;
     } else error->universe_all(FLERR,"Invalid command-line argument");
@@ -280,7 +298,7 @@ LAMMPS::LAMMPS(int narg, char **arg, MPI_Comm communicator)
   // set universe screen and logfile
 
   if (universe->me == 0) {
-    if (screenflag == 0)
+	  if (screenflag == 0)
       universe->uscreen = stdout;
     else if (strcmp(arg[screenflag],"none") == 0)
       universe->uscreen = NULL;
@@ -310,7 +328,7 @@ LAMMPS::LAMMPS(int narg, char **arg, MPI_Comm communicator)
   }
 
   if (universe->me > 0) {
-    if (screenflag == 0) universe->uscreen = stdout;
+	if (screenflag == 0) universe->uscreen = stdout;
     else universe->uscreen = NULL;
     universe->ulogfile = NULL;
     universe->uthermofile = NULL; 
@@ -513,6 +531,7 @@ LAMMPS::LAMMPS(int narg, char **arg, MPI_Comm communicator)
   // allocate input class now that MPI is fully setup
 
   input = new Input(this,narg,arg);
+  input->seed_check_error = seed_check_error;
 
   // allocate top-level classes
 
@@ -554,6 +573,7 @@ LAMMPS::~LAMMPS()
 {
   destroy();
 
+  delete regGranStyles;
   delete citeme;
 
   if (universe->nworlds == 1) {
@@ -661,6 +681,7 @@ void LAMMPS::init()
                          //   when force->pair->gran_history creates fix ??
                          //   atom_vec init uses deform_vremap
   modify->init();        // modify must come after update, force, atom, domain
+  group->init();         // group must come after modify
   neighbor->init();      // neighbor must come after force, modify
   comm->init();          // comm must come after force, modify, neighbor, atom
   output->init();        // output must come after domain, force, modify
@@ -687,8 +708,18 @@ void LAMMPS::destroy()
                           //   since fixes delete callbacks in atom
   delete timer;
 
-  modify = NULL;          // necessary since input->variable->varreader
-                          // will be destructed later
+  // necessary at least for modify class since input->variable->varreader
+  // will be destructed later
+  update = NULL;
+  neighbor = NULL;
+  comm = NULL;
+  force = NULL;
+  group = NULL;
+  output = NULL;
+  modify = NULL;
+  domain = NULL;
+  atom = NULL;
+  timer = NULL;
 }
 
 /* ----------------------------------------------------------------------
@@ -699,7 +730,6 @@ void LAMMPS::help()
 {
   fprintf(screen,
           "\nCommand line options:\n\n"
-          "-cuda on/off                : turn CUDA mode on or off (-c)\n"
           "-echo none/screen/log/both  : echoing of input script (-e)\n"
           "-in filename                : read input from file, not stdin (-i)\n"
           "-help                       : print this help message (-h)\n"
@@ -710,12 +740,11 @@ void LAMMPS::help()
           "-pscreen basename           : basename for partition screens (-ps)\n"
           "-reorder topology-specs     : processor reordering (-r)\n"
           "-screen none/filename       : where to send screen output (-sc)\n"
-          "-suffix cuda/gpu/opt/omp    : style suffix to apply (-sf)\n"
           "-var varname value          : set index style variable (-v)\n\n");
 
   fprintf(screen,"Style options compiled with this executable\n\n");
 
-  int pos = 80;
+  int pos = 160;
   fprintf(screen,"* Atom styles:\n");
 #define ATOM_CLASS
 #define AtomStyle(key,Class) print_style(#key,pos);
@@ -723,7 +752,7 @@ void LAMMPS::help()
 #undef ATOM_CLASS
   fprintf(screen,"\n\n");
 
-  pos = 80;
+  pos = 160;
   fprintf(screen,"* Integrate styles:\n");
 #define INTEGRATE_CLASS
 #define IntegrateStyle(key,Class) print_style(#key,pos);
@@ -731,15 +760,7 @@ void LAMMPS::help()
 #undef INTEGRATE_CLASS
   fprintf(screen,"\n\n");
 
-  pos = 80;
-  fprintf(screen,"* Minimize styles:\n");
-#define MINIMIZE_CLASS
-#define MinimizeStyle(key,Class) print_style(#key,pos);
-#include "style_minimize.h"
-#undef MINIMIZE_CLASS
-  fprintf(screen,"\n\n");
-
-  pos = 80;
+  pos = 160;
   fprintf(screen,"* Pair styles:\n");
 #define PAIR_CLASS
 #define PairStyle(key,Class) print_style(#key,pos);
@@ -747,47 +768,42 @@ void LAMMPS::help()
 #undef PAIR_CLASS
   fprintf(screen,"\n\n");
 
-  pos = 80;
-  fprintf(screen,"* Bond styles:\n");
-#define BOND_CLASS
-#define BondStyle(key,Class) print_style(#key,pos);
-#include "style_bond.h"
-#undef BOND_CLASS
+  pos = 160;
+  fprintf(screen,"* Normal models for pair gran:\n");
+#define NORMAL_MODEL(Name,key,Index) print_style(#key,pos);
+#include "style_normal_model.h"
+#undef NORMAL_MODEL
   fprintf(screen,"\n\n");
 
-  pos = 80;
-  fprintf(screen,"* Angle styles:\n");
-#define ANGLE_CLASS
-#define AngleStyle(key,Class) print_style(#key,pos);
-#include "style_angle.h"
-#undef ANGLE_CLASS
+  pos = 160;
+  fprintf(screen,"* Tangential models for pair gran:\n");
+#define TANGENTIAL_MODEL(Name,key,Index) print_style(#key,pos);
+#include "style_tangential_model.h"
+#undef TANGENTIAL_MODEL
   fprintf(screen,"\n\n");
 
-  pos = 80;
-  fprintf(screen,"* Dihedral styles:\n");
-#define DIHEDRAL_CLASS
-#define DihedralStyle(key,Class) print_style(#key,pos);
-#include "style_dihedral.h"
-#undef DIHEDRAL_CLASS
+  pos = 160;
+  fprintf(screen,"* Cohesion models for pair gran:\n");
+#define COHESION_MODEL(Name,key,Index) print_style(#key,pos);
+#include "style_cohesion_model.h"
+#undef COHESION_MODEL
   fprintf(screen,"\n\n");
 
-  pos = 80;
-  fprintf(screen,"* Improper styles:\n");
-#define IMPROPER_CLASS
-#define ImproperStyle(key,Class) print_style(#key,pos);
-#include "style_improper.h"
-#undef IMPROPER_CLASS
+  pos = 160;
+  fprintf(screen,"* Rolling models for pair gran:\n");
+#define ROLLING_MODEL(Name,key,Index) print_style(#key,pos);
+#include "style_rolling_model.h"
+#undef ROLLING_MODEL
   fprintf(screen,"\n\n");
 
-  pos = 80;
-  fprintf(screen,"* KSpace styles:\n");
-#define KSPACE_CLASS
-#define KSpaceStyle(key,Class) print_style(#key,pos);
-#include "style_kspace.h"
-#undef KSPACE_CLASS
+  pos = 160;
+  fprintf(screen,"* Surface models for pair gran:\n");
+#define SURFACE_MODEL(Name,key,Index) print_style(#key,pos);
+#include "style_surface_model.h"
+#undef SURFACE_MODEL
   fprintf(screen,"\n\n");
 
-  pos = 80;
+  pos = 160;
   fprintf(screen,"* Fix styles\n");
 #define FIX_CLASS
 #define FixStyle(key,Class) print_style(#key,pos);
@@ -795,7 +811,7 @@ void LAMMPS::help()
 #undef FIX_CLASS
   fprintf(screen,"\n\n");
 
-  pos = 80;
+  pos = 160;
   fprintf(screen,"* Compute styles:\n");
 #define COMPUTE_CLASS
 #define ComputeStyle(key,Class) print_style(#key,pos);
@@ -803,7 +819,7 @@ void LAMMPS::help()
 #undef COMPUTE_CLASS
   fprintf(screen,"\n\n");
 
-  pos = 80;
+  pos = 160;
   fprintf(screen,"* Region styles:\n");
 #define REGION_CLASS
 #define RegionStyle(key,Class) print_style(#key,pos);
@@ -811,7 +827,7 @@ void LAMMPS::help()
 #undef REGION_CLASS
   fprintf(screen,"\n\n");
 
-  pos = 80;
+  pos = 160;
   fprintf(screen,"* Dump styles:\n");
 #define DUMP_CLASS
 #define DumpStyle(key,Class) print_style(#key,pos);
@@ -819,7 +835,7 @@ void LAMMPS::help()
 #undef DUMP_CLASS
   fprintf(screen,"\n\n");
 
-  pos = 80;
+  pos = 160;
   fprintf(screen,"* Command styles\n");
 #define COMMAND_CLASS
 #define CommandStyle(key,Class) print_style(#key,pos);
@@ -838,25 +854,23 @@ void LAMMPS::print_style(const char *str, int &pos)
   if (isupper(str[0])) return;
 
   int len = strlen(str);
-  if (pos+len > 80) {
+  if (pos+len > 160) {
     fprintf(screen,"\n");
     pos = 0;
   }
-
+/*
   if (len < 16) {
     fprintf(screen,"%-16s",str);
     pos += 16;
-  } else if (len < 32) {
+  } else */if (len < 32) {
     fprintf(screen,"%-32s",str);
     pos += 32;
-  } else if (len < 48) {
-    fprintf(screen,"%-48s",str);
-    pos += 48;
   } else if (len < 64) {
     fprintf(screen,"%-64s",str);
     pos += 64;
   } else {
-    fprintf(screen,"%-80s",str);
-    pos += 80;
+    fprintf(screen,"%-128s",str);
+    pos += 128;
   }
 }
+

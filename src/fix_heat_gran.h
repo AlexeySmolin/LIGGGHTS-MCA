@@ -44,11 +44,15 @@
 
 #include "fix.h"
 
-#define SMALL 1e-8
+static const double SMALL_FIX_HEAT_GRAN = 1.e-6;
 
 namespace LAMMPS_NS {
 
   class FixHeatGran : public Fix {
+
+    friend class FixMultisphere;
+    friend class Multisphere;
+
   public:
     FixHeatGran(class LAMMPS *, int, char **);
     ~FixHeatGran(){};
@@ -65,7 +69,7 @@ namespace LAMMPS_NS {
     virtual void cpl_evaluate(class ComputePairGranLocal *);
     virtual void register_compute_pair_local(class ComputePairGranLocal *);
     virtual void unregister_compute_pair_local(class ComputePairGranLocal *);
-    void updatePtrs();
+    virtual void updatePtrs();
 
   protected:
     class ComputePairGranLocal *cpl;

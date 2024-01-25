@@ -47,7 +47,8 @@ NORMAL_MODEL(HOOKE_HYSTERESIS,hooke/hysteresis,2)
 #ifndef NORMAL_MODEL_HOOKE_HYSTERESIS_H_
 #define NORMAL_MODEL_HOOKE_HYSTERESIS_H_
 #include "contact_models.h"
-#include "math.h"
+#include "normal_model_base.h"
+#include <cmath>
 #include "atom.h"
 #include "force.h"
 #include "update.h"
@@ -57,24 +58,24 @@ namespace LIGGGHTS {
 namespace ContactModels
 {
   template<>
-  class NormalModel<HOOKE_HYSTERESIS> : protected NormalModel<HOOKE>
+  class NormalModel<HOOKE_HYSTERESIS> : public NormalModel<HOOKE>
   {
   public:
-    static const int MASK = CM_REGISTER_SETTINGS | CM_CONNECT_TO_PROPERTIES | CM_SURFACES_INTERSECT | CM_SURFACES_CLOSE;
-
     NormalModel(LAMMPS * lmp, IContactHistorySetup * hsetup,class ContactModelBase *c) :
         NormalModel<HOOKE>(lmp, hsetup,c),
         kn2k2Max(NULL),
         kn2kc(NULL),
         phiF(NULL)
     {
-      history_offset = hsetup->add_history_value("deltaMax", "1");
+      history_offset = hsetup->add_history_value("deltaMax", "0");
       
     }
 
     inline void registerSettings(Settings & settings){
       NormalModel<HOOKE>::registerSettings(settings);
     }
+
+    inline void postSettings(IContactHistorySetup * hsetup, ContactModelBase *cmb) {}
 
     inline void connectToProperties(PropertyRegistry & registry) {
       NormalModel<HOOKE>::connectToProperties(registry);
@@ -111,12 +112,12 @@ namespace ContactModels
       const int itype = sidata.itype;
       const int jtype = sidata.jtype;
       const double deltan = sidata.deltan;
-      double ri = sidata.radi;
-      double rj = sidata.radj;
-      double reff=sidata.is_wall ? sidata.radi : (ri*rj/(ri+rj));
+      const double radi = sidata.radi;
+      const double radj = sidata.radj;
+      double reff=sidata.is_wall ? radi : (radi*radj/(radi+radj));
 #ifdef SUPERQUADRIC_ACTIVE_FLAG
-      if(sidata.is_non_spherical)
-        reff = MathExtraLiggghtsSuperquadric::get_effective_radius(sidata);
+      if(sidata.is_non_spherical && atom->superquadric_flag)
+        reff = sidata.reff;
 #endif
       double meff=sidata.meff;
       double coeffRestLogChosen;
@@ -161,6 +162,7 @@ namespace ContactModels
       // this accounts for an increasing stiffness with deformation
       const double deltaMaxLim =(k2Max/(k2Max-kn))*phiF[itype][jtype]*2*reff;
       double k2, fHys;
+      const bool update_history = sidata.computeflag && sidata.shearupdate;
       if (deltaMax >= deltaMaxLim) // big overlap ... no kn at all
       {
           k2 = k2Max;
@@ -171,7 +173,8 @@ namespace ContactModels
               fHys = -kc*deltan;
 
               const double newDeltaMax = 0.5*(deltan+sqrt(deltan*deltan+4*((kn+kc)*deltan*deltaMaxLim/(k2Max-kn))));
-              history[0] = newDeltaMax;
+              if (update_history)
+                  history[0] = newDeltaMax;
           }
       } else {
           k2 = kn+(k2Max-kn)*deltaMax/deltaMaxLim;
@@ -185,7 +188,8 @@ namespace ContactModels
                   fHys = -kc*deltan;
 
                   const double newDeltaMax = 0.5*(deltan+sqrt(deltan*deltan+4*((kn+kc)*deltan*deltaMaxLim/(k2Max-kn))));
-                  history[0] = newDeltaMax;
+                  if (update_history)
+                      history[0] = newDeltaMax;
               }
           }
       }
@@ -199,22 +203,22 @@ namespace ContactModels
       sidata.gamman = gamman;
       sidata.gammat = gammat;
 
-      #ifdef SUPERQUADRIC_ACTIVE_FLAG
-          double torque_i[3];
+      #ifdef NONSPHERICAL_ACTIVE_FLAG
           double Fn_i[3] = { Fn * sidata.en[0], Fn * sidata.en[1], Fn * sidata.en[2]};
+          double torque_i[3] = {0.0, 0.0, 0.0}; //initialized here with zeros to avoid compiler warnings
           if(sidata.is_non_spherical) {
             double xci[3];
-            vectorSubtract3D(sidata.contact_point, sidata.pos_i, xci);
+            vectorSubtract3D(sidata.contact_point, atom->x[sidata.i], xci);
             vectorCross3D(xci, Fn_i, torque_i);
           }
       #endif
       // apply normal force
       if(sidata.is_wall) {
         const double Fn_ = Fn * sidata.area_ratio;
-        i_forces.delta_F[0] = Fn_ * sidata.en[0];
-        i_forces.delta_F[1] = Fn_ * sidata.en[1];
-        i_forces.delta_F[2] = Fn_ * sidata.en[2];
-        #ifdef SUPERQUADRIC_ACTIVE_FLAG
+        i_forces.delta_F[0] += Fn_ * sidata.en[0];
+        i_forces.delta_F[1] += Fn_ * sidata.en[1];
+        i_forces.delta_F[2] += Fn_ * sidata.en[2];
+        #ifdef NONSPHERICAL_ACTIVE_FLAG
                 if(sidata.is_non_spherical) {
                   //for non-spherical particles normal force can produce torque!
                   i_forces.delta_torque[0] += torque_i[0];
@@ -223,19 +227,19 @@ namespace ContactModels
                 }
         #endif
       } else {
-        i_forces.delta_F[0] = sidata.Fn * sidata.en[0];
-        i_forces.delta_F[1] = sidata.Fn * sidata.en[1];
-        i_forces.delta_F[2] = sidata.Fn * sidata.en[2];
+        i_forces.delta_F[0] += sidata.Fn * sidata.en[0];
+        i_forces.delta_F[1] += sidata.Fn * sidata.en[1];
+        i_forces.delta_F[2] += sidata.Fn * sidata.en[2];
 
-        j_forces.delta_F[0] = -i_forces.delta_F[0];
-        j_forces.delta_F[1] = -i_forces.delta_F[1];
-        j_forces.delta_F[2] = -i_forces.delta_F[2];
-        #ifdef SUPERQUADRIC_ACTIVE_FLAG
+        j_forces.delta_F[0] += -i_forces.delta_F[0];
+        j_forces.delta_F[1] += -i_forces.delta_F[1];
+        j_forces.delta_F[2] += -i_forces.delta_F[2];
+        #ifdef NONSPHERICAL_ACTIVE_FLAG
                 if(sidata.is_non_spherical) {
                   //for non-spherical particles normal force can produce torque!
                   double xcj[3], torque_j[3];
                   double Fn_j[3] = { -Fn_i[0], -Fn_i[1], -Fn_i[2]};
-                  vectorSubtract3D(sidata.contact_point, sidata.pos_j, xcj);
+                  vectorSubtract3D(sidata.contact_point, atom->x[sidata.j], xcj);
                   vectorCross3D(xcj, Fn_j, torque_j);
 
                   i_forces.delta_torque[0] += torque_i[0];

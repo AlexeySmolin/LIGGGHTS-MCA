@@ -33,6 +33,8 @@
 -------------------------------------------------------------------------
     Contributing author and copyright for this file:
 
+    Alexander Podlozhnyuk (DCS Computing GmbH, Linz)
+    Andreas Aigner (DCS Computing GmbH, Linz)
     Christoph Kloss (DCS Computing GmbH, Linz)
     Christoph Kloss (JKU Linz)
     Richard Berger (JKU Linz)
@@ -47,8 +49,9 @@ ROLLING_MODEL(ROLLING_CDT,cdt,1)
 #ifndef ROLLING_MODEL_CDT_H_
 #define ROLLING_MODEL_CDT_H_
 #include "contact_models.h"
+#include "rolling_model_base.h"
 #include <algorithm>
-#include "math.h"
+#include <cmath>
 #include "math_extra_liggghts.h"
 
 namespace LIGGGHTS {
@@ -57,17 +60,21 @@ namespace ContactModels
   using namespace LAMMPS_NS;
 
   template<>
-  class RollingModel<ROLLING_CDT> : protected Pointers {
+  class RollingModel<ROLLING_CDT> : public RollingModelBase {
   public:
-    static const int MASK = CM_CONNECT_TO_PROPERTIES | CM_SURFACES_INTERSECT;
-
-    RollingModel(LAMMPS * lmp, IContactHistorySetup*,class ContactModelBase *) :
-        Pointers(lmp), coeffRollFrict(NULL)
+    RollingModel(LAMMPS * lmp, IContactHistorySetup * hsetup, class ContactModelBase * c) :
+        RollingModelBase(lmp, hsetup, c), coeffRollFrict(NULL)
     {
       
     }
 
-    void registerSettings(Settings&) {}
+    void registerSettings(Settings& settings)
+    {
+       settings.registerOnOff("torsionTorque", torsion_torque, false);
+    }
+
+    inline void postSettings(IContactHistorySetup * hsetup, ContactModelBase *cmb)
+    {}
 
     void connectToProperties(PropertyRegistry & registry)
     {
@@ -88,11 +95,11 @@ namespace ContactModels
 
       const double radi = sidata.radi;
       const double radj = sidata.radj;
-      double reff=sidata.is_wall ? sidata.radi : (radi*radj/(radi+radj));
+      double reff=sidata.is_wall ? radi : (radi*radj/(radi+radj));
 
 #ifdef SUPERQUADRIC_ACTIVE_FLAG
-      if(sidata.is_non_spherical)
-        reff = MathExtraLiggghtsSuperquadric::get_effective_radius(sidata);
+      if(sidata.is_non_spherical && atom->superquadric_flag)
+        reff = sidata.reff;
 #endif
 
       if(sidata.is_wall){
@@ -113,12 +120,15 @@ namespace ContactModels
           r_torque[2] = rmu*Fn*wr3/wrmag*reff;
 
           // remove normal (torsion) part of torque
-          double rtorque_dot_delta = r_torque[0]*enx+ r_torque[1]*eny + r_torque[2]*enz;
-          double r_torque_n[3];
-          r_torque_n[0] = enx * rtorque_dot_delta;
-          r_torque_n[1] = eny * rtorque_dot_delta;
-          r_torque_n[2] = enz * rtorque_dot_delta;
-          vectorSubtract3D(r_torque,r_torque_n,r_torque);
+          if(!torsion_torque)
+          {
+              double rtorque_dot_delta = r_torque[0]*enx+ r_torque[1]*eny + r_torque[2]*enz;
+              double r_torque_n[3];
+              r_torque_n[0] = enx * rtorque_dot_delta;
+              r_torque_n[1] = eny * rtorque_dot_delta;
+              r_torque_n[2] = enz * rtorque_dot_delta;
+              vectorSubtract3D(r_torque,r_torque_n,r_torque);
+          }
         }
       } else {
 
@@ -135,12 +145,15 @@ namespace ContactModels
           vectorScalarMult3D(wr_roll,rmu*sidata.kn*sidata.deltan*reff/wr_rollmag,r_torque);
 
           // remove normal (torsion) part of torque
-          const double rtorque_dot_delta = r_torque[0]*enx + r_torque[1]*eny + r_torque[2]*enz;
-          double r_torque_n[3];
-          r_torque_n[0] = enx * rtorque_dot_delta;
-          r_torque_n[1] = eny * rtorque_dot_delta;
-          r_torque_n[2] = enz * rtorque_dot_delta;
-          vectorSubtract3D(r_torque,r_torque_n,r_torque);
+          if(!torsion_torque)
+          {
+              const double rtorque_dot_delta = r_torque[0]*enx + r_torque[1]*eny + r_torque[2]*enz;
+              double r_torque_n[3];
+              r_torque_n[0] = enx * rtorque_dot_delta;
+              r_torque_n[1] = eny * rtorque_dot_delta;
+              r_torque_n[2] = enz * rtorque_dot_delta;
+              vectorSubtract3D(r_torque,r_torque_n,r_torque);
+          }
         }
       }
 
@@ -159,6 +172,7 @@ namespace ContactModels
 
   private:
     double ** coeffRollFrict;
+    bool torsion_torque;
   };
 }
 }

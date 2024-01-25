@@ -49,7 +49,7 @@ inline double Multisphere::max_r_bound()
     double max_r_bound = 0.;
 
     for(int i = 0; i < nbody_; i++)
-        max_r_bound = MathExtraLiggghts::max(max_r_bound,r_bound_(i));
+        max_r_bound = std::max(max_r_bound,r_bound_(i));
 
     MPI_Max_Scalar(max_r_bound,world);
 
@@ -97,6 +97,7 @@ inline void Multisphere::reset_forces(bool extflag)
     fcm_.setAll(nbody_,0.);
     torquecm_.setAll(nbody_,0.);
     if(extflag) dragforce_cm_.setAll(nbody_,0.);
+    if(extflag) hdtorque_cm_.setAll(nbody_,0.);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -127,6 +128,22 @@ inline int Multisphere::calc_n_steps(int, int body, double *p_ref, double *norma
     v_integrate_.set(ibody,v_normal);
 
     return n_steps;
+}
+
+/* ---------------------------------------------------------------------- */
+
+inline void Multisphere::recalc_n_steps(double dt_ratio)
+{
+  
+  for(int ibody = 0; ibody < nbody_; ibody++)
+  {
+        if(start_step_(ibody) > update->ntimestep)
+        {
+            
+            start_step_(ibody) = static_cast<int>(update->ntimestep) + static_cast<int>(dt_ratio*(static_cast<double>(start_step_(ibody)) - static_cast<double>(update->ntimestep)));
+            
+        }
+  }
 }
 
 /* ---------------------------------------------------------------------- */

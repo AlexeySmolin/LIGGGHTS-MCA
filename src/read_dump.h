@@ -52,12 +52,14 @@ CommandStyle(read_dump,ReadDump)
 #ifndef LMP_READ_DUMP_H
 #define LMP_READ_DUMP_H
 
-#include "stdio.h"
+#include <stdio.h>
 #include "pointers.h"
 
 namespace LAMMPS_NS {
 
 class ReadDump : protected Pointers {
+ friend class Rerun;
+
  public:
   ReadDump(class LAMMPS *);
   ~ReadDump();
@@ -72,6 +74,9 @@ class ReadDump : protected Pointers {
   int fields_and_keywords(int, char **);
 
 private:
+
+  void file_search(char *infile);
+
   int me,nprocs;
   FILE *fp;
 

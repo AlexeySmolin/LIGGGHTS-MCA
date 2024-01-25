@@ -59,15 +59,16 @@ namespace PairStyles {
     typedef LAMMPS_NS::PairGran ParentType;
 
     virtual ~IGranularPairStyle();
-    virtual void settings(int nargs, char ** args) = 0;
+    virtual void settings(int nargs, char ** args, IContactHistorySetup *hsetup) = 0;
     virtual void init_granular() = 0;
     virtual void write_restart_settings(FILE * fp) = 0;
-    virtual void read_restart_settings(FILE * fp) = 0;
+    virtual void read_restart_settings(FILE * fp, int64_t hashcode = -1) = 0;
     virtual void compute_force(LAMMPS_NS::PairGran * pg, int eflag, int vflag, int addflag) = 0;
 
-    virtual int bond_history_offset() = 0;
+    virtual int get_history_offset(const std::string hname) = 0;
     virtual double stressStrainExponent() = 0;
     virtual int64_t hashcode() = 0;
+    virtual bool contact_match(const std::string mtype, const std::string model) = 0;
 
   };
 

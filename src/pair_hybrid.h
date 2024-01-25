@@ -52,7 +52,7 @@ PairStyle(hybrid,PairHybrid)
 #ifndef LMP_PAIR_HYBRID_H
 #define LMP_PAIR_HYBRID_H
 
-#include "stdio.h"
+#include <stdio.h>
 #include "pair.h"
 
 namespace LAMMPS_NS {
@@ -72,7 +72,7 @@ class PairHybrid : public Pair {
   void init_style();
   double init_one(int, int);
   void write_restart(FILE *);
-  void read_restart(FILE *);
+  void read_restart(FILE *, const int major, const int minor);
   double single(int, int, int, int, double, double, double, double &);
   void modify_params(int narg, char **arg);
   double memory_usage();

@@ -39,9 +39,10 @@
     Copyright 2012-     DCS Computing GmbH, Linz
     Copyright 2009-2015 JKU Linz
 ------------------------------------------------------------------------- */
-#include "math.h"
-#include "stdlib.h"
-#include "string.h"
+#include <cmath>
+#include <algorithm>
+#include <stdlib.h>
+#include <string.h>
 #include "fix_insert_stream.h"
 #include "fix_mesh_surface.h"
 #include "atom.h"
@@ -59,7 +60,6 @@
 #include "fix_property_atom_tracer_stream.h"
 #include "fix_particledistribution_discrete.h"
 #include "fix_multisphere.h"
-#include "multisphere.h"
 #include "fix_template_sphere.h"
 #include "particleToInsert.h"
 #include "tri_mesh_planar.h"
@@ -75,7 +75,11 @@ using namespace FixConst;
 /* ---------------------------------------------------------------------- */
 
 FixInsertStream::FixInsertStream(LAMMPS *lmp, int narg, char **arg) :
-  FixInsert(lmp, narg, arg)
+  FixInsert(lmp, narg, arg),
+  recalc_release_ms(false),
+  dt_ratio(0.),
+  save_template_(false),
+  fix_template_(NULL)
 {
   // set defaults first, then parse args
   init_defaults();
@@ -84,6 +88,7 @@ FixInsertStream::FixInsertStream(LAMMPS *lmp, int narg, char **arg) :
   while(iarg < narg && hasargs)
   {
     hasargs = false;
+    
     if (strcmp(arg[iarg],"insertion_face") == 0)
     {
       
@@ -103,9 +108,12 @@ FixInsertStream::FixInsertStream(LAMMPS *lmp, int narg, char **arg) :
       if(extrude_length < 0. ) error->fix_error(FLERR,this,"invalid extrude_length");
       iarg += 2;
       hasargs = true;
-    } else if (strcmp(arg[iarg],"duration") == 0) {
+    } else if (strcmp(arg[iarg],"duration") == 0 || strcmp(arg[iarg],"duration_time") == 0) {
       if (iarg+2 > narg) error->fix_error(FLERR,this,"not enough arguments");
-      duration = atoi(arg[iarg+1]);
+      if(strcmp(arg[iarg],"duration_time") == 0)
+          duration = static_cast<int>(atof(arg[iarg+1])/update->dt);
+      else
+        duration = atoi(arg[iarg+1]);
       if(duration < 1 ) error->fix_error(FLERR,this,"'duration' can not be < 1");
       iarg += 2;
       hasargs = true;
@@ -124,7 +132,22 @@ FixInsertStream::FixInsertStream(LAMMPS *lmp, int narg, char **arg) :
       if(ntry_mc < 1000) error->fix_error(FLERR,this,"ntry_mc must be > 1000");
       iarg += 2;
       hasargs = true;
-    } else if (0 == strcmp(style,"insert/stream")) 
+    }
+    else if (strcmp(arg[iarg], "save_template") == 0)
+    {
+        if (iarg+2 > narg)
+            error->fix_error(FLERR,this,"not enough arguments");
+
+        if(strcmp("yes",arg[iarg+1]) == 0)
+            save_template_ = true;
+        else if(strcmp("no",arg[iarg+1]) == 0)
+            save_template_ = false;
+        else
+            error->fix_error(FLERR,this,"expecting 'yes' or 'no' for 'save_template'");
+        iarg += 2;
+        hasargs = true;
+    }
+    else if (0 == strcmp(style,"insert/stream")) 
       error->fix_error(FLERR,this,"unknown keyword or wrong keyword order");
   }
 
@@ -151,12 +174,12 @@ FixInsertStream::~FixInsertStream()
 
 void FixInsertStream::post_create()
 {
-  FixInsert::post_create();
+    FixInsert::post_create();
 
-  // only register property if I am the first fix/insert/stream in the simulation
-  
-  if(modify->n_fixes_style(style) == 1)
-  {
+    // only register property if I am the first fix/insert/stream in the simulation
+    
+    if(modify->n_fixes_style(style) == 1)
+    {
         const char* fixarg[22];
         fixarg[0]="release_fix_insert_stream";
         fixarg[1]="all";
@@ -181,7 +204,33 @@ void FixInsertStream::post_create()
         fixarg[20]="0.";
         fixarg[21]="0.";
         modify->add_fix_property_atom(22,const_cast<char**>(fixarg),style);
-  }
+
+        fix_release = static_cast<FixPropertyAtom*>(modify->find_fix_property("release_fix_insert_stream","property/atom","vector",14,0,style));
+        if(!fix_release) error->fix_error(FLERR,this,"Internal error in fix insert/stream");
+
+        if( modify->fix_restart_in_progress())
+            recalc_release_restart();
+    }
+
+    if (save_template_)
+    {
+        fix_template_ = static_cast<FixPropertyAtom*>(modify->find_fix_property("insertion_template_", "property/atom", "scalar", 1, 0, style, false));
+        if (!fix_template_)
+        {
+            const char *fixarg[9];
+            fixarg[0] = "insertion_template_";
+            fixarg[1] = "all";
+            fixarg[2] = "property/atom";
+            fixarg[3] = "insertion_template_";
+            fixarg[4] = "scalar";
+            fixarg[5] = "yes"; // restart
+            fixarg[6] = "yes"; // ghost
+            fixarg[7] = "no";  // reverse
+            fixarg[8] = "-1.0";
+            fix_template_ = modify->add_fix_property_atom(9, const_cast<char**>(fixarg), style);
+        }
+        fix_distribution->save_templates(fix_template_);
+    }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -324,8 +373,8 @@ void FixInsertStream::calc_insertion_properties()
 
         extrude_length = static_cast<double>(duration) * dt * vectorMag3D(v_normal);
         
-        if(extrude_length < 3.*max_r_bound())
-          error->fix_error(FLERR,this,"'insert_every' or 'vel' is too small, or radius of inserted particles too large");
+        if(extrude_length < 2.*max_r_bound())
+          error->fix_error(FLERR,this,"'insert_every' or 'vel' is too small, or (bounding) radius of inserted particles too large");
     }
 
     // ninsert - if ninsert not defined directly, calculate it
@@ -393,6 +442,7 @@ void FixInsertStream::init()
 
     fix_release = static_cast<FixPropertyAtom*>(modify->find_fix_property("release_fix_insert_stream","property/atom","vector",5,0,style));
     if(!fix_release) error->fix_error(FLERR,this,"Internal error if fix insert/stream");
+    fix_release->set_internal();
 
     i_am_integrator = modify->i_am_first_of_style(this);
 
@@ -402,6 +452,15 @@ void FixInsertStream::init()
 
     if(ins_face->isMoving() || ins_face->isScaling())
         error->fix_error(FLERR,this,"cannot translate, rotate, scale mesh which is used for particle insertion");
+
+    if(recalc_release_ms)
+    {
+        recalc_release_ms = false;
+        
+        if(fix_multisphere && dt_ratio > 0.)
+            fix_multisphere->data().recalc_n_steps(dt_ratio);
+        
+    }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -473,8 +532,8 @@ void FixInsertStream::calc_ins_fraction()
                     
                     if(dot > 0. && dot < extrude_length)
                     {
-                        extrude_length_max = MathExtraLiggghts::max(extrude_length_max,dot);
-                        extrude_length_min = MathExtraLiggghts::min(extrude_length_min,dot);
+                        extrude_length_max = std::max(extrude_length_max,dot);
+                        extrude_length_min = std::min(extrude_length_min,dot);
                     }
                     else if(dot < 0.)
                         extrude_length_min = 0.;
@@ -542,7 +601,7 @@ BoundingBox FixInsertStream::getBoundingBox() {
   bb.extrude(delta, normalvec);
   bb.shrinkToSubbox(domain->sublo, domain->subhi);
 
-  const double extend = 3*maxrad /*cut*/ + this->extend_cut_ghost(); 
+  const double extend = 3*maxrad /*cut*/ + 2.*fix_distribution->max_r_bound(); 
   bb.extendByDelta(extend);
 
   return bb;
@@ -576,6 +635,7 @@ inline void FixInsertStream::generate_random(double *pos, double rad)
 
     vectorScalarMult3D(normalvec,r,ext);
     vectorAdd3D(pos,ext,pos);
+
 }
 
 /* ----------------------------------------------------------------------
@@ -634,15 +694,16 @@ void FixInsertStream::x_v_omega(int ninsert_this_local,int &ninserted_this_local
                 generate_random(pos,rad_to_insert);
                 ntry++;
             }
-            while(ntry < maxtry && ((!domain->is_in_subdomain(pos)) || (domain->dist_subbox_borders(pos) < rad_to_insert)));
-
-            // could randomize quat here
-
-            if(quat_random_)
-                    MathExtraLiggghts::random_unit_quat(random,quat_insert);
+                        
+            while(ntry < maxtry && (!domain->is_in_subdomain(pos)));
 
             if(ntry < maxtry)
             {
+                // randomize quat here
+
+                if(quat_random_)
+                        MathExtraLiggghts::random_unit_quat(random,quat_insert);
+
                 nins = pti->set_x_v_omega(pos,v_normal,omega_tmp,quat_insert);
 
                 ninserted_spheres_this_local += nins;
@@ -672,13 +733,11 @@ void FixInsertStream::x_v_omega(int ninsert_this_local,int &ninserted_this_local
                 }
                 while(ntry < maxtry && ((!domain->is_in_subdomain(pos)) || (domain->dist_subbox_borders(pos) < rad_to_insert)));
 
-                // could randomize quat here
-
-                if(quat_random_)
-                    MathExtraLiggghts::random_unit_quat(random,quat_insert);
-                
                 if(ntry < maxtry)
                 {
+                    // randomize quat here
+                    if(quat_random_)
+                        MathExtraLiggghts::random_unit_quat(random,quat_insert);
                     
                     nins = pti->check_near_set_x_v_omega(pos,v_normal,omega_tmp,quat_insert,neighList);
                 }
@@ -786,7 +845,8 @@ void FixInsertStream::end_of_step()
     {
         if (mask[i] & groupbit)
         {
-            if(release_data[i][3] == 0.) continue;
+            if(MathExtraLiggghts::compDouble(release_data[i][3],0.,1.e-13))
+                continue;
 
             i_step = static_cast<int>(release_data[i][3]+FIX_INSERT_STREAM_TINY);
             r_step = static_cast<int>(release_data[i][4]+FIX_INSERT_STREAM_TINY);
@@ -842,6 +902,7 @@ void FixInsertStream::end_of_step()
 
                 // set x,v,omega
                 vectorAdd3D(x_ins,dist_elapsed,x[i]);
+                
                 vectorCopy3D(v_integrate,v[i]);
                 vectorZeroize3D(omega[i]);
 
@@ -858,6 +919,7 @@ void FixInsertStream::end_of_step()
 
 void FixInsertStream::reset_timestep(bigint newstep,bigint oldstep)
 {
+    FixInsert::reset_timestep(newstep,oldstep);
     
     reset_releasedata(newstep,oldstep);
 }
@@ -886,4 +948,34 @@ void FixInsertStream::reset_releasedata(bigint newstep,bigint oldstep)
         // 6-8th value is integration velocity
         vectorCopy3D(v_normal,&release_data[i][5]);
   }
+}
+
+/* ---------------------------------------------------------------------- */
+
+void FixInsertStream::recalc_release_restart()
+{
+  
+  const int nlocal = atom->nlocal;
+  double **x = atom->x;
+  double **release_data = fix_release->array_atom;
+  const double dt = update->dt;
+  double change_ratio = -1.;
+
+  for(int i = 0; i < nlocal; i++)
+  {
+        if(release_data[i][4] > update->ntimestep)
+        {
+            double dx[3];
+            vectorSubtract3D(x[i],release_data[i],dx);
+            const double dt_old = (vectorMag3D(dx)) / (vectorMag3D(&release_data[i][5]) * (static_cast<double>(update->ntimestep) - release_data[i][3]));
+
+            change_ratio = dt_old / dt;
+            
+            release_data[i][4] = static_cast<double>(update->ntimestep) + static_cast<double>(static_cast<int>(change_ratio*(release_data[i][4] - static_cast<double>(update->ntimestep))));
+            
+        }
+  }
+
+  recalc_release_ms = true;
+  dt_ratio = change_ratio;
 }

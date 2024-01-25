@@ -43,16 +43,17 @@
     the GNU General Public License.
 ------------------------------------------------------------------------- */
 
-#include "stdlib.h"
-#include "string.h"
+#include <stdlib.h>
+#include <string.h>
 #include "region_union.h"
 #include "domain.h"
 #include "error.h"
 #include "force.h"
 
-using namespace LAMMPS_NS;
+// include last to ensure correct macros
+#include "domain_definitions.h"
 
-#define BIG 1.0e20
+using namespace LAMMPS_NS;
 
 /* ---------------------------------------------------------------------- */
 

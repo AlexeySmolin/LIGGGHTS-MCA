@@ -32,7 +32,15 @@
 
 -------------------------------------------------------------------------
     Contributing author and copyright for this file:
-    This file is from LAMMPS
+    This file is from LAMMPS, but has been modified. Copyright for
+    modification:
+
+    Christoph Kloss (DCS Computing GmbH)
+    Arno Mayrhofer (DCS Computing GmbH)
+
+    Copyright 2016-     DCS Computing GmbH, Linz
+
+    Copyright of original file:
     LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
     http://lammps.sandia.gov, Sandia National Laboratories
     Steve Plimpton, sjplimp@sandia.gov
@@ -43,8 +51,8 @@
     the GNU General Public License.
 ------------------------------------------------------------------------- */
 
-#include "stdlib.h"
-#include "string.h"
+#include <stdlib.h>
+#include <string.h>
 #include "run.h"
 #include "domain.h"
 #include "update.h"
@@ -56,6 +64,7 @@
 #include "timer.h"
 #include "error.h"
 #include "force.h"
+#include "signal_handling.h"
 
 using namespace LAMMPS_NS;
 
@@ -67,14 +76,14 @@ Run::Run(LAMMPS *lmp) : Pointers(lmp) {}
 
 /* ---------------------------------------------------------------------- */
 
-void Run::command(int narg, char **arg)
+void Run::command(int narg, char **arg, bigint nsteps_input_ext)
 {
   if (narg < 1) error->all(FLERR,"Illegal run command");
 
   if (domain->box_exist == 0)
     error->all(FLERR,"Run command before simulation box is defined");
 
-  bigint nsteps_input = ATOBIGINT(arg[0]);
+  bigint nsteps_input = nsteps_input_ext > 0 ? nsteps_input_ext : ATOBIGINT(arg[0]);
 
   // parse optional args
 
@@ -86,7 +95,7 @@ void Run::command(int narg, char **arg)
   int postflag = 1;
   int nevery = 0;
   int ncommands = 0;
-  int first,last;
+  int first=0,last=0;
 
   int iarg = 1;
   while (iarg < narg) {
@@ -197,10 +206,16 @@ void Run::command(int narg, char **arg)
     if (stopflag) update->endstep = stop;
     else update->endstep = update->laststep;
 
-    if (preflag || update->first_update == 0) {
+    if (preflag || update->first_update == 0)
+    {
       lmp->init();
       update->integrate->setup();
-    } else output->setup(0);
+    }
+    else
+    {
+      output->init();
+      output->setup(0);
+    }
 
     timer->init();
     timer->barrier_start(TIME_LOOP);
@@ -235,10 +250,16 @@ void Run::command(int narg, char **arg)
       if (stopflag) update->endstep = stop;
       else update->endstep = update->laststep;
 
-      if (preflag || iter == 0) {
+      if (preflag || iter == 0)
+      {
         lmp->init();
         update->integrate->setup();
-      } else output->setup(0);
+      }
+      else
+      {
+        output->init();
+        output->setup(0);
+      }
 
       timer->init();
       timer->barrier_start(TIME_LOOP);
@@ -255,13 +276,21 @@ void Run::command(int narg, char **arg)
       // since a command may invoke computes via variables
 
       if (ncommands) {
-        modify->clearstep_compute();
-        for (int i = 0; i < ncommands; i++) input->one(commands[i]);
-        modify->addstep_compute(update->ntimestep + nevery);
+          modify->clearstep_compute();
+          for (int i = 0; i < ncommands; i++)
+          {
+              input->one(commands[i]);
+              if (SignalHandler::request_quit)
+                  break;
+          }
+          modify->addstep_compute(update->ntimestep + nevery);
       }
 
       nleft -= nsteps;
       iter++;
+
+      if (SignalHandler::request_quit)
+          break;
     }
   }
 

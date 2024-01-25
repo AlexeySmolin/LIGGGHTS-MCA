@@ -49,8 +49,8 @@
     the GNU General Public License.
 ------------------------------------------------------------------------- */
 
-#include "stdlib.h"
-#include "string.h"
+#include <stdlib.h>
+#include <string.h>
 #include "ctype.h"
 #include "force.h"
 #include "style_bond.h"
@@ -91,8 +91,9 @@ Force::Force(LAMMPS *lmp) : Pointers(lmp), registry(lmp)
 
   dielectric = 1.0;
 
-  coarsegraining = 1.0; 
-  error_coarsegraining = true; 
+  coarsegraining_ = 1.0;
+  error_coarsegraining_ = true;
+  warn_coarsegraining_ = false;
 
   pair = NULL;
   bond = NULL;
@@ -162,6 +163,8 @@ void Force::init()
   if (angle) angle->init();
   if (dihedral) dihedral->init();
   if (improper) improper->init();
+  if(cg_active() && warn_cg() && atom->ntypes != int(coarsegrainingTypeBased_.size()))
+    error->warningAll(FLERR,"Coarse graining factor not specified for all atom types. will use maximum CG for unspecified atom types.\n\n");
 }
 
 /* ----------------------------------------------------------------------
@@ -789,18 +792,30 @@ void Force::bounds(char *str, int nmax, int &nlo, int &nhi, int nmin)
    called by various commands to check validity of their arguments
 ------------------------------------------------------------------------- */
 
-double Force::numeric(const char *file, int line, char *str)
+double Force::numeric(const char *file, const int line, const char *const str)
 {
-  int n = strlen(str);
-  for (int i = 0; i < n; i++) {
-    if (isdigit(str[i])) continue;
-    if (str[i] == '-' || str[i] == '+' || str[i] == '.') continue;
-    if (str[i] == 'e' || str[i] == 'E') continue;
-    error->all(file,line,"Expected floating point parameter "
-               "in input script or data file");
-  }
+    const unsigned int n = strlen(str);
+    char *dstr;
+    dstr = new char[n+1];
+    for (unsigned int i = 0; i < n; i++)
+    {
+        if (isdigit(str[i]) ||
+            str[i] == '-'   ||
+            str[i] == '+'   ||
+            str[i] == '.'   ||
+            str[i] == 'e'   ||
+            str[i] == 'E')
+            dstr[i] = str[i];
+        else if (str[i] == '\r' && i == n-1)
+            dstr[i] = '\0';
+        else
+            error->all(file, line, "Expected floating point parameter in input script or data file");
+    }
+    dstr[n] = '\0';
 
-  return atof(str);
+    const double val = atof(dstr);
+    delete [] dstr;
+    return val;
 }
 
 /* ----------------------------------------------------------------------
@@ -809,16 +824,25 @@ double Force::numeric(const char *file, int line, char *str)
    called by various commands to check validity of their arguments
 ------------------------------------------------------------------------- */
 
-int Force::inumeric(const char *file, int line, char *str)
+int Force::inumeric(const char *file, const int line, const char *const str)
 {
-  int n = strlen(str);
-  for (int i = 0; i < n; i++) {
-    if (isdigit(str[i]) || str[i] == '-' || str[i] == '+') continue;
-    error->all(file,line,
-               "Expected integer parameter in input script or data file");
-  }
+    const unsigned int n = strlen(str);
+    char *istr;
+    istr = new char[n+1];
+    for (unsigned int i = 0; i < n; i++)
+    {
+        if (isdigit(str[i]) || str[i] == '-' || str[i] == '+')
+            istr[i] = str[i];
+        else if (str[i] == '\r' && i == n-1)
+            istr[i] = '\0';
+        else
+            error->all(file, line, "Expected integer parameter in input script or data file");
+    }
+    istr[n] = '\0';
 
-  return atoi(str);
+    const int val = atoi(istr);
+    delete [] istr;
+    return val;
 }
 
 /* ----------------------------------------------------------------------

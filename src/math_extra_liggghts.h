@@ -43,9 +43,10 @@
 #define LMP_MATH_EXTRA_LIGGGHTS_H
 
 #include "pointers.h"
-#include "math.h"
-#include "stdio.h"
-#include "string.h"
+#include <cmath>
+#include <algorithm>
+#include <stdio.h>
+#include <string.h>
 #include "error.h"
 #include "vector_liggghts.h"
 #include "math_extra.h"
@@ -65,46 +66,47 @@ namespace MathExtraLiggghts {
   inline double cbrta_halleyd(const double a, const double R);
   inline double halley_cbrt1d(double d);
 
-  inline int min(int a,int b);
-  inline int max(int a,int b);
-  inline int abs(int a);
-  inline double min(double a,double b);
-  inline double max(double a,double b);
-  inline double min(double a,double b,double c);
-  inline double max(double a,double b,double c);
-  inline double min(double a,double b,double c,double d);
-  inline double min(double *input, int n,int &which);
-  inline double max(double *input, int n,int &which);
-  inline double min(int *input, int n,int &which);
-  inline double max(int *input, int n,int &which);
-  inline double abs(double a);
+  //exp aproximation
+  inline double exp_fast(double x);
+
+  inline double min(const double a, const double b, const double c);
+  inline double max(const double a, const double b, const double c);
+  inline double min(const double a, const double b, const double c, const double d);
+  inline double max(const double a, const double b, const double c, const double d);
+  template <typename T>
+  inline T min(const T * const input, const unsigned int n, int &which);
+  template <typename T>
+  inline T max(const T * const input, const unsigned int n, int &which);
+  template <typename T>
+  inline T abs(const T a);
 
   inline void matrix_invert_4x4_special(double matrix[4][4]);
   inline void transpose3(const double m[3][3], double ans[3][3]);
   inline int is_inside_tet(double *pos,double invmatrix[4][4]);
 
-  inline void local_coosys_to_cartesian(double *global,double *local, double *ex_local, double *ey_local, double *ez_local);
+  inline void local_coosys_to_cartesian(double * const global, const double * const local, const double * const ex_local, const double * const ey_local, const double * const ez_local);
   inline void cartesian_coosys_to_local(double *local,double *global, double *ex_local, double *ey_local, double *ez_local,LAMMPS_NS::Error *error);
   inline void cartesian_coosys_to_local_orthogonal(double *local,double *global, double *ex_local, double *ey_local, double *ez_local,LAMMPS_NS::Error *error);
 
   // quaternion operations
+  inline bool is_unit_quat(const double *q);
   inline void quat_normalize(double *q);
-  inline void qconjugate(double *q, double *qc);
+  inline void qconjugate(const double * const q, double * const qc);
   inline void quat_from_vec(const double *v, double *q);
-  inline void vec_from_quat(const double *q, double *v);
-  inline void vec_quat_rotate(double *vec, double *quat, double *result);
-  inline void vec_quat_rotate(double *vec, double *quat);
-  inline void vec_quat_rotate(int *vec, double *quat) { UNUSED(vec); UNUSED(quat); }
-  inline void vec_quat_rotate(bool *vec, double *quat) { UNUSED(vec); UNUSED(quat); }
+  inline void vec_from_quat(const double *q, double * const v);
+  inline void vec_quat_rotate(const double * const vec, const double * const quat, double *result);
+  inline void vec_quat_rotate(double * const vec, const double * const quat);
+  inline void vec_quat_rotate(int * const vec, const double * const quat) { UNUSED(vec); UNUSED(quat); }
+  inline void vec_quat_rotate(bool * const vec, const double * const quat) { UNUSED(vec); UNUSED(quat); }
   inline void quat_diff(double *q_new, double *q_old, double *q_diff);
   inline void angmom_from_omega(double *w,
                                   double *ex, double *ey, double *ez,
                                   double *idiag, double *m);
 
-  // double comparison, added by P.S.
+  // double comparison
   inline bool compDouble(double const a, double const b, double const prec = 1e-13);
 
-  // calculate barycentrc coordinates of p w.r.t node, added by P.S.
+  // calculate barycentrc coordinates of p w.r.t node
   inline void calcBaryTriCoords(double *p, double **edgeVec, double *edgeLen, double *bary);
   inline void calcBaryTriCoords(double *p, double *edgeVec0, double *edgeVec1, double *edgeVec2, double *edgeLen, double *bary);
 
@@ -113,15 +115,18 @@ namespace MathExtraLiggghts {
   inline bool is_int(char *str);
   inline void generateComplementBasis(double *uVec, double *vVec, double *direction);
 
-  // template signum function, added by A.A.
+  // template signum function
   template <typename T>
   int sgn(T val) {
       return (T(0) < val) - (val < T(0));
   }
+
+  // prime number test
+  inline bool isPrime(int val);
 };
 
 /* ----------------------------------------------------------------------
-   matrix  times col vector 
+   matrix  times col vector
 ------------------------------------------------------------------------- */
 
 void MathExtraLiggghts::col_times3(const double m[3][3],const double *v, double *ans)
@@ -132,7 +137,6 @@ void MathExtraLiggghts::col_times3(const double m[3][3],const double *v, double 
 }
 
 /* ----------------------------------------------------------------------
-
 Matrix determinant
 ------------------------------------------------------------------------- */
 
@@ -144,7 +148,7 @@ double MathExtraLiggghts::mdet(const double m[3][3],LAMMPS_NS::Error *error)
 }
 
 /* ----------------------------------------------------------------------
-   Cubic root approx. 
+   Cubic root approx.
 ------------------------------------------------------------------------- */
 
 inline double MathExtraLiggghts::cbrt_5d(double d)
@@ -172,100 +176,77 @@ inline double MathExtraLiggghts::halley_cbrt1d(double d)
 }
 
 /* ----------------------------------------------------------------------
+   exp approx
+------------------------------------------------------------------------- */
+
+inline double MathExtraLiggghts::exp_fast(double x)
+{
+      x = 1.0 + x / 256.0;
+      x *= x; x *= x; x *= x; x *= x;
+      x *= x; x *= x; x *= x; x *= x;
+      return x;
+}
+
+/* ----------------------------------------------------------------------
    min max stuff
 ------------------------------------------------------------------------- */
 
-  int MathExtraLiggghts::min(int a,int b) { if (a<b) return a; return b;}
-  int MathExtraLiggghts::max(int a,int b) { if (a>b) return a; return b;}
+double MathExtraLiggghts::min(const double a, const double b, const double c)
+{
+    return std::min(std::min(a,b),c);
+}
 
-  double MathExtraLiggghts::min(double a,double b) { if (a<b) return a; return b;}
-  double MathExtraLiggghts::max(double a,double b) { if (a>b) return a; return b;}
+double MathExtraLiggghts::max(const double a, const double b, const double c)
+{
+    return std::max(std::max(a,b),c);
+}
 
-  double MathExtraLiggghts::min(double a,double b,double c)
-  {
-      double ab = MathExtraLiggghts::min(a,b);
-      if (ab<c) return ab;
-      return c;
-  }
-  double MathExtraLiggghts::max(double a,double b,double c)
-  {
-      double ab = MathExtraLiggghts::max(a,b);
-      if (ab<c) return c;
-      return ab;
-  }
+double MathExtraLiggghts::min(const double a, const double b, const double c, const double d)
+{
+    return std::min(std::min(a,b),std::min(c,d));
+}
 
-  double MathExtraLiggghts::min(double a,double b,double c,double d)
-  {
-      double ab = MathExtraLiggghts::min(a,b);
-      double cd = MathExtraLiggghts::min(c,d);
-      if (ab<cd) return ab;
-      return cd;
-  }
+double MathExtraLiggghts::max(const double a, const double b, const double c, const double d)
+{
+    return std::max(std::max(a,b),std::max(c,d));
+}
 
-  double MathExtraLiggghts::min(double *input, int n,int &which)
-  {
-      double min = input[0];
-      which = 0;
+template <typename T>
+T MathExtraLiggghts::min(const T * const input, const unsigned int n, int &which)
+{
+    T min = input[0];
+    which = 0;
 
-      for(int i = 1; i < n; i++)
-      {
-          if(input[i] < min)
-          {
-              which = i;
-              min = input[i];
-          }
-      }
-      return min;
-  }
-  double MathExtraLiggghts::max(double *input, int n,int &which)
-  {
-      double max = input[0];
-      which = 0;
+    for(unsigned int i = 1; i < n; i++)
+    {
+        if(input[i] < min)
+        {
+            which = i;
+            min = input[i];
+        }
+    }
+    return min;
+}
 
-      for(int i = 1; i < n; i++)
-      {
-          if(input[i] > max)
-          {
-              which = i;
-              max = input[i];
-          }
-      }
-      return max;
-  }
+template <typename T>
+T MathExtraLiggghts::max(const T * const input, const unsigned int n, int &which)
+{
+    T max = input[0];
+    which = 0;
 
-  double MathExtraLiggghts::min(int *input, int n,int &which)
-  {
-      double min = input[0];
-      which = 0;
+    for(unsigned int i = 1; i < n; i++)
+    {
+        if(input[i] > max)
+        {
+            which = i;
+            max = input[i];
+        }
+    }
+    return max;
+}
 
-      for(int i = 1; i < n; i++)
-      {
-          if(input[i] < min)
-          {
-              which = i;
-              min = input[i];
-          }
-      }
-      return min;
-  }
-  double MathExtraLiggghts::max(int *input, int n,int &which)
-  {
-      double max = input[0];
-      which = 0;
-
-      for(int i = 1; i < n; i++)
-      {
-          if(input[i] > max)
-          {
-              which = i;
-              max = input[i];
-          }
-      }
-      return max;
-  }
-
-  int MathExtraLiggghts::abs(int a) { if (a>0) return a; return -a;}
-  double MathExtraLiggghts::abs(double a) { if (a>0.) return a; return -a;}
+template <typename T>
+T MathExtraLiggghts::abs(const T a) { return a < static_cast<T>(0) ? -a : a; }
 
 /*----------------------------------------------------------------------
    inverts a special 4x4 matrix that looks like this
@@ -352,7 +333,7 @@ inline int MathExtraLiggghts::is_inside_tet(double *pos,double invmatrix[4][4])
     result[2] = invmatrix[2][0] * pos[0] + invmatrix[2][1] * pos[1] + invmatrix[2][2] * pos[2] + invmatrix[2][3];
     result[3] = invmatrix[3][0] * pos[0] + invmatrix[3][1] * pos[1] + invmatrix[3][2] * pos[2] + invmatrix[3][3];
 
-    if(max(result[0],max(result[1],max(result[2],result[3]))) > 1.0) return 0;
+    if(max(result[0],result[1],result[2],result[3]) > 1.0) return 0;
     return 1;
 }
 
@@ -360,7 +341,7 @@ inline int MathExtraLiggghts::is_inside_tet(double *pos,double invmatrix[4][4])
    transform from local to global coords
 ------------------------------------------------------------------------- */
 
-void MathExtraLiggghts::local_coosys_to_cartesian(double *global,double *local, double *ex_local, double *ey_local, double *ez_local)
+void MathExtraLiggghts::local_coosys_to_cartesian(double * const global, const double * const local, const double * const ex_local, const double * const ey_local, const double * const ez_local)
 {
     global[0] = local[0]*ex_local[0] + local[1]*ey_local[0] + local[2]*ez_local[0];
     global[1] = local[0]*ex_local[1] + local[1]*ey_local[1] + local[2]*ez_local[1];
@@ -412,7 +393,7 @@ void MathExtraLiggghts::cartesian_coosys_to_local_orthogonal(double *local,doubl
    assume q is of unit length
 ------------------------------------------------------------------------- */
 
-void MathExtraLiggghts::qconjugate(double *q, double *qc)
+void MathExtraLiggghts::qconjugate(const double * const q, double * const qc)
 {
   qc[0] = q[0];
   qc[1] = -q[1];
@@ -436,7 +417,7 @@ void MathExtraLiggghts::quat_from_vec(const double *v, double *q)
    construct vector3 from quaternion4
 ------------------------------------------------------------------------- */
 
-void MathExtraLiggghts::vec_from_quat(const double *q, double *v)
+void MathExtraLiggghts::vec_from_quat(const double *q, double * const v)
 {
   v[0] = q[1];
   v[1] = q[2];
@@ -447,7 +428,7 @@ void MathExtraLiggghts::vec_from_quat(const double *q, double *v)
    rotoate vector by quaternion
 ------------------------------------------------------------------------- */
 
-void MathExtraLiggghts::vec_quat_rotate(double *vec, double *quat, double *result)
+void MathExtraLiggghts::vec_quat_rotate(const double * const vec, const double * const quat, double * const result)
 {
     double vecQ[4], resultQ[4], quatC[4], temp[4];
 
@@ -469,7 +450,7 @@ void MathExtraLiggghts::vec_quat_rotate(double *vec, double *quat, double *resul
    rotoate vector by quaternion
 ------------------------------------------------------------------------- */
 
-void MathExtraLiggghts::vec_quat_rotate(double *vec, double *quat)
+void MathExtraLiggghts::vec_quat_rotate(double * const vec, const double * const quat)
 {
     double vecQ[4], resultQ[4], quatC[4], temp[4], result[3];
 
@@ -510,6 +491,15 @@ inline void MathExtraLiggghts::angmom_from_omega(double *w,
   m[0] = mbody[0]*ex[0] + mbody[1]*ey[0] + mbody[2]*ez[0];
   m[1] = mbody[0]*ex[1] + mbody[1]*ey[1] + mbody[2]*ez[1];
   m[2] = mbody[0]*ex[2] + mbody[1]*ey[2] + mbody[2]*ez[2];
+}
+
+/* ----------------------------------------------------------------------
+   Check if is unit quaternion
+------------------------------------------------------------------------- */
+
+inline bool MathExtraLiggghts::is_unit_quat(const double *q)
+{
+    return MathExtraLiggghts::compDouble(LAMMPS_NS::vectorMag4DSquared(q),1.0,1e-6);
 }
 
 /* ----------------------------------------------------------------------
@@ -620,9 +610,9 @@ void MathExtraLiggghts::random_unit_quat(LAMMPS_NS::RanPark *random,double *quat
 
 bool MathExtraLiggghts::is_int(char *str)
 {
-    int n = strlen(str);
-    for (int i = 0; i < n; i++)
-      if (0 == isdigit(str[i]))
+    size_t n = strlen(str);
+    for (size_t i = 0; i < n; ++i)
+      if (isdigit(str[i]) == 0)
         return false;
 
     return true;
@@ -667,6 +657,40 @@ void MathExtraLiggghts::generateComplementBasis(double *uVec, double *vVec, doub
         vVec[1] = -direction[0]*uVec[2];
         vVec[2] =  direction[0]*uVec[1];
     }
+}
+
+/* ----------------------------------------------------------------------
+   check if integer is a prime number (primes are 6k+-1)
+------------------------------------------------------------------------- */
+
+bool MathExtraLiggghts::isPrime(int val)
+{
+  if (val < 2)
+    return false;
+  else if (val == 2)
+    return true;
+  else if (val == 3)
+    return true;
+  else if (val % 2 == 0)
+    return false;
+  else if (val % 3 == 0)
+    return false;
+
+  // max range is up to square-root
+  int testTo = static_cast<int>(floor(::sqrt(static_cast<double>(val))));
+  int test = 5;
+  int width = 2;
+
+  while (  test <= testTo )
+  {
+    if (val % test == 0)
+      return false;
+
+    test += width;
+    width = 6 - width;
+  }
+
+  return true;
 }
 
 #endif

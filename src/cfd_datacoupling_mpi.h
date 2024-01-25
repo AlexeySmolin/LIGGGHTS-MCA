@@ -52,7 +52,7 @@
 #include "multisphere_parallel.h"
 #include "error.h"
 #include "properties.h"
-#include "mpi.h"
+#include <mpi.h>
 
 namespace LAMMPS_NS {
 
@@ -73,9 +73,9 @@ class CfdDatacouplingMPI : public CfdDatacoupling {
   { return false;}
 
   void allocate_external(int    **&data, int len2,int len1,     int initvalue);
-  void allocate_external(int    **&data, int len2,char *keyword,int initvalue);
+  void allocate_external(int    **&data, int len2,const char *keyword,int initvalue);
   void allocate_external(double **&data, int len2,int len1,     double initvalue);
-  void allocate_external(double **&data, int len2,char *keyword,double initvalue);
+  void allocate_external(double **&data, int len2,const char *keyword,double initvalue);
 
  private:
   template <typename T> T* check_grow(int len);
@@ -102,6 +102,13 @@ void CfdDatacouplingMPI::pull_mpi(const char *name,const char *type,void *&from)
     if (atom->nlocal && (!to || len1 < 0 || len2 < 0))
     {
         if(screen) fprintf(screen,"LIGGGHTS could not find property %s to write data from calling program to.\n",name);
+
+        if(!to && len2 > 0)
+            if(screen) fprintf(screen,"Detailed info: reason is that len2 = %d, but pointer is empty. \n"
+                                      "The reason could be that property is not allocated within LIGGGHTS. \n"
+                                      "This hints to a NON allocated atom property (i.e., a deep error in your simulation setup). \n"
+                                      "Ensure that your atom properties do not collide with property/atom \n"
+                                      "(i.e., use a different property/atom name, or change your atom_style)!\n", len2);
         lmp->error->one(FLERR,"This is fatal");
     }
 
@@ -186,6 +193,12 @@ void CfdDatacouplingMPI::push_mpi(const char *name,const char *type,void *&to)
     {
         
         if(screen) fprintf(screen,"LIGGGHTS could not find property %s to write data from calling program to.\n",name);
+        if(!from && len2 > 0)
+            if(screen) fprintf(screen,"Detailed info: reason is that len2 = %d, but pointer is empty. \n"
+                                      "The reason could be that property is not allocated within LIGGGHTS. \n"
+                                      "This hints to a NON allocated atom property (i.e., a deep error in your simulation setup). \n"
+                                      "Ensure that your atom properties do not collide with property/atom \n"
+                                      "(i.e., use a different property/atom name, or change your atom_style)!\n", len2);
         lmp->error->one(FLERR,"This is fatal");
     }
 

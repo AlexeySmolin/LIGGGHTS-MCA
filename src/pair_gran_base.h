@@ -47,12 +47,12 @@
 #ifndef PAIR_GRAN_BASE_H_
 #define PAIR_GRAN_BASE_H_
 
+#include <vector>
 #include "contact_interface.h"
-#include "superquadric_flag.h"
 #include "math_extra_liggghts.h"
 
 #ifdef SUPERQUADRIC_ACTIVE_FLAG
-#include "math_extra_liggghts_superquadric.h"
+#include "math_extra_liggghts_nonspherical.h"
 #include "math_const.h"
 #endif
 
@@ -61,6 +61,7 @@
 #include "neigh_list.h"
 #include "fix_contact_property_atom.h"
 #include "os_specific.h"
+#include "fix_insert_stream_predefined.h"
 
 #include "granular_pair_style.h"
 
@@ -78,20 +79,23 @@ class Granular : private Pointers, public IGranularPairStyle {
   ForceData * aligned_j_forces;
   ContactModel cmodel;
 
-  inline void force_update(double * const f, double * const torque,
-      const ForceData & forces) {
-    for (int coord = 0; coord < 3; coord++) {
-      f[coord] += forces.delta_F[coord];
-      torque[coord] += forces.delta_torque[coord];
+  inline void force_update(double relax,double *const f, double *const torque,
+      const ForceData & forces)
+  {
+    for (int coord = 0; coord < 3; coord++)
+    {
+      f[coord] += relax*forces.delta_F[coord];
+      torque[coord] += relax*forces.delta_torque[coord];
     }
   }
 
 public:
-  Granular(class LAMMPS * lmp, PairGran* parent) : Pointers(lmp),
+  Granular(class LAMMPS * lmp, PairGran* parent, const int64_t hash) : Pointers(lmp),
     aligned_sidata(aligned_malloc<SurfacesIntersectData>(32)),
     aligned_i_forces(aligned_malloc<ForceData>(32)),
     aligned_j_forces(aligned_malloc<ForceData>(32)),
-    cmodel(lmp, parent,false /*is_wall*/) {
+    cmodel(lmp, parent,false /*is_wall*/, hash)
+  {
   }
 
   virtual ~Granular() {
@@ -103,11 +107,11 @@ public:
   int64_t hashcode()
   { return cmodel.hashcode(); }
 
-  virtual void settings(int nargs, char ** args) {
+  virtual void settings(int nargs, char ** args, IContactHistorySetup *hsetup) {
     Settings settings(lmp);
     cmodel.registerSettings(settings);
     bool success = settings.parseArguments(nargs, args);
-    cmodel.postSettings();
+    cmodel.postSettings(hsetup);
 
 #ifdef LIGGGHTS_DEBUG
     if(comm->me == 0) {
@@ -144,26 +148,35 @@ public:
 
   virtual void write_restart_settings(FILE * fp)
   {
-    int64_t hashcode = ContactModel::STYLE_HASHCODE;
+    int64_t hashcode = cmodel.hashcode();
     fwrite(&hashcode, sizeof(int64_t), 1, fp);
   }
 
-  virtual void read_restart_settings(FILE * fp)
+  virtual void read_restart_settings(FILE * fp, int64_t hashcode)
   {
     int me = comm->me;
-    int64_t hashcode = -1;
+    int64_t selected = -1;
     if(me == 0){
-      size_t dummy = fread(&hashcode, sizeof(int64_t), 1, fp);
+      size_t dummy = fread(&selected, sizeof(int64_t), 1, fp);
       UNUSED(dummy);
       // sanity check
-      if(hashcode != ContactModel::STYLE_HASHCODE)
-        error->all(FLERR,"wrong pair style loaded!");
+      if(hashcode != -1) { // backward compability
+          if(hashcode != cmodel.hashcode())
+              error->one(FLERR,"wrong pair style loaded!");
+      } else {
+          if(selected != cmodel.hashcode())
+              error->one(FLERR,"wrong pair style loaded!");
+      }
     }
   }
 
-  int bond_history_offset()
+  inline bool contact_match(const std::string mtype, const std::string model) {
+    return cmodel.contact_match(mtype, model);
+  }
+
+  int get_history_offset(const std::string hname)
   {
-    return cmodel.bond_history_offset();
+    return cmodel.get_history_offset(hname);
   }
 
   double stressStrainExponent()
@@ -188,13 +201,10 @@ public:
     double *mass = atom->mass;
     int *type = atom->type;
     int *mask = atom->mask;
+    int *tag = atom->tag;
     int nlocal = atom->nlocal;
 #ifdef SUPERQUADRIC_ACTIVE_FLAG
     int superquadric_flag = atom->superquadric_flag;
-    double **quat = atom->quaternion;
-    double **shape = atom->shape;
-    double **roundness = atom->roundness;
-    double **inertia = atom->inertia;
 #endif // SUPERQUADRIC_ACTIVE_FLAG
     const int newton_pair = force->newton_pair;
 
@@ -208,7 +218,22 @@ public:
 
     const int dnum = pg->dnum();
     const bool store_contact_forces = pg->storeContactForces();
+    const bool store_contact_forces_stress = pg->storeContactForcesStress();
     const int freeze_group_bit = pg->freeze_group_bit();
+
+    const double contactDistanceMultiplier = neighbor->contactDistanceFactor*neighbor->contactDistanceFactor;
+
+    // fix insert/stream/predefined
+    // check if inserted
+    // use most_recent_ins_step of this fix for this
+    std::vector<FixInsertStreamPredefined*> fix_insert;
+    int nfix_insert = modify->n_fixes_style("insert/stream/predefined");
+    for (int i = 0; i < nfix_insert; i++)
+    {
+        FixInsertStreamPredefined * fix = static_cast<FixInsertStreamPredefined*>(modify->find_fix_style("insert/stream/predefined", i));
+        if (fix->has_inserted())
+            fix_insert.push_back(fix);
+    }
 
     // clear data, just to be safe
     memset(aligned_sidata, 0, sizeof(SurfacesIntersectData));
@@ -232,23 +257,20 @@ public:
       const double xtmp = x[i][0];
       const double ytmp = x[i][1];
       const double ztmp = x[i][2];
-      const double radi = radius[i];
+      double radi = radius[i];
       int * const contact_flags = first_contact_flag ? first_contact_flag[i] : NULL;
       double * const all_contact_hist = first_contact_hist ? first_contact_hist[i] : NULL;
       int * const jlist = firstneigh[i];
       const int jnum = numneigh[i];
 
       sidata.i = i;
-      sidata.radi = radi;
       #ifdef SUPERQUADRIC_ACTIVE_FLAG
           if(superquadric_flag) {
-            sidata.pos_i = x[i];
-            sidata.quat_i = quat[i];
-            sidata.shape_i = shape[i];
-            sidata.roundness_i = roundness[i];
             sidata.radi = cbrt(0.75 * atom->volume[i] / M_PI);
-            sidata.inertia_i = inertia[i];
-          }
+          } else
+            sidata.radi = radi;
+      #else
+          sidata.radi = radi;
       #endif
 
       for (int jj = 0; jj < jnum; jj++) {
@@ -258,7 +280,34 @@ public:
         const double dely = ytmp - x[j][1];
         const double delz = ztmp - x[j][2];
         const double rsq = delx * delx + dely * dely + delz * delz;
-        const double radj = radius[j];
+        double radj = radius[j];
+
+        // In case of multicontact models use the computed delta_ij and delta_ji to expand the radius (on a per contact basis)
+        if (pg->storeSumDelta()) {
+            FixContactPropertyAtom* mcFix = pg->fix_store_multicontact_delta();
+            const int cj = mcFix->has_partner(i, tag[j]);
+            radi = radius[i];
+            if (cj != -1)
+            {
+                const double * const dataI = mcFix->contacthistory(i, cj);
+                radi += dataI[3];
+            }
+            const int ci = mcFix->has_partner(j, tag[i]);
+            if (ci != -1)
+            {
+                const double * const dataJ = mcFix->contacthistory(j, ci);
+                radj += dataJ[3];
+            }
+        }
+
+#ifdef SUPERQUADRIC_ACTIVE_FLAG
+        if(superquadric_flag) {
+          sidata.radj = cbrt(0.75 * atom->volume[j] / M_PI);
+        } else
+          sidata.radj = radj;
+#else
+        sidata.radj = radj;
+#endif
         const double radsum = radi + radj;
 
         sidata.j = j;
@@ -266,20 +315,18 @@ public:
         sidata.delta[1] = dely;
         sidata.delta[2] = delz;
         sidata.rsq = rsq;
-        sidata.radj = radj;
         sidata.radsum = radsum;
         sidata.contact_flags = contact_flags ? &contact_flags[jj] : NULL;
         sidata.contact_history = all_contact_hist ? &all_contact_hist[dnum*jj] : NULL;
-        #ifdef SUPERQUADRIC_ACTIVE_FLAG
-            if(superquadric_flag) {
-              sidata.pos_j = x[j];
-              sidata.quat_j = quat[j];
-              sidata.shape_j = shape[j];
-              sidata.roundness_j = roundness[j];
-              sidata.radj = cbrt(0.75 * atom->volume[j] / M_PI);
-              sidata.inertia_j = inertia[j];
+
+        if (!fix_insert.empty())
+        {
+            std::vector<FixInsertStreamPredefined*>::iterator it = fix_insert.begin();
+            for (; it != fix_insert.end(); it++)
+            {
+                (*it)->copy_history(i, j, sidata.contact_history);
             }
-        #endif
+        }
 
         i_forces.reset();
         j_forces.reset();
@@ -287,9 +334,7 @@ public:
         // rsq < radsum * radsum is broad phase check with bounding spheres
         // cmodel.checkSurfaceIntersect() is narrow phase check
         
-#ifdef SUPERQUADRIC_ACTIVE_FLAG
-        sidata.v_i     = v[i];
-        sidata.v_j     = v[j];
+        #ifdef SUPERQUADRIC_ACTIVE_FLAG
         if (rmass) {
           sidata.mi = rmass[i];
           sidata.mj = rmass[j];
@@ -299,7 +344,15 @@ public:
         }
         sidata.omega_i = omega[i];
         sidata.omega_j = omega[j];
-#endif
+        #endif
+
+        sidata.v_i     = v[i];
+        sidata.v_j     = v[j];
+        const int itype = type[i];
+        const int jtype = type[j];
+        sidata.itype = itype;
+        sidata.jtype = jtype;
+
         if (rsq < radsum * radsum && cmodel.checkSurfaceIntersect(sidata)) {
           const double r = sqrt(rsq);
           const double rinv = 1.0 / r;
@@ -314,8 +367,6 @@ public:
           // if I or J part of rigid body, use body mass
           // if I or J is frozen, meff is other particle
           double mi, mj;
-          const int itype = type[i];
-          const int jtype = type[j];
 
           if (rmass) {
             mi = rmass[i];
@@ -338,41 +389,57 @@ public:
 
           // copy collision data to struct (compiler can figure out a better way to
           // interleave these stores with the double calculations above.
-          sidata.itype = itype;
-          sidata.jtype = jtype;
           sidata.r = r;
           sidata.rinv = rinv;
           sidata.meff = meff;
           sidata.mi = mi;
           sidata.mj = mj;
+          
           if(atom->sphere_flag) {
               sidata.en[0]   = enx_sphere;
               sidata.en[1]   = eny_sphere;
               sidata.en[2]   = enz_sphere;
           }
-          sidata.v_i     = v[i];
-          sidata.v_j     = v[j];
           sidata.omega_i = omega[i];
           sidata.omega_j = omega[j];
 
           cmodel.surfacesIntersect(sidata, i_forces, j_forces);
 
-          cmodel.endSurfacesIntersect(sidata,0);
+          cmodel.endSurfacesIntersect(sidata, 0, i_forces, j_forces);
 
           // if there is a surface touch, there will always be a force
           sidata.has_force_update = true;
-        } else {
+
+        // surfacesClose is not supported for convex particles
+        } else if(rsq < contactDistanceMultiplier * radsum * radsum && !atom->shapetype_flag) {
           // apply force update only if selected contact models have requested it
           sidata.has_force_update = false;
           cmodel.surfacesClose(sidata, i_forces, j_forces);
-        }
+        } else
+          sidata.has_force_update = false;
 
         if(sidata.has_force_update) {
           if (sidata.computeflag) {
-            force_update(f[i], torque[i], i_forces);
+
+            const double relax_i = pg->relax(i);
+            force_update(relax_i,f[i], torque[i], i_forces);
 
             if(newton_pair || j < nlocal) {
-              force_update(f[j], torque[j], j_forces);
+              const double relax_j = pg->relax(j);
+              force_update(relax_j,f[j], torque[j], j_forces);
+            }
+
+            // summation of f.n to compute a simplistic pressure
+            if (pg->store_sum_normal_force())
+            {
+                double * const iforce = pg->get_sum_normal_force_ptr(i);
+                const double fDotN = vectorDot3D(i_forces.delta_F, sidata.en);
+                *iforce += fDotN;
+                if (j < nlocal || newton_pair)
+                {
+                    double * const jforce = pg->get_sum_normal_force_ptr(j);
+                    *jforce += fDotN;
+                }
             }
           }
 
@@ -382,21 +449,39 @@ public:
           if (pg->evflag)
             pg->ev_tally_xyz(i, j, nlocal, newton_pair, 0.0, 0.0,i_forces.delta_F[0],i_forces.delta_F[1],i_forces.delta_F[2],sidata.delta[0],sidata.delta[1],sidata.delta[2]);
 
-          if (store_contact_forces)
+          if (store_contact_forces && 0 == update->ntimestep % pg->storeContactForcesEvery())
           {
             double forces_torques_i[6],forces_torques_j[6];
 
-            if(!pg->fix_contact_forces()->has_partner(i,atom->tag[j]))
+            if(pg->fix_contact_forces()->has_partner(i,atom->tag[j]) == -1)
             {
                 vectorCopy3D(i_forces.delta_F,&(forces_torques_i[0]));
                 vectorCopy3D(i_forces.delta_torque,&(forces_torques_i[3]));
                 pg->fix_contact_forces()->add_partner(i,atom->tag[j],forces_torques_i);
             }
-            if(!pg->fix_contact_forces()->has_partner(j,atom->tag[i]))
+            if(pg->fix_contact_forces()->has_partner(j,atom->tag[i]) == -1)
             {
                 vectorCopy3D(j_forces.delta_F,&(forces_torques_j[0]));
                 vectorCopy3D(j_forces.delta_torque,&(forces_torques_j[3]));
                 pg->fix_contact_forces()->add_partner(j,atom->tag[i],forces_torques_j);
+            }
+          }
+
+          if (store_contact_forces_stress)
+          {
+            double forces_pos[4];
+
+            if(pg->fix_contact_forces_stress()->has_partner(i,atom->tag[j]) == -1)
+            {
+                vectorCopy3D(i_forces.delta_F,&(forces_pos[0]));
+                forces_pos[3] = (double) j;
+                pg->fix_contact_forces_stress()->add_partner(i,atom->tag[j],forces_pos);
+            }
+            if(pg->fix_contact_forces_stress()->has_partner(j,atom->tag[i]) == -1)
+            {
+                vectorCopy3D(j_forces.delta_F,&(forces_pos[0]));
+                forces_pos[3] = (double) i;
+                pg->fix_contact_forces_stress()->add_partner(j,atom->tag[i],forces_pos);
             }
           }
         }
@@ -410,6 +495,8 @@ public:
 
     if(store_contact_forces)
         pg->fix_contact_forces()->do_forward_comm();
+    if(store_contact_forces_stress)
+        pg->fix_contact_forces_stress()->do_forward_comm();
   }
 };
 

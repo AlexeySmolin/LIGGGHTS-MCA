@@ -38,16 +38,15 @@
     Copyright 2015-     DCS Computing GmbH, Linz
 ------------------------------------------------------------------------- */
 
-#include "string.h"
+#include <string.h>
 #include "atom.h"
-#include "mpi.h"
-#include "math.h"
+#include <mpi.h>
+#include <cmath>
 #include "modify.h"
 #include "properties.h"
 #include "error.h"
 #include "memory.h"
 #include "fix_multisphere.h"
-#include "multisphere.h"
 #include "fix_property_atom.h"
 #include "fix_property_global.h"
 
@@ -60,7 +59,11 @@ using namespace LAMMPS_NS;
 
 Properties::Properties(LAMMPS *lmp): Pointers(lmp),
   ms_(0),
-  ms_data_(0)
+  ms_data_(0),
+  mintype_(-1),
+  maxtype_(-1),
+  allow_soft_particles_(false),
+  allow_hard_particles_(false)
 {
 }
 
@@ -80,15 +83,15 @@ Properties::~Properties()
 int Properties::max_type()
 {
   // loop over all particles to check how many atom types are present
-  mintype = 100000;
-  maxtype = 1;
+  mintype_ = 100000;
+  maxtype_ = 1;
 
   for (int i=0;i<atom->nlocal;i++)
   {
-      if (atom->type[i]<mintype)
-        mintype=atom->type[i];
-      if (atom->type[i]>maxtype)
-        maxtype=atom->type[i];
+      if (atom->type[i]<mintype_)
+        mintype_=atom->type[i];
+      if (atom->type[i]>maxtype_)
+        maxtype_=atom->type[i];
   }
 
   // check all fixes
@@ -97,26 +100,35 @@ int Properties::max_type()
   {
       // checks
       Fix *fix = modify->fix[i];
-      if(fix->min_type() > 0 &&  fix->min_type() < mintype)
-        mintype = fix->min_type();
-      if(fix->max_type() > 0 &&  fix->max_type() > maxtype)
-        maxtype = fix->max_type();
+      if(fix->min_type() > 0 &&  fix->min_type() < mintype_)
+        mintype_ = fix->min_type();
+      if(fix->max_type() > 0 &&  fix->max_type() > maxtype_)
+        maxtype_ = fix->max_type();
   }
 
   //Get min/max from other procs
   int mintype_all,maxtype_all;
-  MPI_Allreduce(&mintype,&mintype_all, 1, MPI_INT, MPI_MIN, world);
-  MPI_Allreduce(&maxtype,&maxtype_all, 1, MPI_INT, MPI_MAX, world);
-  mintype = mintype_all;
-  maxtype = maxtype_all;
+  MPI_Allreduce(&mintype_,&mintype_all, 1, MPI_INT, MPI_MIN, world);
+  MPI_Allreduce(&maxtype_,&maxtype_all, 1, MPI_INT, MPI_MAX, world);
+  mintype_ = mintype_all;
+  maxtype_ = maxtype_all;
 
   //error check
-  if(mintype != 1)
-    error->all(FLERR,"Atom types must start from 1 for granular simulations");
-  if(maxtype > atom->ntypes)
-    error->all(FLERR,"Please increase the number of atom types in the 'create_box' command to match the number of atom types you use in the simulation");
-
-  return maxtype;
+  if(!lmp->wb)
+  {
+      if(mintype_ != 1)
+        error->all(FLERR,"Atom types must start from 1 for granular simulations");
+      if(maxtype_ > atom->ntypes)
+        error->all(FLERR,"Please increase the number of atom types in the 'create_box' command to match the number of atom types you use in the simulation");
+  }
+  else
+  {
+      if(mintype_ != 1)
+        error->all(FLERR,"Materials defined but not used in the simulation as particle or wall material must be the last materials defined");
+      if(maxtype_ > atom->ntypes)
+        error->all(FLERR,"Please increase the number of atom types in the 'create_box' command to match the number of atom types you use in the simulation");
+  }
+  return maxtype_;
 }
 
 /* ----------------------------------------------------------------------
@@ -240,6 +252,11 @@ void* Properties::find_property(const char *name, const char *type, int &len1, i
         // check if length correct
         if(((strcmp(type,"scalar-atom") == 0) && (len2 != 1)) || ((strcmp(type,"vector-atom") == 0) && (len2 != 3)))
             return NULL;
+        else if(ptr && strstr(type,"multisphere"))
+        {
+            error->one(FLERR,"mismatch of data found and type specified");
+            return NULL;
+        }
         return ptr;
     }
 
@@ -247,7 +264,7 @@ void* Properties::find_property(const char *name, const char *type, int &len1, i
     // may come from a fix multisphere
     // also handles scalar-multisphere and vector-multisphere
 
-    ms_ = static_cast<FixMultisphere*>(modify->find_fix_style_strict("multisphere",0));
+    ms_ = static_cast<FixMultisphere*>(modify->find_fix_style("multisphere",0));
     if(ms_) ms_data_ = &ms_->data();
 
     if(ms_)
@@ -255,9 +272,15 @@ void* Properties::find_property(const char *name, const char *type, int &len1, i
         ptr = ms_->extract(name,len1,len2);
         if(((strcmp(type,"scalar-multisphere") == 0) && (len2 != 1)) || ((strcmp(type,"vector-multisphere") == 0) && (len2 != 3)))
             return NULL;
+        
+        else if(ptr && (strcmp(name,"body") && strstr(type,"atom")))
+        {
+            error->one(FLERR,"mismatch of data found and type specified");
+            return NULL;
+        }
 
         if(ptr || ((len1 >= 0) && (len2 >= 0)))
-        return ptr;
+            return ptr;
     }
 
     // possiblility 3

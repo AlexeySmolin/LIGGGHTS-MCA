@@ -39,8 +39,8 @@
     Copyright 2009-2012 JKU Linz
 ------------------------------------------------------------------------- */
 
-#include "string.h"
-#include "stdlib.h"
+#include <string.h>
+#include <stdlib.h>
 #include "atom.h"
 #include "update.h"
 #include "respa.h"
@@ -48,7 +48,7 @@
 #include "memory.h"
 #include "comm.h"
 #include "modify.h"
-#include "math.h"
+#include <cmath>
 #include "vector_liggghts.h"
 #include "fix_cfd_coupling.h"
 #include "fix_multisphere.h"
@@ -73,8 +73,6 @@ CfdDatacouplingMPI::CfdDatacouplingMPI(LAMMPS *lmp,int iarg, int narg, char **ar
   allred_double = NULL;
   len_allred_int = 0;
   allred_int = NULL;
-
-  if(comm->me == 0) error->message(FLERR,"nevery as specified in LIGGGHTS is overriden by calling external program",1);
 
 }
 
@@ -132,7 +130,7 @@ void CfdDatacouplingMPI::allocate_external(int **&data, int len2,int len1,int in
 
 /* ---------------------------------------------------------------------- */
 
-void CfdDatacouplingMPI::allocate_external(int    **&data, int len2,char *keyword,int initvalue)
+void CfdDatacouplingMPI::allocate_external(int    **&data, int len2,const char *keyword,int initvalue)
 {
   int len1 = 0;
   Multisphere *ms_data = properties_->ms_data();
@@ -169,7 +167,7 @@ void CfdDatacouplingMPI::allocate_external(double **&data, int len2,int len1,dou
 
 /* ---------------------------------------------------------------------- */
 
-void CfdDatacouplingMPI::allocate_external(double **&data, int len2,char *keyword,double initvalue)
+void CfdDatacouplingMPI::allocate_external(double **&data, int len2,const char *keyword,double initvalue)
 {
   int len1 = 0;
   Multisphere *ms_data = properties_->ms_data();

@@ -55,6 +55,8 @@ class Update : protected Pointers {
   double dt;                      // timestep
   double etol,ftol;               // minimizer tolerances on energy/force
   bigint ntimestep;               // current step (dynamics or min iterations)
+  bool ntimestep_reset_since_last_run;
+  bool timestep_set;              // flag if time-step set since simulation start (object created)
   int nsteps;                     // # of steps to run (dynamics or min iter)
   int whichflag;                  // 0 for unset, 1 for dynamics, 2 for min
   double atime;                   // simulation time at atime_step
@@ -89,9 +91,16 @@ class Update : protected Pointers {
   void update_time();
   bigint memory_usage();
 
+  void set_force_dt_reset(bool value)
+  { force_dt_reset_ = value; }
+
+  double get_cur_time() const
+  { return atime + (ntimestep - atimestep)*dt; }
+
  private:
   void new_integrate(char *, int, char **, char *, int &);
 
+  bool force_dt_reset_; 
 };
 
 }

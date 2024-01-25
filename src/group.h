@@ -46,7 +46,7 @@
 #ifndef LMP_GROUP_H
 #define LMP_GROUP_H
 
-#include "stdio.h"
+#include <stdio.h>
 #include "pointers.h"
 
 namespace LAMMPS_NS {
@@ -61,13 +61,17 @@ class Group : protected Pointers {
   Group(class LAMMPS *);
   ~Group();
   void assign(int, char **);         // assign atoms to a group
-  void create(char *, int *);        // add flagged atoms to a group
+  void create(const char *, int *);        // add flagged atoms to a group
+  void init();                             // init function for general set up
+  void set(const char *name, bool flag);   // set if all atoms belong to group or not
   int find(const char *);            // lookup name in list of groups
   void write_restart(FILE *);
   void read_restart(FILE *);
 
   bigint count(int);                       // count atoms in group
   bigint count(int,int);                   // count atoms in group & region
+  bigint count_ms(int);                    // count atoms / multispheres in group
+  bigint count_ms(int,int);                // count atoms / multispheres in group & region
   double mass(int);                        // total mass of atoms in group
   double mass(int,int);
   double charge(int);                      // total charge of atoms in group
@@ -94,6 +98,7 @@ class Group : protected Pointers {
 
  private:
   int me;
+  class FixMultisphere *fix_ms_; // holds multispheres, otherwise NULL
 
   int find_unused();
 };

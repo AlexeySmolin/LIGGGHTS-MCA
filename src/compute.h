@@ -48,6 +48,12 @@
 
 #include "pointers.h"
 
+#define INVOKED_SCALAR  1<<0
+#define INVOKED_VECTOR  1<<1
+#define INVOKED_ARRAY   1<<2
+#define INVOKED_PERATOM 1<<3
+#define INVOKED_LOCAL   1<<4
+
 namespace LAMMPS_NS {
 
 class Compute : protected Pointers {
@@ -108,12 +114,13 @@ class Compute : protected Pointers {
 
   int comm_forward;   // size of forward communication (0 if none)
   int comm_reverse;   // size of reverse communication (0 if none)
+  int dynamic_group_allow;  // 1 if can be used with dynamic group, else 0
 
   unsigned int datamask;
   unsigned int datamask_ext;
   int cudable;        // 1 if compute is CUDA-enabled
 
-  Compute(class LAMMPS *, int, char **);
+  Compute(class LAMMPS *lmp, int &iarg, int narg, char ** arg);
   virtual ~Compute();
   void modify_params(int, char **);
   void reset_extra_dof();
@@ -150,6 +157,9 @@ class Compute : protected Pointers {
   virtual int unsigned data_mask() {return datamask;}
   virtual int unsigned data_mask_ext() {return datamask_ext;}
 
+  bool update_on_run_end()
+  { return update_on_run_end_; }
+
  protected:
   int extra_dof;               // extra DOF for temperature computes
   int dynamic;                 // recount atoms for temperature computes
@@ -166,6 +176,9 @@ class Compute : protected Pointers {
   inline int sbmask(int j) {
     return j >> SBBITS & 3;
   }
+
+  // true if this compute is updated at the end of every run
+  bool update_on_run_end_;
 };
 
 }

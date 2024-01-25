@@ -43,8 +43,8 @@
     the GNU General Public License.
 ------------------------------------------------------------------------- */
 
-#include "stdlib.h"
-#include "string.h"
+#include <stdlib.h>
+#include <string.h>
 #include "fix_store_state.h"
 #include "atom.h"
 #include "domain.h"
@@ -63,8 +63,6 @@ using namespace LAMMPS_NS;
 using namespace FixConst;
 
 enum{KEYWORD,COMPUTE,FIX,VARIABLE};
-
-#define INVOKED_PERATOM 8
 
 /* ---------------------------------------------------------------------- */
 

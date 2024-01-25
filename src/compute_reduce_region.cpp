@@ -49,8 +49,8 @@
     the GNU General Public License.
 ------------------------------------------------------------------------- */
 
-#include "string.h"
-#include "stdlib.h"
+#include <string.h>
+#include <stdlib.h>
 #include "compute_reduce_region.h"
 #include "atom.h"
 #include "update.h"
@@ -70,17 +70,12 @@ enum{SUM,MINN,MAXX,AVE};
 enum{X,V,F,COMPUTE,FIX,VARIABLE,RHO,P}; 
 enum{PERATOM,LOCAL};
 
-#define INVOKED_VECTOR 2
-#define INVOKED_ARRAY 4
-#define INVOKED_PERATOM 8
-#define INVOKED_LOCAL 16
-
 #define BIG 1.0e20
 
 /* ---------------------------------------------------------------------- */
 
-ComputeReduceRegion::ComputeReduceRegion(LAMMPS *lmp, int narg, char **arg) :
-  ComputeReduce(lmp, narg, arg) {}
+ComputeReduceRegion::ComputeReduceRegion(LAMMPS *lmp, int &iarg, int narg, char **arg) :
+  ComputeReduce(lmp, iarg, narg, arg) {}
 
 /* ----------------------------------------------------------------------
    calculate reduced value for one input M and return it

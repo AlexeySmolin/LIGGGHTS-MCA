@@ -51,7 +51,7 @@ It counts the total number of particles and the associated mass. Only particles
 part of {group} are eligible for counting.
 
 Particles are counted if they cross from the inner side of the mesh to the outer
-side of the mesh. The outer side can be defined by using the keyword {vec_side},
+side of the mesh. The outer side can be defined either by using the keyword {vec_side} or 
 by specifying a point at the outlet side of the mesh (keyword {point_at_outlet}). Note
 that the vector defined by {vec_side} does not necessarily have to be
 perpendicular to the mesh face.
@@ -76,6 +76,14 @@ flow conditions.
 
 The diameter, position and velocity of the particles can be written into a file using the {file} keyword,
 by specifying a filename.
+
+IMPORTANT NOTE: When using fix massflow/mesh with multispherical particles,
+the evaluation of the mass passing the mesh is done for each sphere within the
+multisphere particle. Each sphere counts as a fraction of a particle, i.e. 
+floating point number might evolve for the number of particles passing the
+mesh if not all spheres belonging to one multisphere particle pass the mesh.
+The weight for each sphere is calculated taking into account the possible overlap 
+between spheres in a multisphere particle.
 
 If the {screen} keyword is used, output by this fix to the screen and
 logfile can be turned on or off as desired.
@@ -103,7 +111,7 @@ can also be accessed by various "output commands"_Section_howto.html#howto_8.
 
 [Restrictions:]
 
-Currently, this feature does not support multi-sphere particles.
+none
 
 [Related commands:]
 

@@ -54,10 +54,10 @@
 ------------------------------------------------------------------------- */
 
 #include "lmptype.h"
-#include "mpi.h"
-#include "math.h"
-#include "stdlib.h"
-#include "string.h"
+#include <mpi.h>
+#include <cmath>
+#include <stdlib.h>
+#include <string.h>
 #include "neighbor.h"
 #include "neigh_list.h"
 #include "neigh_request.h"
@@ -340,9 +340,6 @@ void Neighbor::init()
   // check other classes that can induce reneighboring in decide()
   // don't check if build_once is set
 
-  restart_check = 0;
-  if (output->restart_flag) restart_check = 1;
-
   delete [] fixchecklist;
   fixchecklist = NULL;
   fixchecklist = new int[modify->nfix];
@@ -352,8 +349,9 @@ void Neighbor::init()
     if (modify->fix[i]->force_reneighbor)
       fixchecklist[fix_check++] = i;
 
-  must_check = 0;
-  if (restart_check || fix_check) must_check = 1;
+  // always check whether we need to do reneighboring because we might have
+  // a sudden restart request from the signal handler
+  must_check = 1;
   if (build_once) must_check = 0;
 
   // set special_flag for 1-2, 1-3, 1-4 neighbors
@@ -1359,8 +1357,8 @@ void Neighbor::print_lists_of_lists()
 int Neighbor::decide()
 {
   if (must_check) {
-    int n = update->ntimestep;
-    if (restart_check && n == output->next_restart) return 1;
+    const bigint n = update->ntimestep;
+    if (output->restart_requested(update->ntimestep)) return 1;
     for (int i = 0; i < fix_check; i++)
       if (n == modify->fix[fixchecklist[i]]->next_reneighbor) return 1;
   }
@@ -1858,19 +1856,44 @@ double Neighbor::bin_largest_distance(int i, int j, int k)
    set neighbor style and skin distance
 ------------------------------------------------------------------------- */
 
-void Neighbor::set(int narg, char **arg)
+void Neighbor::set(int narg, char **arg, bool auto_set_bin)
 {
-  if (narg != 2) error->all(FLERR,"Illegal neighbor command");
+  if (narg != (auto_set_bin ? 1 : 2))
+    error->all(FLERR,"Illegal neighbor command");
 
-  skin = force->cg()*force->numeric(FLERR,arg[0]); 
+  skin = force->cg_max()*force->numeric(FLERR,arg[0]); 
   if (skin < 0.0) error->all(FLERR,"Illegal neighbor command");
 
-  if (strcmp(arg[1],"nsq") == 0) style = NSQ;
-  else if (strcmp(arg[1],"bin") == 0) style = BIN;
-  else if (strcmp(arg[1],"multi") == 0) style = MULTI;
-  else error->all(FLERR,"Illegal neighbor command");
+  if (auto_set_bin)
+    style = BIN;
+  else
+  {
+    if (strcmp(arg[1],"nsq") == 0) style = NSQ;
+    else if (strcmp(arg[1],"bin") == 0) style = BIN;
+    else if (strcmp(arg[1],"multi") == 0) style = MULTI;
+    else error->all(FLERR,"Illegal neighbor command");
+  }
 
   if (style == MULTI && lmp->citeme) lmp->citeme->add(cite_neigh_multi);
+}
+
+/* ----------------------------------------------------------------------
+   modify parameters of the pair-wise neighbor build (neigh_settings)
+------------------------------------------------------------------------- */
+
+void Neighbor::modify_params_restricted(int narg, char **arg)
+{
+    // set delay to 0
+    delay = 0;
+    // allow only one input
+    if (narg > 1)
+        error->all (FLERR, "neigh_settings requires at most one parameter");
+    // which is to be the binsize
+    binsize_user = force->cg_max()*force->numeric(FLERR,arg[0]);
+    if (binsize_user <= 0.0)
+        binsizeflag = 0;
+    else
+        binsizeflag = 1;
 }
 
 /* ----------------------------------------------------------------------
@@ -1920,11 +1943,12 @@ void Neighbor::modify_params(int narg, char **arg)
       iarg += 2;
     } else if (strcmp(arg[iarg],"binsize") == 0) {
       if (iarg+2 > narg) error->all(FLERR,"Illegal neigh_modify command");
-      binsize_user = force->cg()*force->numeric(FLERR,arg[iarg+1]); 
+      binsize_user = force->cg_max()*force->numeric(FLERR,arg[iarg+1]); 
       if (binsize_user <= 0.0) binsizeflag = 0;
       else binsizeflag = 1;
       iarg += 2;
     } else if (strcmp(arg[iarg],"cluster") == 0) {
+      error->all(FLERR,"neigh_modify cluster is deprecated");
       if (iarg+2 > narg) error->all(FLERR,"Illegal neigh_modify command");
       if (strcmp(arg[iarg+1],"yes") == 0) cluster_check = 1;
       else if (strcmp(arg[iarg+1],"no") == 0) cluster_check = 0;

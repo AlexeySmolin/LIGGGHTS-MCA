@@ -43,8 +43,8 @@
     the GNU General Public License.
 ------------------------------------------------------------------------- */
 
-#include "stdlib.h"
-#include "string.h"
+#include <stdlib.h>
+#include <string.h>
 #include "unistd.h"
 #include "fix_ave_histo.h"
 #include "atom.h"
@@ -66,12 +66,6 @@ enum{ONE,RUNNING};
 enum{SCALAR,VECTOR,WINDOW};
 enum{GLOBAL,PERATOM,LOCAL};
 enum{IGNORE,END,EXTRA};
-
-#define INVOKED_SCALAR 1
-#define INVOKED_VECTOR 2
-#define INVOKED_ARRAY 4
-#define INVOKED_PERATOM 8
-#define INVOKED_LOCAL 16
 
 #define BIG 1.0e20
 /* ---------------------------------------------------------------------- */

@@ -32,11 +32,13 @@
 
 -------------------------------------------------------------------------
     Contributing author and copyright for this file:
-    (if not contributing author is listed, this file has been contributed
-    by the core developer)
+
+    Christoph Kloss (DCS Computing GmbH, Linz)
+    Arno Mayrhofer (CFDEMresearch GmbH, Linz)
 
     Copyright 2012-     DCS Computing GmbH, Linz
     Copyright 2009-2012 JKU Linz
+    Copyright 2016-     CFDEMresearch GmbH, Linz
 ------------------------------------------------------------------------- */
 
 #ifndef LMP_CONTACT_HISTORY_MESH_I_H
@@ -46,29 +48,35 @@
 
   /* ---------------------------------------------------------------------- */
 
-  inline bool FixContactHistoryMesh::handleContact(int iP, int idTri, double *&history)
+  inline bool FixContactHistoryMesh::handleContact(int iP, int idTri, double *&history,bool intersect,bool faceflag)
   {
     
     // check if contact with iTri was there before
     // if so, set history to correct location and return
-    if(haveContact(iP,idTri,history))
+    if(haveContact(iP,idTri,history,intersect))
       return true;
 
     // else new contact - add contact if did not calculate contact with coplanar neighbor already
     
-    if(coplanarContactAlready(iP,idTri))
+    if(faceflag && coplanarContactAlready(iP,idTri))
+    {
         // did not add new contact
         return false;
+    }
     else
     {
-        addNewTriContactToExistingParticle(iP,idTri,history);
+        /*if (coplanarContactAlready(iP,idTri) && !faceflag)
+            {
+                fprintf(screen,"WEIRD: atom ID %d, ts " BIGINT_FORMAT "\n",atom->tag[iP],update->ntimestep);
+            }
+        */
+        addNewTriContactToExistingParticle(iP,idTri,history,intersect);
 
         // check if one of the contacts of previous steps is coplanar with iTri
         
         // if so, copy history
-        // also check if this contact has delflag = false, i.e. has been executed already
-        // this step. If so, signalize not to execute this contact (return false)
-        checkCoplanarContactHistory(iP,idTri,history);
+        if(faceflag)
+            checkCoplanarContactHistory(iP,idTri,history);
         return true;
     }
   }
@@ -93,12 +101,16 @@
           const bool keepflag_temp  = keepflag_[ilocal][ineigh];
           keepflag_[ilocal][ineigh] = keepflag_[ilocal][jneigh];
           keepflag_[ilocal][jneigh] = keepflag_temp;
+
+          const bool intersectflag_temp = intersectflag_[ilocal][ineigh];
+          intersectflag_[ilocal][ineigh] = intersectflag_[ilocal][jneigh];
+          intersectflag_[ilocal][jneigh] = intersectflag_temp;
       }
   }
 
   /* ---------------------------------------------------------------------- */
 
-  inline bool FixContactHistoryMesh::haveContact(int iP, int idTri, double *&history)
+  inline bool FixContactHistoryMesh::haveContact(int iP, int idTri, double *&history,bool intersect)
   {
     int *tri = partner_[iP];
     const int nneighs = fix_nneighs_->get_vector_atom_int(iP);
@@ -109,6 +121,7 @@
         {
             if(dnum_ > 0) history = &(contacthistory_[iP][i*dnum_]);
             keepflag_[iP][i] = true;
+            intersectflag_[iP][i] = intersect;
             return true;
         }
     }
@@ -125,7 +138,7 @@
       
       int idPartnerTri = partner_[iP][i];
 
-      if(idPartnerTri >= 0 && idPartnerTri != idTri && mesh_->map(idPartnerTri) >= 0 && mesh_->areCoplanarNodeNeighs(idPartnerTri,idTri))
+      if(idPartnerTri >= 0 && idPartnerTri != idTri && mesh_->map(idPartnerTri, 0) >= 0 && mesh_->areCoplanarNodeNeighs(idPartnerTri,idTri))
       {
         
         // other coplanar contact handled already - do not handle this contact
@@ -147,7 +160,7 @@
     for(int i = 0; i < nneighs; i++)
     {
       
-      if(tri[i] >= 0 && tri[i] != idTri && mesh_->map(tri[i]) >= 0 && mesh_->areCoplanarNodeNeighs(tri[i],idTri))
+      if(tri[i] >= 0 && tri[i] != idTri && mesh_->map(tri[i], 0) >= 0 && mesh_->areCoplanarNodeNeighs(tri[i],idTri))
       {
           
           // copy contact history
@@ -159,7 +172,7 @@
 
   /* ---------------------------------------------------------------------- */
 
-  inline void FixContactHistoryMesh::addNewTriContactToExistingParticle(int iP, int idTri, double *&history)
+  inline void FixContactHistoryMesh::addNewTriContactToExistingParticle(int iP, int idTri, double *&history, bool intersect)
   {
       
       const int nneighs = fix_nneighs_->get_vector_atom_int(iP);
@@ -188,6 +201,7 @@
 
       partner_[iP][iContact] = idTri;
       keepflag_[iP][iContact] = true;
+      intersectflag_[iP][iContact] = intersect;
 
       if(dnum_ > 0)
       {
@@ -203,25 +217,45 @@
 
   /* ---------------------------------------------------------------------- */
 
-  inline int FixContactHistoryMesh::n_contacts()
+  inline int FixContactHistoryMesh::n_contacts(int & nIntersect)
   {
     int ncontacts = 0, nlocal = atom->nlocal;
 
     for(int i = 0; i < nlocal; i++)
-           ncontacts += npartner_[i];
+    {
+        for(int ipartner = 0; ipartner < npartner_[i]; ipartner++)
+        {
+            if(intersectflag_[i][ipartner])
+            {
+                nIntersect++;
+            }
+            ncontacts++;
+        }
+    }
     return ncontacts;
   }
 
   /* ---------------------------------------------------------------------- */
 
-  inline int FixContactHistoryMesh::n_contacts(int contact_groupbit)
+  inline int FixContactHistoryMesh::n_contacts(int contact_groupbit, int & nIntersect)
   {
     int ncontacts = 0, nlocal = atom->nlocal;
     int *mask = atom->mask;
 
     for(int i = 0; i < nlocal; i++)
+    {
         if(mask[i] & contact_groupbit)
-           ncontacts += npartner_[i];
+        {
+            for(int ipartner = 0; ipartner < npartner_[i]; ipartner++)
+            {
+                if(intersectflag_[i][ipartner])
+                {
+                    nIntersect++;
+                }
+                ncontacts++;
+            }
+        }
+    }
     return ncontacts;
   }
 

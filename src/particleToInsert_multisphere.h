@@ -57,6 +57,8 @@ namespace LAMMPS_NS {
            // per-particle displace in body coordinates
            double **displace;
 
+           double *volumeweight;
+
            // vector to center of bounding sphere in body coos
            double xcm_to_xbound[3];
 
@@ -76,7 +78,7 @@ namespace LAMMPS_NS {
            int type_ms;
 
            int insert();
-           int check_near_set_x_v_omega(double *x,double *v, double *omega, double *quat, RegionNeighborList & neighList);//, double **xnear, int &nnear)
+           int check_near_set_x_v_omega(double *x,double *v, double *omega, double *quat, RegionNeighborList<interpolate_no> & neighList);//, double **xnear, int &nnear)
            int set_x_v_omega(double *,double *,double *, double *);
 
            void random_rotate(double,double,double);
