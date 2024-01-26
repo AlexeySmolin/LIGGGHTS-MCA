@@ -1,13 +1,13 @@
 #!/bin/sh
 
 THEPWD=`pwd`
-OMP_NUM_THREADS=6
+OMP_NUM_THREADS=8
 export OMP_NUM_THREADS
 
 #cd ../../../../src
-#make serial_omp
+#make omp
 #cd $THEPWD
 
 rm -rf post
 
-../../../../src/lmp_serial_omp -in cube_shear.in
+../../../../src/lmp_omp -in cube_shear.in

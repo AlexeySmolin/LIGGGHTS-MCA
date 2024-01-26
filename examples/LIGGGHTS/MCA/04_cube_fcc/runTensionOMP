@@ -4,14 +4,14 @@
 
 THEPWD=`pwd`
 
-cd ../../../../src
-make serial_omp
+#cd ../../../../src
+#make omp
 
 cd $THEPWD
 
 rm -rf post
 
-OMP_NUM_THREADS=6
+OMP_NUM_THREADS=8
 export OMP_NUM_THREADS
 
-../../../../src/lmp_serial_omp -in cube_fcc_tension.in
+../../../../src/lmp_omp -in cube_fcc_tension.in

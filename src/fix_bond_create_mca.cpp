@@ -108,7 +108,7 @@ FixBondCreateMCA::FixBondCreateMCA(LAMMPS *lmp, int narg, char **arg) :
   jnewtype = jatomtype;
   init_state = BONDED;
   fraction = 1.0;
-  int seed = 12345;
+  char * seed = "11939";// "12345";
 
   int iarg = 9;
   while (iarg < narg) {
@@ -137,10 +137,10 @@ FixBondCreateMCA::FixBondCreateMCA(LAMMPS *lmp, int narg, char **arg) :
     } else if (strcmp(arg[iarg],"prob") == 0) {
       if (iarg+3 > narg) error->all(FLERR,"Illegal fix bond/create/mca command");
       fraction = atof(arg[iarg+1]);
-      seed = atoi(arg[iarg+2]);
+      seed = arg[iarg+2];
       if (fraction < 0.0 || fraction > 1.0)
         error->all(FLERR,"Illegal fix bond/create/mca command");
-      if (seed <= 0) error->all(FLERR,"Illegal fix bond/create/mca command");
+      //if (seed <= 0) error->all(FLERR,"Illegal fix bond/create/mca command");
       iarg += 3;
     } else error->all(FLERR,"Illegal fix bond/create/mca command");
   }
@@ -155,7 +155,7 @@ FixBondCreateMCA::FixBondCreateMCA(LAMMPS *lmp, int narg, char **arg) :
 
   // initialize Marsaglia RNG with processor-unique seed
 
-  random = new RanMars(lmp,seed + me);
+    random = new RanMars(lmp, seed, true); // TODO? seed + me);
 
   // perform initial allocation of atom-based arrays
   // register with Atom class

@@ -58,7 +58,7 @@ namespace LAMMPS_NS {
 
 class ComputePropertyMCA : public Compute {
  public:
-  ComputePropertyMCA(class LAMMPS *, int, char **);
+  ComputePropertyMCA(class LAMMPS *, int &iarg, int, char **);
   ~ComputePropertyMCA();
   void init();
   void compute_peratom();

@@ -60,7 +60,7 @@ atom_modify	map array # map keyword determines how atom ID lookup is done.
 # Lookups are performed by bond routines to find the local atom index associated with a global atom ID. 
 # When the array value is used, each processor stores a lookup table of length N (total # of atoms in the system).
 
-neigh_modify	delay 0	check no cluster yes	# set parameters that affect the building and use of pairwise neighbor lists
+neigh_modify	delay 0	# set parameters that affect the building and use of pairwise neighbor lists
 			# defaults are delay = 10, every = 1, check = yes, once = no, cluster = no, include = all
 
 newton		off
@@ -214,10 +214,9 @@ shell mkdir post
 thermo_style	custom step atoms #numbond
 thermo		100
 thermo_modify	lost ignore norm no
-compute_modify	thermo_temp dynamic yes
 
-dump	dmp all custom  ${filestep} post/dump*.liggghts id type x y z vx vy vz fx fy fz omegax omegay omegaz tqx tqy tqz
-#dump	dmp all custom  1 post/dump*.liggghts id type x y z vx vy vz fx fy fz omegax omegay omegaz tqx tqy tqz
+dump		dmp all custom  ${filestep} post/dump*.liggghts id type x y z vx vy vz fx fy fz omegax omegay omegaz tqx tqy tqz
+dump_modify	dmp pad 5
 
 ####################################################################################################
 # OUTPUT PLOT PARAMETERS

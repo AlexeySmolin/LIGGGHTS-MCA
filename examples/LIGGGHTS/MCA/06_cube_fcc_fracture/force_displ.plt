@@ -24,7 +24,7 @@ set title "Loading diagram"
 plot \
      Y*x*1.0E-8 title "Young" with lines, \
      './cube-orig.dat' using (100.*($4-Z0)/Z0):(-$7*1.E-6/A) t "orig" with l, \
-     './cube.dat' using (100.*($4-Z0)/Z0):(-$7*1.E-6/A) not with points
+     './cube.dat' using (100.*($4-Z0)/Z0):(-$7*1.E-6/A) not with linespoints
 
 pause -1 "Hit return "
 

@@ -98,6 +98,8 @@ void DeleteAtoms::command(int narg, char **arg)
 
   if(modify->n_fixes_style_strict("contacthistory") > 0)
     modify->find_fix_style_strict("contacthistory",0)->pre_exchange();
+  if(modify->n_fixes_style_strict("bond/propagate/gran") > 0)
+    modify->find_fix_style_strict("bond/propagate/gran",0)->pre_exchange();
   if(modify->n_fixes_style_strict("bond/exchange/mca") > 0)
     modify->find_fix_style_strict("bond/exchange/mca",0)->pre_exchange();
 

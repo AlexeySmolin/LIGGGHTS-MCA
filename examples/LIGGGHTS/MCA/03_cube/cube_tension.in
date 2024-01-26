@@ -178,9 +178,9 @@ shell mkdir post
 thermo_style	custom step atoms #numbond
 thermo		100
 thermo_modify	lost ignore norm no
-compute_modify	thermo_temp dynamic yes
 
-dump	dmp all custom  ${filestep} post/dump*.liggghts id type x y z vx vy vz fx fy fz omegax omegay omegaz
+dump		dmp all custom  ${filestep} post/dump*.liggghts id type x y z vx vy vz fx fy fz omegax omegay omegaz
+dump_modify	dmp pad 5
 
 ####################################################################################################
 # OUTPUT PLOT PARAMETERS

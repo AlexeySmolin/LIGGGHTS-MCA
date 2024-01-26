@@ -181,6 +181,18 @@ Atom::Atom(LAMMPS *lmp) : Pointers(lmp)
   rho_flag = e_flag = cv_flag = vest_flag = 0;
   p_flag = 0; 
 
+  // Used for MCA
+  mca_flag = 0;
+  packing = 1;
+  coord_num = 6;
+  mca_radius = 1.;
+  contact_area = 1.;
+  mca_inertia = mean_stress = mean_stress_prev = NULL;
+  equiv_stress = equiv_stress_prev = equiv_strain = NULL;
+  theta = theta_prev = NULL;
+  cont_distance = NULL;
+  bond_index = NULL;
+
   shapetype_flag = 0;
 
   // ntype-length arrays
@@ -316,6 +328,18 @@ Atom::~Atom()
   memory->destroy(improper_atom2);
   memory->destroy(improper_atom3);
   memory->destroy(improper_atom4);
+
+  // Used for MCA
+  memory->destroy(mca_inertia);
+  memory->destroy(theta);
+  memory->destroy(theta_prev);
+  memory->destroy(mean_stress);
+  memory->destroy(mean_stress_prev);
+  memory->destroy(equiv_stress);
+  memory->destroy(equiv_stress_prev);
+  memory->destroy(equiv_strain);
+  memory->destroy(cont_distance);
+  memory->destroy(bond_index);
 
 //Superquadric bonus-----------------------------------
   memory->destroy(shape); //half axes and blockiness parameters

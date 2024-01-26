@@ -58,8 +58,8 @@ using namespace LAMMPS_NS;
 /* ---------------------------------------------------------------------- */
 
 ComputePropertyMCA::
-ComputePropertyMCA(LAMMPS *lmp, int narg, char **arg) :
-  Compute(lmp, narg, arg)
+ComputePropertyMCA(LAMMPS *lmp, int &iarg, int narg, char **arg) :
+  Compute(lmp, iarg, narg, arg)
 {
 /*  
 <PRE>compute ID group-ID property/mca input1 input2 ... 
@@ -76,13 +76,13 @@ ComputePropertyMCA(LAMMPS *lmp, int narg, char **arg) :
   </PRE>
 </UL>
 */
-  if (narg < 4) error->all(FLERR,"Illegal compute property/mca command");
+  if (narg < iarg+1) error->all(FLERR,"Illegal compute property/mca command");
 
   if ((atom->molecular == 0) || (atom->bond_mca == 0))
     error->all(FLERR,"Compute property/mca requires mca atom style");
 
   peratom_flag = 1;
-  nvalues = narg - 3;
+  nvalues = narg - iarg;
   if (nvalues == 1) size_peratom_cols = 0;
   else size_peratom_cols = nvalues;
 
@@ -91,8 +91,9 @@ ComputePropertyMCA(LAMMPS *lmp, int narg, char **arg) :
   // parse input values
   // customize a new keyword by adding to if statement
   int i;
-  for (int iarg = 3; iarg < narg; iarg++) {
-    i = iarg-3;
+  const int arg_offset = iarg;
+  for (; iarg < narg; iarg++) {
+    i = iarg-arg_offset;
 
     if (strcmp(arg[iarg],"mean_stress") == 0)
       pack_choice[i] = &ComputePropertyMCA::pack_meanstress;
