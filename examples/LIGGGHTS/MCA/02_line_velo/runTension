@@ -2,8 +2,8 @@
 
 THEPWD=`pwd`
 
-cd ../../../../src
-make serial
+#cd ../../../../src
+#make serial
 
 cd $THEPWD
 

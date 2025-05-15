@@ -7,6 +7,6 @@ THEPWD=`pwd`
 #
 #cd $THEPWD
 
-rm -rf post
+rm -rf results
 
 ../../../../src/lmp_serial -in cube_tension.in

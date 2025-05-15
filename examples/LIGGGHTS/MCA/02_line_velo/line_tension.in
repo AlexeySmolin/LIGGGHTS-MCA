@@ -52,7 +52,7 @@ newton		off
 # 'off' means that if two interacting atoms are on different processors, both processors compute their 
 # interaction and the resulting force information is not communicated.
 
-# ????? processors	2 1 1
+# ???? processors	2 1 1
 # ???? comm_modify	vel yes
 communicate	single vel yes
 
@@ -98,7 +98,7 @@ mass 		1 1.0 #dummy
 ####################################################################################################
 region		bc cylinder x 0.00 0.00 ${rp} 0.0 $L units box
 variable 	sc equal $d	# *(1.0-0.00001) # lattice spacing for creating particles
-				# ????????????
+
 lattice		sc ${sc}
 create_atoms	1 region bc	# create just 11 particles in a line
 #run 1
@@ -107,19 +107,6 @@ create_atoms	1 region bc	# create just 11 particles in a line
 # MATERIAL PROPERTIES REQUIRED FOR NEW PAIR STYLE
 ####################################################################################################
 set		group all density ${rho} # diameter ${d} - for mca we set their size in 'atom_style mca radius'
-
-####################################################################################################
-# DEFINE WALLS TO AVOID LOST OF ATOMS
-####################################################################################################
-# Everything that happens during a simulation besides force computation, neighbor list construction, and output, is a "fix".
-# This includes time integration (update of coordinates and velocities), force constraints or boundary conditions
-# (SHAKE or walls), and diagnostics (compute a diffusion coefficient).
-#fix boxwalls_x1 all wall/gran model hertz tangential history primitive type 1 xplane -$L
-#fix boxwalls_x2 all wall/gran model hertz tangential history primitive type 1 xplane +${2L}
-#fix boxwalls_y1 all wall/gran model hertz tangential history primitive type 1 yplane -1
-#fix boxwalls_y2 all wall/gran model hertz tangential history primitive type 1 yplane +1
-#fix boxwalls_z1 all wall/gran model hertz tangential history primitive type 1 zplane -$L
-#fix boxwalls_z2 all wall/gran model hertz tangential history primitive type 1 zplane +1
 
 ####################################################################################################
 # DEFINE BOUNDARY CONDITIONS
@@ -169,10 +156,10 @@ timestep	${dt}
 ####################################################################################################
 # CLEAN OUTPUT DIRECTORY
 ####################################################################################################
-#shell -rf post		# does not work
-shell rm    post/*	# does not work
-shell rmdir post	# does not work
-shell mkdir post
+#shell -rf results		# does not work
+#shell rm    results/*	# does not work
+#shell rmdir results	# does not work
+shell mkdir results
 
 ####################################################################################################
 # STATUS OUTPUT
@@ -182,7 +169,7 @@ thermo_style	custom step atoms #numbond
 thermo		100
 thermo_modify	lost ignore norm no
 
-dump		dmp 	all custom  ${filestep} post/dump*.liggghts id type x y z vx vy vz fx fy fz omegax omegay omegaz
+dump		dmp 	all custom  ${filestep} results/dump*.liggghts id type x y z vx vy vz fx fy fz omegax omegay omegaz
 dump_modify	dmp pad 5
 
 ####################################################################################################
@@ -194,10 +181,6 @@ variable time equal step*${dt}
 variable px equal x[${lastone}]
 variable py equal y[${lastone}]
 variable pz equal z[${lastone}]
-###OLD ###
-#variable pfx equal fx[${lastone}]
-#variable pfy equal fy[${lastone}]
-#variable pfz equal fz[${lastone}]
 variable pfx equal f_topV_fix[1]	#fx[${lastone}]
 variable pfy equal f_topV_fix[2]	#fy[${lastone}]
 variable pfz equal f_topV_fix[3]	#fz[${lastone}]
